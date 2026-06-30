@@ -1,0 +1,29 @@
+name: ✨ Feature
+description: 새 기능 제안 / 추가
+title: "[Feature] "
+labels: [feature]
+body:
+  - type: textarea
+    id: goal
+    attributes:
+      label: 목표
+      description: 무엇을, 왜 만들려고 하나요?
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: 수용 기준 (Acceptance Criteria)
+      description: 완료를 판단할 수 있는 체크리스트
+      value: |
+        - [ ]
+        - [ ]
+    validations:
+      required: true
+  - type: textarea
+    id: notes
+    attributes:
+      label: 참고 / 기술 노트
+      description: 관련 자료, 설계 고려사항, 의존 이슈 등 (선택)
+    validations:
+      required: false
