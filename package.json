@@ -1,0 +1,19 @@
+{
+  "name": "wake-surfer",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Video conferencing and realtime collaboration platform.",
+  "packageManager": "pnpm@11.7.0",
+  "scripts": {
+    "lint": "eslint .",
+    "format": "prettier . --write",
+    "format:check": "prettier . --check"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.6.0",
+    "prettier": "^3.9.3",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.62.0"
+  }
+}
