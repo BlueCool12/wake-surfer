@@ -18,8 +18,8 @@
 
 ```
 wake-surfer/
-├── apps/        # 배포 가능한 애플리케이션 (web, server, signaling 등)
-├── packages/    # 앱 간 공유 코드 (shared 타입, UI, 프로토콜 정의 등)
+├── apps/
+├── packages/
 └── AGENTS.md
 ```
 
@@ -31,22 +31,22 @@ wake-surfer/
 
 | 영역 | 선택 | 비고 |
 | --- | --- | --- |
-| 언어 | TBD | |
+| 언어 | TypeScript, TBD | 앱/패키지별로 Go/Java 등 추가 가능 |
 | 프론트엔드 | TBD | |
 | 백엔드 / 시그널링 | TBD | |
 | 실시간 통신 | WebSocket, WebRTC, RTMP | |
-| 패키지 매니저 / 모노레포 | TBD | |
+| 패키지 매니저 / 모노레포 | pnpm workspace | |
 | 테스트 | TBD | |
 
 ## 개발 워크플로우
 
 > 명령어는 스택 확정 후 채웁니다.
 
-- 설치: `TBD`
+- 설치: `pnpm install`
 - 개발 서버: `TBD`
 - 빌드: `TBD`
 - 테스트: `TBD`
-- 린트 / 포맷: `TBD`
+- 린트 / 포맷: `pnpm lint`, `pnpm format:check`, `pnpm format`
 
 ## 브랜치 & 커밋 규칙
 

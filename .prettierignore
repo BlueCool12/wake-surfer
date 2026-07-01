@@ -1,0 +1,9 @@
+node_modules/
+.pnpm-store/
+
+dist/
+build/
+coverage/
+
+AGENTS.md
+pnpm-lock.yaml
