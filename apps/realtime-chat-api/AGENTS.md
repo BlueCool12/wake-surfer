@@ -25,7 +25,7 @@ apps module은 제품 기능을 직접 구현하지 않는다. package public AP
 
 - product request/response DTO를 정의하지 않는다.
 - product data contract, socket event payload, product error shape, schema를 정의하지 않는다.
-- 도메인 불변식, 비즈니스 정책, 상태 전이, 유스케이스를 구현하지 않는다.
+- 도메인 불변식, 비즈니스 정책, 상태 전이, 구현하지 않는다.
 - DB query, repository 구현, ORM model 접근을 하지 않는다.
 - Stripe/OpenAI/S3/Redis/Kafka/Prisma 같은 provider SDK를 직접 호출하지 않는다.
 - package 내부 파일을 직접 import하지 않는다.

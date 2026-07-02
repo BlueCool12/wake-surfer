@@ -17,6 +17,16 @@ apps = terminal node
 
 apps module은 독립적으로 실행되고 배포될 수 있어야 한다. 하지만 그 안에는 제품 규칙, 도메인 판단, data contract, 저장소 접근, 외부 provider 연동 세부가 들어가면 안 된다.
 
+## MVP 변화율 격리 관점
+
+apps module을 얇게 유지하는 이유는 product package가 항상 안정적인 핵심이라서가 아니다.
+
+MVP 단계에서는 채팅 요구사항 자체가 가장 자주 바뀔 수 있다. `packages/realtime-chat`에 command, contract, workflow, adapter, domain rule을 모아두면 현재 채팅 구현을 잠시 사용하지 않거나 다른 구현으로 바꿀 때 변화가 package 경계 안에 머문다.
+
+따라서 apps module은 채팅 제품 언어를 알아서는 안 된다. `JoinRoomCommand`, `SendMessageCommand`, `room.join`, `chat.message`, `resume` 같은 이름은 앱의 분기 조건이나 타입 정의로 새지 않아야 한다.
+
+apps module이 고정하는 것은 프로세스, runtime framework, endpoint mount, shutdown 같은 낮은 변화율의 실행 셸이다.
+
 ## Apps가 해야 하는 일
 
 apps module은 실행과 연결을 책임진다.
@@ -28,7 +38,7 @@ apps module은 실행과 연결을 책임진다.
 - socket 서버 실행
 - worker 실행
 - 환경 변수 읽기
-- logger 생성
+- node_modules 또는 package public factory를 통한 runtime logger 연결
 - global middleware 연결
 - auth middleware mount
 - 제품별 API route mount
@@ -74,6 +84,7 @@ app.route('/v1/<product>', createProductApi())
 ## API app 예시
 
 ```ts
+const logger = createRuntimeLogger({ env })
 const app = createBaseHonoApp({ logger })
 
 installBaseMiddlewares(app)
@@ -95,6 +106,8 @@ apps module이 몰라야 하는 것:
 - DB 저장 방식
 - OpenAI/Stripe/S3 호출 방식
 - product별 에러 코드 의미
+
+logger의 경우 apps가 할 수 있는 일은 node_modules 또는 package가 제공하는 public factory를 호출해서 runtime logger instance를 만들고 주입하는 것이다. logger format, redaction, transport, trace 정책을 담은 구현 파일은 apps가 소유하지 않는다.
 
 ## Package Public API 사용 규칙
 
@@ -207,6 +220,9 @@ HTTP request를 workflow로 연결하는 product API adapter인가?
 
 유스케이스 실행 흐름인가?
   -> apps가 만들지 않는다.
+
+제품 command 또는 use case input인가?
+  -> apps가 만들지 않는다. package workflow 또는 adapter 경계로 보낸다.
 
 도메인 상태/규칙인가?
   -> apps가 만들지 않는다.
