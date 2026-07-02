@@ -1,1 +1,16 @@
+node_modules/
+.pnpm-store/
+
+dist/
+build/
+coverage/
+
+.idea/
+
+.env
+.env.*
+!.env.example
+
+*.log
 AGENTS.override.md
+.codex/skills/
