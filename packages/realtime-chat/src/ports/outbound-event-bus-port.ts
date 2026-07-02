@@ -6,9 +6,9 @@
  * 인메모리 버스를 사용하고, 운영 확장 시 broker adapter만 바꿔 같은 publish/subscribe
  * 의미를 유지한다.
  */
-import type { DeliveryEvent } from '../contract'
+import type { OutboundEvent } from '../contract'
 
-export type OutboundEventHandler = (event: DeliveryEvent) => Promise<void> | void
+export type OutboundEventHandler = (event: OutboundEvent) => Promise<void> | void
 
 export type UnsubscribeOutboundEventHandler = () => Promise<void> | void
 
@@ -20,7 +20,7 @@ export type OutboundEventBusPort = {
    * Pub/Sub, Kafka, durable stream으로 교체되더라도 호출자는 "배달 이벤트를 발행한다"
    * 는 의미만 유지한다.
    */
-  publish(event: DeliveryEvent): Promise<void>
+  publish(event: OutboundEvent): Promise<void>
 
   /**
    * gateway runtime이 배달 이벤트를 받을 handler를 등록한다.

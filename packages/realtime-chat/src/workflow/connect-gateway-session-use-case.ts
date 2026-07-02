@@ -17,7 +17,7 @@ import type {
 } from '../ports'
 
 export type ConnectGatewaySessionUseCaseInput = {
-  ticketId: string
+  rawTicket: string
   gatewayId: string
   metadata?: Record<string, unknown>
   now?: number
@@ -64,7 +64,7 @@ export function createConnectGatewaySessionUseCase(
   return {
     async execute(input: ConnectGatewaySessionUseCaseInput): Promise<ConnectGatewaySessionUseCaseResult> {
       const consumed = await deps.ticketPort.consume({
-        ticketId: input.ticketId,
+        rawTicket: input.rawTicket,
         gatewayId: input.gatewayId,
         now: input.now,
       })
@@ -82,7 +82,10 @@ export function createConnectGatewaySessionUseCase(
         userId: consumed.ticket.userId,
         gatewayId: input.gatewayId,
         connectedAt,
-        metadata: input.metadata,
+      }
+
+      if (input.metadata !== undefined) {
+        session.metadata = input.metadata
       }
 
       await deps.sessionRegistry.bind(session)

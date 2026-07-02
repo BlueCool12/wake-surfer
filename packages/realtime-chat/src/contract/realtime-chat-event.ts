@@ -36,3 +36,16 @@ export type DeliveryEvent<TPayload = unknown> = {
   event: RealtimeChatEvent<TPayload>
   publishedAt: number
 }
+
+export type OutboundMessageDeliveryRequested = {
+  type: 'OutboundMessageDeliveryRequested'
+  deliveryId: string
+  messageId: string
+  streamId: string
+  sequence: number
+  publishedAt: number
+}
+
+export type OutboundEvent<TPayload = unknown> =
+  | DeliveryEvent<TPayload>
+  | OutboundMessageDeliveryRequested

@@ -20,6 +20,7 @@ type StoredGatewayTicket = {
 
 export type InMemoryGatewayTicketAdapterOptions = {
   generateTicketId: () => string
+  generateRawTicket: () => string
   now: () => number
   tickets: Map<string, StoredGatewayTicket>
 }
@@ -27,6 +28,7 @@ export type InMemoryGatewayTicketAdapterOptions = {
 export class InMemoryGatewayTicketAdapter implements GatewayTicketPort {
   private readonly tickets: Map<string, StoredGatewayTicket>
   private readonly generateTicketId: () => string
+  private readonly generateRawTicket: () => string
   private readonly now: () => number
 
   /**
@@ -40,6 +42,7 @@ export class InMemoryGatewayTicketAdapter implements GatewayTicketPort {
   constructor(options: InMemoryGatewayTicketAdapterOptions) {
     this.tickets = options.tickets
     this.generateTicketId = options.generateTicketId
+    this.generateRawTicket = options.generateRawTicket
     this.now = options.now
   }
 
@@ -56,17 +59,25 @@ export class InMemoryGatewayTicketAdapter implements GatewayTicketPort {
    */
   async issue(input: IssueGatewayTicketInput): Promise<GatewayTicket> {
     const issuedAt = input.now ?? this.now()
+    const rawTicket = this.generateRawTicket()
     const ticket: GatewayTicket = {
       ticketId: this.generateTicketId(),
+      rawTicket,
       userId: input.userId,
       assignedGatewayId: input.assignedGatewayId,
       issuedAt,
       expiresAt: issuedAt + input.ttlMs,
     }
 
-    this.tickets.set(ticket.ticketId, {
+    this.tickets.set(rawTicket, {
       consumed: false,
-      ticket,
+      ticket: {
+        ticketId: ticket.ticketId,
+        userId: ticket.userId,
+        assignedGatewayId: ticket.assignedGatewayId,
+        issuedAt: ticket.issuedAt,
+        expiresAt: ticket.expiresAt,
+      },
     })
 
     return ticket
@@ -86,7 +97,7 @@ export class InMemoryGatewayTicketAdapter implements GatewayTicketPort {
    * 있도록 포트 계약을 유지한다.
    */
   async consume(input: ConsumeGatewayTicketInput): Promise<ConsumeGatewayTicketResult> {
-    const stored = this.tickets.get(input.ticketId)
+    const stored = this.tickets.get(input.rawTicket)
 
     if (!stored) {
       return { ok: false, reason: 'not_found' }

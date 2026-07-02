@@ -9,6 +9,7 @@
 import type {
   DeliveryEvent,
   GatewaySession,
+  OutboundEvent,
 } from '../contract'
 import type {
   ConnectionSenderPort,
@@ -79,7 +80,9 @@ export function createGatewayDeliveryRuntime(options: GatewayDeliveryRuntimeOpti
       }
 
       unsubscribe = await options.eventBus.subscribe(async (delivery) => {
-        await deliverToLocalSessions(options, delivery)
+        if (isLegacyDeliveryEvent(delivery)) {
+          await deliverToLocalSessions(options, delivery)
+        }
       })
     },
 
@@ -99,6 +102,10 @@ export function createGatewayDeliveryRuntime(options: GatewayDeliveryRuntimeOpti
       unsubscribe = undefined
     },
   }
+}
+
+function isLegacyDeliveryEvent(event: OutboundEvent): event is DeliveryEvent {
+  return 'recipientUserId' in event
 }
 
 /**

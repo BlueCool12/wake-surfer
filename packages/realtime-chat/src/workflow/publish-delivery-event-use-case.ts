@@ -52,9 +52,12 @@ export function createPublishDeliveryEventUseCase(
       const delivery: DeliveryEvent<TPayload> = {
         deliveryId: input.deliveryId ?? deps.generateDeliveryId(),
         recipientUserId: input.recipientUserId,
-        targetGatewayId: input.targetGatewayId,
         event: input.event,
         publishedAt: input.publishedAt ?? deps.now(),
+      }
+
+      if (input.targetGatewayId !== undefined) {
+        delivery.targetGatewayId = input.targetGatewayId
       }
 
       await deps.eventBus.publish(delivery)

@@ -6,6 +6,12 @@
  * 포함하지 않는다.
  */
 export type { ConnectionSenderPort } from './connection-sender-port'
+export type {
+  ChatMessageRepositoryPort,
+  ListMessagesAfterInput,
+  PersistUserMessageInput,
+  PersistUserMessageResult,
+} from './chat-message-repository-port'
 export type { GatewaySessionRegistryPort } from './gateway-session-registry-port'
 export type { GatewayTicketPort } from './gateway-ticket-port'
 export type { InboundMessagePort } from './inbound-message-port'
@@ -14,3 +20,4 @@ export type {
   OutboundEventHandler,
   UnsubscribeOutboundEventHandler,
 } from './outbound-event-bus-port'
+export type { CanWriteChannelInput, PermissionPort } from './permission-port'

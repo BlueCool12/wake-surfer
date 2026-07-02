@@ -24,8 +24,18 @@ export {
   type PublishDeliveryEventUseCaseInput,
 } from './publish-delivery-event-use-case'
 export {
+  createSendChannelMessageUseCase,
+  type SendChannelMessageUseCase,
+  type SendChannelMessageUseCaseDeps,
+} from './send-channel-message-use-case'
+export {
   createSubmitInboundClientEventUseCase,
   type SubmitInboundClientEventUseCase,
   type SubmitInboundClientEventUseCaseDeps,
   type SubmitInboundClientEventUseCaseInput,
 } from './submit-inbound-client-event-use-case'
+export {
+  createSyncChatStreamUseCase,
+  type SyncChatStreamUseCase,
+  type SyncChatStreamUseCaseDeps,
+} from './sync-chat-stream-use-case'

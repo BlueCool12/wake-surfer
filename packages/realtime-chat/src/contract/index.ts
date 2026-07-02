@@ -6,7 +6,21 @@
  * 추가하지 않는다.
  */
 export type {
+  ChatMessageAccepted,
+  MessageContent,
+  MessageRecord,
+  MessageType,
+  OutboundDeliveryPublishResult,
+  SendChannelMessageCommand,
+  SendChannelMessageResult,
+  SyncChatStreamCommand,
+  SyncChatStreamResult,
+  TextMessageContent,
+} from './chat-message'
+export type {
   DeliveryEvent,
+  OutboundEvent,
+  OutboundMessageDeliveryRequested,
   RealtimeChatEvent,
   RealtimeChatEventType,
 } from './realtime-chat-event'

@@ -5,7 +5,7 @@
  * 프로세스 안에서 검증하기 위한 adapter다. Redis Pub/Sub, Kafka, durable stream의
  * delivery semantics를 흉내 내지 않는다.
  */
-import type { DeliveryEvent } from '../../contract'
+import type { OutboundEvent } from '../../contract'
 import type {
   OutboundEventBusPort,
   OutboundEventHandler,
@@ -39,7 +39,7 @@ export class InMemoryOutboundEventBus implements OutboundEventBusPort {
    * handler 중 하나가 에러를 던지면 이 함수도 reject된다. 운영용 broker adapter를
    * 만들 때는 retry, dead-letter, ack 정책을 별도로 정의해야 한다.
    */
-  async publish(event: DeliveryEvent): Promise<void> {
+  async publish(event: OutboundEvent): Promise<void> {
     for (const handler of [...this.handlers]) {
       await handler(event)
     }

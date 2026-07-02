@@ -6,6 +6,7 @@
  */
 export type GatewayTicket = {
   ticketId: string
+  rawTicket?: string
   userId: string
   assignedGatewayId: string
   issuedAt: number
@@ -20,7 +21,7 @@ export type IssueGatewayTicketInput = {
 }
 
 export type ConsumeGatewayTicketInput = {
-  ticketId: string
+  rawTicket: string
   gatewayId: string
   now?: number
 }
