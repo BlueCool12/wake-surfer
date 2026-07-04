@@ -4,11 +4,11 @@ import tseslint from "typescript-eslint";
 
 export default defineConfig([
   globalIgnores([
-    "node_modules/",
+    "**/node_modules/",
     ".pnpm-store/",
-    "dist/",
-    "build/",
-    "coverage/",
+    "**/dist/",
+    "**/build/",
+    "**/coverage/",
     "pnpm-lock.yaml",
   ]),
   {
