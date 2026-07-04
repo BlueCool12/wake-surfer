@@ -1,0 +1,38 @@
+{
+  "name": "@wake-surfer/realtime-chat",
+  "version": "0.0.0",
+  "private": true,
+  "type": "commonjs",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./api": {
+      "types": "./dist/api/public.d.ts",
+      "default": "./dist/api/public.js"
+    },
+    "./gateway": {
+      "types": "./dist/gateway/public.d.ts",
+      "default": "./dist/gateway/public.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "clean": "tsc -b tsconfig.json --clean"
+  },
+  "dependencies": {
+    "@wake-surfer/realtime-chat-contracts": "workspace:*"
+  },
+  "devDependencies": {
+    "@testcontainers/postgresql": "^12.0.4",
+    "testcontainers": "^12.0.4",
+    "vitest": "^4.1.9"
+  }
+}

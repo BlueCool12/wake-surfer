@@ -13,4 +13,4 @@ coverage/
 
 *.log
 AGENTS.override.md
-.codex/skills/
+.codex
