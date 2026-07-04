@@ -1,0 +1,28 @@
+{
+  "name": "@wake-surfer/realtime-chat-api",
+  "version": "0.0.0",
+  "private": true,
+  "type": "commonjs",
+  "main": "./dist/main.js",
+  "types": "./dist/main.d.ts",
+  "scripts": {
+    "build": "pnpm --filter @wake-surfer/realtime-chat-contracts build && pnpm --filter @wake-surfer/realtime-chat build && tsc -p tsconfig.json",
+    "start": "node dist/main.js",
+    "test:smoke": "vitest run --config vitest.config.mts"
+  },
+  "dependencies": {
+    "@hono/node-server": "^1.19.6",
+    "@hono/zod-validator": "^0.7.6",
+    "@wake-surfer/realtime-chat": "workspace:*",
+    "hono": "^4.10.7",
+    "kysely": "^0.28.8",
+    "pg": "^8.16.3",
+    "pino": "^10.1.0",
+    "zod": "^4.2.1"
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.1",
+    "@types/pg": "^8.15.6",
+    "vitest": "^4.1.9"
+  }
+}
