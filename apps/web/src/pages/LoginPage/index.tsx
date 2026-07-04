@@ -1,3 +1,5 @@
+import { useNavigate } from "react-router-dom";
+
 import logo from "../../assets/logo.png";
 import GithubIcon from "./GithubIcon";
 import styles from "./LoginPage.module.css";
@@ -5,8 +7,11 @@ import styles from "./LoginPage.module.css";
 const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? "";
 
 function LoginPage() {
+  const navigate = useNavigate();
+
   const handleGithubLogin = () => {
     alert("GitHub 로그인 버튼 클릭됨" + apiBaseUrl);
+    navigate("/");
   };
 
   return (
