@@ -3,7 +3,6 @@ import {
   asRecord,
   invalid,
   optionalStringField,
-  positiveIntegerField,
   stringField,
   valid,
   type ValidationResult
@@ -26,13 +25,9 @@ export function parseIssueGatewayTicketRequest(
   }
 
   const workspaceId = optionalStringField(record, 'workspaceId');
-  const gatewayUrl = optionalStringField(record, 'gatewayUrl');
-  const ttlSeconds = positiveIntegerField(record, 'ttlSeconds');
 
   return valid({
     actorId,
-    ...(workspaceId ? { workspaceId } : {}),
-    ...(gatewayUrl ? { gatewayUrl } : {}),
-    ...(ttlSeconds ? { ttlSeconds } : {})
+    ...(workspaceId ? { workspaceId } : {})
   });
 }

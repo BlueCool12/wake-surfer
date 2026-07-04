@@ -1,12 +1,22 @@
 # @wake-surfer/realtime-chat 공개 불변 조건
 
 - app은 mount option과 runtime dependency만 결정합니다.
-- app은 command, handler, usecase, repository, domain model, socket event router를 직접 만들지 않습니다.
+- app은 command, handler, usecase, repository, domain model, socket event router, session registry를 직접 만들지 않습니다.
+- consumer는 package root 또는 `@wake-surfer/realtime-chat/api`, `@wake-surfer/realtime-chat/gateway`만 import합니다.
+- `src/**` deep import는 public contract가 아닙니다.
+- public wire DTO는 `@wake-surfer/realtime-chat-contracts`에서 가져옵니다. package-private command는 이 패키지 내부에 둡니다.
 - API side는 message permission check, idempotency lookup, append, ACK response, best-effort outbound publish를 소유합니다.
 - Gateway side는 ticket consume, local session registry, socket payload validation, API DTO forwarding, ACK relay, outbound fan-out을 소유합니다.
 - Gateway side는 최종 chat permission decision이나 message persistence를 수행하지 않습니다.
+- gateway ticket TTL과 advertised gateway URL은 app이 mount option으로 주입하지만, request DTO가 override하지 않습니다.
+- `IssueGatewayTicketRequest`의 actor는 body `actorId` 또는 HTTP header `x-actor-id` fallback으로 결정됩니다.
+- HTTP DTO/socket event validation은 required field를 검사하고 현재 extra field를 거부하지 않습니다.
+- text message는 trim 후 빈 문자열이면 invalid이고, 기본 최대 길이는 4000자입니다.
 - message ordering 기준은 `streamId + sequence`입니다.
 - user message idempotency key semantics는 sender, target, `clientMessageId`로 retry를 식별합니다.
 - outbound publish failure는 저장된 message를 rollback하지 않습니다.
-- read cursor update는 cursor를 뒤로 이동시키지 않습니다.
-- public wire DTO는 `@wake-surfer/realtime-chat-contracts`에서 가져옵니다. package-private command는 이 패키지 내부에 둡니다.
+- read cursor update는 cursor를 뒤로 이동시키지 않습니다. `db.markReadCursor`가 `advanced` 여부를 반환합니다.
+- stream sync limit은 요청 limit을 최소 1, 최대 `syncMaxLimit`으로 clamp합니다.
+- Gateway socket payload는 JSON object여야 하고 server event는 JSON string으로 전송됩니다.
+- Gateway outbound fan-out은 `OutboundMessageDeliveryRequested.recipientUserIds`에 해당하는 local session에만 push합니다.
+- 현재 `mountRealtimeChatGateway`는 outbound subscription cleanup handle을 반환하지 않습니다.

@@ -19,9 +19,7 @@ export function createIssueGatewayTicketHandler(
 
     const result = await usecases.issueGatewayTicket({
       actorId: parsed.value.actorId,
-      ...(parsed.value.workspaceId ? { workspaceId: parsed.value.workspaceId } : {}),
-      ...(parsed.value.gatewayUrl ? { gatewayUrl: parsed.value.gatewayUrl } : {}),
-      ...(parsed.value.ttlSeconds ? { ttlSeconds: parsed.value.ttlSeconds } : {})
+      ...(parsed.value.workspaceId ? { workspaceId: parsed.value.workspaceId } : {})
     });
 
     if (result.status === 'rejected') {

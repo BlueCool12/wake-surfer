@@ -7,7 +7,7 @@ export type RealtimeChatApiMountOptions = {
   basePath: string;
   exposeOpenApi?: boolean;
   gatewayUrl?: string;
-  ticketTtlSeconds?: number;
+  gatewayTicketTtlSeconds?: number;
   maxMessageTextLength?: number;
   syncDefaultLimit?: number;
   syncMaxLimit?: number;

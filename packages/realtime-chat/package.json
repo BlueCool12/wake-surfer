@@ -25,7 +25,8 @@
   ],
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "clean": "tsc -b tsconfig.json --clean"
+    "clean": "tsc -b tsconfig.json --clean",
+    "test:consumer": "pnpm --filter @wake-surfer/realtime-chat-contracts build && pnpm run build && vitest run --config vitest.config.mts && tsc -p tsconfig.consumer-test.json --noEmit"
   },
   "dependencies": {
     "@wake-surfer/realtime-chat-contracts": "workspace:*"

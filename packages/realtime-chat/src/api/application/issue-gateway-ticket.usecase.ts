@@ -38,7 +38,7 @@ export async function issueGatewayTicket(
     };
   }
 
-  const ttlSeconds = request.ttlSeconds ?? options.ticketTtlSeconds ?? 60;
+  const ttlSeconds = options.gatewayTicketTtlSeconds ?? 60;
   const issuedAtDate = deps.clock.now();
   const expiresAtDate = new Date(issuedAtDate.getTime() + ttlSeconds * 1000);
   const ticket = [
@@ -60,9 +60,7 @@ export async function issueGatewayTicket(
     status: 'issued',
     response: {
       ticket,
-      ...(request.gatewayUrl || options.gatewayUrl
-        ? { gatewayUrl: request.gatewayUrl ?? options.gatewayUrl }
-        : {}),
+      ...(options.gatewayUrl ? { gatewayUrl: options.gatewayUrl } : {}),
       expiresAt: expiresAtDate.toISOString()
     }
   };
