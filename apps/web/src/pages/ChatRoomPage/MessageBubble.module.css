@@ -49,3 +49,15 @@
   font-size: 0.7rem;
   opacity: 0.7;
 }
+
+.retry {
+  align-self: flex-end;
+  padding: 0;
+  border: none;
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-size: 0.7rem;
+  text-decoration: underline;
+  cursor: pointer;
+}

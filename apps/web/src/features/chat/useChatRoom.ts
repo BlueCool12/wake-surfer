@@ -13,7 +13,7 @@ import { createMockChatTransport, MOCK_ME } from "./transport/mockChatTransport"
 // 채팅 브랜치 머지 후 타입 정리 필요
 export type ChatMessageStatus = "pending" | "sent" | "failed";
 
-export type ChatMessageView = {  
+export type ChatMessageView = {
   key: string;
   clientMessageId?: ClientMessageId;
   messageId?: string;
@@ -44,6 +44,7 @@ export type UseChatRoomResult = {
   messages: ChatMessageView[];
   isLoading: boolean;
   sendMessage: (text: string) => void;
+  retryMessage: (message: ChatMessageView) => void;
 };
 
 /**
@@ -111,31 +112,45 @@ export function useChatRoom(channelId: ChannelId, meId: UserId = MOCK_ME): UseCh
     };
   }, [channelId, meId]);
 
-  const sendMessage = useCallback(
-    (text: string) => {
-      const trimmed = text.trim();
-      const transport = transportRef.current;
-      if (trimmed === "" || transport === null) return;
+  const sendMessage = useCallback((text: string) => {
+    const trimmed = text.trim();
+    const transport = transportRef.current;
+    if (trimmed === "" || transport === null) return;
 
-      const clientMessageId = crypto.randomUUID();
-      const optimistic: ChatMessageView = {
-        key: clientMessageId,
-        clientMessageId,
-        isMine: true,
-        messageType: "USER",
-        text: trimmed,
-        createdAt: new Date().toISOString(),
-        status: "pending",
-      };
-      setMessages((prev) => [...prev, optimistic]);
+    const clientMessageId = crypto.randomUUID();
+    const optimistic: ChatMessageView = {
+      key: clientMessageId,
+      clientMessageId,
+      isMine: true,
+      messageType: "USER",
+      text: trimmed,
+      createdAt: new Date().toISOString(),
+      status: "pending",
+    };
+    setMessages((prev) => [...prev, optimistic]);
 
-      transport.sendChannelMessage({
-        clientMessageId,
-        content: { kind: "text", text: trimmed },
-      });
-    },
-    [],
-  );
+    transport.sendChannelMessage({
+      clientMessageId,
+      content: { kind: "text", text: trimmed },
+    });
+  }, []);
 
-  return { messages, isLoading, sendMessage };
+  const retryMessage = useCallback((message: ChatMessageView) => {
+    const transport = transportRef.current;
+    // 실패한 낙관적 항목만 재시도한다. 같은 clientMessageId 로 다시 보내
+    // accepted/rejected 정합이 그대로 이어진다.
+    if (transport === null || message.clientMessageId === undefined) return;
+
+    const { clientMessageId, text } = message;
+    setMessages((prev) =>
+      prev.map((m) => (m.clientMessageId === clientMessageId ? { ...m, status: "pending" } : m)),
+    );
+
+    transport.sendChannelMessage({
+      clientMessageId,
+      content: { kind: "text", text },
+    });
+  }, []);
+
+  return { messages, isLoading, sendMessage, retryMessage };
 }

@@ -38,6 +38,8 @@ export function createMockChatTransport(context: ChatTransportContext): ChatTran
   const streamId = `stream-${context.channelId}`;
   let sequence = 0;
   const nextSequence = () => (sequence += 1);
+  // 목 전용: 한 번 실패시킨 clientMessageId 를 기억해 재시도 땐 성공시킨다.
+  const failedOnce = new Set<string>();
 
   const history: PublicMessageDto[] = [
     {
@@ -76,8 +78,22 @@ export function createMockChatTransport(context: ChatTransportContext): ChatTran
     },
 
     sendChannelMessage({ clientMessageId, content }) {
-      // 수락 응답 (낙관적 항목 확정)
       window.setTimeout(() => {
+        // 목 전용: "/fail"로 시작하는 메시지는 첫 전송을 실패시켜 재시도 UI를 테스트할 수 있다.
+        // 같은 clientMessageId 로 재시도하면 두 번째엔 성공한다. (실제 트랜스포트엔 없는 장치)
+        if (content.text.startsWith("/fail") && !failedOnce.has(clientMessageId)) {
+          failedOnce.add(clientMessageId);
+          rejected.emit({
+            status: "rejected",
+            commandId: crypto.randomUUID(),
+            clientMessageId,
+            reason: "MESSAGE_SAVE_FAILED",
+            message: "목 전송 실패 — 다시 시도해보세요.",
+          });
+          return;
+        }
+
+        // 수락 응답 (낙관적 항목 확정)
         const messageId = `m-${crypto.randomUUID()}`;
         const seq = nextSequence();
         const serverCreatedAt = new Date().toISOString();

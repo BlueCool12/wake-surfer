@@ -2,8 +2,14 @@ import type { ChatMessageView } from "../../features/chat/useChatRoom";
 import { formatTime } from "../../utils/date";
 import styles from "./MessageBubble.module.css";
 
+type MessageBubbleProps = {
+  message: ChatMessageView;
+  /** 전송 실패한 메시지를 다시 보낼 때 호출. */
+  onRetry?: (() => void) | undefined;
+};
+
 /** 채팅방의 메시지 한 건을 말풍선으로 렌더링한다. 내/상대, 전송 상태에 따라 스타일이 달라진다. */
-function MessageBubble({ message }: { message: ChatMessageView }) {
+function MessageBubble({ message, onRetry }: MessageBubbleProps) {
   const rowClass = message.isMine ? `${styles.row} ${styles.rowMine}` : styles.row;
   const bubbleClass = [
     styles.bubble,
@@ -18,13 +24,15 @@ function MessageBubble({ message }: { message: ChatMessageView }) {
     <div className={rowClass}>
       <div className={bubbleClass}>
         <span className={styles.text}>{message.text}</span>
-        <span className={styles.meta}>
-          {message.status === "failed"
-            ? "전송 실패"
-            : message.status === "pending"
-              ? "전송 중…"
-              : formatTime(message.createdAt)}
-        </span>
+        {message.status === "failed" ? (
+          <button type="button" className={styles.retry} onClick={onRetry}>
+            전송 실패 · 다시 시도
+          </button>
+        ) : (
+          <span className={styles.meta}>
+            {message.status === "pending" ? "전송 중…" : formatTime(message.createdAt)}
+          </span>
+        )}
       </div>
     </div>
   );
