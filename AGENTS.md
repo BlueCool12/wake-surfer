@@ -14,25 +14,22 @@
 
 ## 프로젝트 구조
 
-모노레포로 구성합니다. (도구·레이아웃 미확정)
+pnpm workspace 기반 모노레포로 구성합니다.
 
 ```
 wake-surfer/
 ├── apps/
+│   └── web/          # React 프론트엔드 (Vite)
 ├── packages/
 └── AGENTS.md
 ```
 
-> 디렉터리 구조와 패키지 매니저(pnpm/turborepo/nx 등)는 확정 후 업데이트.
-
 ## 기술 스택
-
-**미정.** 후보가 결정되는 대로 아래를 채웁니다.
 
 | 영역 | 선택 | 비고 |
 | --- | --- | --- |
 | 언어 | TypeScript, TBD | 앱/패키지별로 Go/Java 등 추가 가능 |
-| 프론트엔드 | TBD | |
+| 프론트엔드 | React 19 + Vite | `apps/web` |
 | 백엔드 / 시그널링 | TBD | |
 | 실시간 통신 | WebSocket, WebRTC, RTMP | |
 | 패키지 매니저 / 모노레포 | pnpm workspace | |
@@ -40,11 +37,9 @@ wake-surfer/
 
 ## 개발 워크플로우
 
-> 명령어는 스택 확정 후 채웁니다.
-
 - 설치: `pnpm install`
-- 개발 서버: `TBD`
-- 빌드: `TBD`
+- 개발 서버: `pnpm --filter web dev`
+- 빌드: `pnpm --filter web build`
 - 테스트: `TBD`
 - 린트 / 포맷: `pnpm lint`, `pnpm format:check`, `pnpm format`
 
