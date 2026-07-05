@@ -1,0 +1,51 @@
+.row {
+  display: flex;
+  justify-content: flex-start;
+}
+
+.rowMine {
+  justify-content: flex-end;
+}
+
+.bubble {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  max-width: 75%;
+  padding: 0.5rem 0.75rem;
+  border-radius: var(--radius-md);
+  font-size: 0.9rem;
+  line-height: 1.4;
+}
+
+.bubbleOther {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-top-left-radius: 2px;
+}
+
+.bubbleMine {
+  background: var(--color-accent);
+  color: var(--color-accent-text);
+  border-top-right-radius: 2px;
+}
+
+.bubblePending {
+  opacity: 0.6;
+}
+
+.bubbleFailed {
+  background: var(--color-danger);
+  color: var(--color-accent-text);
+}
+
+.text {
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.meta {
+  align-self: flex-end;
+  font-size: 0.7rem;
+  opacity: 0.7;
+}
