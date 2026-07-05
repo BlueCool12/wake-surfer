@@ -79,6 +79,21 @@ export type StoredGatewayTicket = {
   expiresAt: ISODateTime;
 };
 
+export type StoredGatewayTicketConsumeResult =
+  | {
+      status: 'consumed';
+      ticket: {
+        actorId: UserId;
+        workspaceId?: WorkspaceId;
+        consumedAt: ISODateTime;
+      };
+    }
+  | {
+      status: 'rejected';
+      reason: RealtimeChatErrorCode;
+      message?: string;
+    };
+
 export type StoredReadCursor = {
   actorId: UserId;
   streamId: StreamId;
@@ -89,6 +104,10 @@ export type StoredReadCursor = {
 
 export type RealtimeChatDbPort = {
   issueGatewayTicket: (ticket: StoredGatewayTicket) => Promise<void>;
+  consumeGatewayTicket: (input: {
+    ticketValueHash: string;
+    consumedAt: ISODateTime;
+  }) => Promise<StoredGatewayTicketConsumeResult>;
   findMessageByIdempotencyKey: (
     idempotencyKey: string
   ) => Promise<StoredRealtimeChatMessage | undefined>;

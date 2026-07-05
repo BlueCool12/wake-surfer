@@ -17,10 +17,11 @@ REALTIME_CHAT_GATEWAY_PATH
 GATEWAY_ID
 REALTIME_CHAT_API_BASE_URL
 MAX_PAYLOAD_BYTES
-DATABASE_URL
+REDIS_URL
+REALTIME_CHAT_OUTBOUND_CHANNEL
 ```
 
-`DATABASE_URL`은 gateway ticket atomic consume에 사용합니다. 실제 값은 `.env` 또는 프로세스 환경 변수로 주입합니다.
+Gateway ticket atomic consume은 API endpoint를 통해 수행합니다. `REDIS_URL`과 `REALTIME_CHAT_OUTBOUND_CHANNEL`은 API가 publish한 outbound delivery event를 subscribe하는 데 사용합니다.
 
 ## 명령
 

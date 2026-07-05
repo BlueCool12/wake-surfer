@@ -65,7 +65,7 @@ import {
 | `PermissionPort`, `PermissionDecision`, `RealtimeChatMessageTarget` | API side permission/recipient resolution port |
 | `OutboundEventBusPort` | API side outbound delivery publish port |
 | `ClockPort`, `IdGeneratorPort`, `LoggerPort`, `MetricsPort`, `TicketHasherPort` | API side common infrastructure port |
-| `StoredRealtimeChatMessage`, `StoredGatewayTicket`, `StoredReadCursor` | app-owned persistence adapter가 반환하거나 저장하는 public port data shape |
+| `StoredRealtimeChatMessage`, `StoredGatewayTicket`, `StoredGatewayTicketConsumeResult`, `StoredReadCursor` | app-owned persistence adapter가 반환하거나 저장하는 public port data shape |
 
 `@wake-surfer/realtime-chat/gateway`는 Gateway side port type도 export합니다.
 
@@ -192,6 +192,10 @@ API side `RealtimeChatDbPort`:
 ```ts
 type RealtimeChatDbPort = {
   issueGatewayTicket(ticket: StoredGatewayTicket): Promise<void>;
+  consumeGatewayTicket(input: {
+    ticketValueHash: string;
+    consumedAt: ISODateTime;
+  }): Promise<StoredGatewayTicketConsumeResult>;
   findMessageByIdempotencyKey(
     idempotencyKey: string
   ): Promise<StoredRealtimeChatMessage | undefined>;
@@ -231,6 +235,7 @@ type RealtimeChatDbPort = {
 | method | `basePath` 아래 suffix | input 위치 | 성공 응답 | 실패 응답 |
 | --- | --- | --- | --- | --- |
 | `POST` | `/gateway-tickets` | body `IssueGatewayTicketRequest`, 또는 header `x-actor-id` fallback | `201 IssueGatewayTicketResponse` | `400 INVALID_PAYLOAD`, `403 <permission reason>` |
+| `POST` | `/internal/gateway-tickets/consume` | body `ConsumeGatewayTicketRequest` | `200 ConsumeGatewayTicketResponse` | `400 INVALID_PAYLOAD` |
 | `POST` | `/internal/messages/channel` | body `SendChannelMessageRequest` | `200 MessageCommandResponse` | `400 INVALID_PAYLOAD` |
 | `POST` | `/internal/messages/dm` | body `SendDMMessageRequest` | `200 MessageCommandResponse` | `400 INVALID_PAYLOAD` |
 | `POST` | `/internal/messages/thread-replies` | body `ReplyThreadMessageRequest` | `200 MessageCommandResponse` | `400 INVALID_PAYLOAD` |
@@ -256,6 +261,8 @@ Gateway ticket semantics:
 - `gatewayTicketTtlSeconds`는 request DTO가 아니라 `RealtimeChatApiMountOptions`로 주입합니다.
 - response의 `gatewayUrl`은 `RealtimeChatApiMountOptions.gatewayUrl`이 설정된 경우에만 포함합니다.
 - ticket 저장 시 `db.issueGatewayTicket`에는 raw ticket이 아니라 `ticketValueHash`가 전달됩니다.
+- ticket consume 시 API adapter가 raw ticket을 hash하고 `db.consumeGatewayTicket`에 `ticketValueHash`와 `consumedAt`을 전달합니다.
+- gateway app은 ticket table을 직접 보지 않고 `GatewayTicketConsumePort` 구현에서 API consume endpoint를 호출합니다.
 
 Message semantics:
 
@@ -263,6 +270,7 @@ Message semantics:
 - 빈 text 또는 `maxMessageTextLength` 초과 text는 `MESSAGE_CONTENT_INVALID` rejected response가 됩니다.
 - user message idempotency는 sender, target, `clientMessageId` 조합입니다.
 - 저장 성공 후 outbound delivery publish는 best effort입니다. publish 실패는 accepted message를 rollback하지 않습니다.
+- process 간 push fan-out은 app-owned broker adapter가 `OutboundMessageDeliveryRequested`를 publish/subscribe해서 연결합니다.
 
 Sync semantics:
 

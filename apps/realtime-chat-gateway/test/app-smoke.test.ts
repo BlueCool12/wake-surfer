@@ -152,6 +152,7 @@ function testEnv(): ReturnType<typeof loadEnv> {
     GATEWAY_ID: 'test-gateway',
     REALTIME_CHAT_API_BASE_URL: 'http://127.0.0.1:3001/api/realtime-chat',
     MAX_PAYLOAD_BYTES: '65536',
-    DATABASE_URL: 'postgres://example.invalid/realtime-chat'
+    REDIS_URL: 'redis://127.0.0.1:6379',
+    REALTIME_CHAT_OUTBOUND_CHANNEL: 'realtime-chat:test:outbound'
   });
 }

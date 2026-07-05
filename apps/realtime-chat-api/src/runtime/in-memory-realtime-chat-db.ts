@@ -10,8 +10,12 @@ export function createInMemoryRealtimeChatDb(): RealtimeChatDbPort {
   return new InMemoryRealtimeChatDb();
 }
 
+type InMemoryGatewayTicket = StoredGatewayTicket & {
+  consumedAt?: string;
+};
+
 class InMemoryRealtimeChatDb implements RealtimeChatDbPort {
-  private readonly gatewayTickets = new Map<string, StoredGatewayTicket>();
+  private readonly gatewayTickets = new Map<string, InMemoryGatewayTicket>();
   private readonly messagesByStream = new Map<string, StoredRealtimeChatMessage[]>();
   private readonly messagesByIdempotencyKey = new Map<string, StoredRealtimeChatMessage>();
   private readonly readCursors = new Map<string, StoredReadCursor>();
@@ -19,6 +23,50 @@ class InMemoryRealtimeChatDb implements RealtimeChatDbPort {
 
   async issueGatewayTicket(ticket: StoredGatewayTicket): Promise<void> {
     this.gatewayTickets.set(ticket.ticketValueHash, ticket);
+  }
+
+  async consumeGatewayTicket(
+    input: Parameters<RealtimeChatDbPort['consumeGatewayTicket']>[0]
+  ): Promise<Awaited<ReturnType<RealtimeChatDbPort['consumeGatewayTicket']>>> {
+    const ticket = this.gatewayTickets.get(input.ticketValueHash);
+
+    if (!ticket) {
+      return {
+        status: 'rejected',
+        reason: 'GATEWAY_TICKET_INVALID_OR_EXPIRED'
+      };
+    }
+
+    if (ticket.consumedAt) {
+      return {
+        status: 'rejected',
+        reason: 'GATEWAY_TICKET_ALREADY_CONSUMED'
+      };
+    }
+
+    if (new Date(ticket.expiresAt).getTime() <= new Date(input.consumedAt).getTime()) {
+      return {
+        status: 'rejected',
+        reason: 'GATEWAY_TICKET_INVALID_OR_EXPIRED'
+      };
+    }
+
+    const consumedTicket: InMemoryGatewayTicket = {
+      ...ticket,
+      consumedAt: input.consumedAt
+    };
+    this.gatewayTickets.set(input.ticketValueHash, consumedTicket);
+
+    return {
+      status: 'consumed',
+      ticket: {
+        actorId: consumedTicket.actorId,
+        ...(consumedTicket.workspaceId
+          ? { workspaceId: consumedTicket.workspaceId }
+          : {}),
+        consumedAt: input.consumedAt
+      }
+    };
   }
 
   async findMessageByIdempotencyKey(

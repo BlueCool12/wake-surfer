@@ -16,6 +16,7 @@ export type {
   PermissionPort,
   RealtimeChatApiRuntimeDeps,
   RealtimeChatDbPort,
+  StoredGatewayTicketConsumeResult,
   RealtimeChatMessageTarget,
   StoredGatewayTicket,
   StoredReadCursor,

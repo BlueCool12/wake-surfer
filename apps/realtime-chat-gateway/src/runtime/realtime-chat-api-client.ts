@@ -1,4 +1,5 @@
 import type {
+  ConsumeGatewayTicketResponse,
   IssueGatewayTicketResponse,
   MarkReadCursorRequest,
   MarkReadCursorResponse,
@@ -9,7 +10,10 @@ import type {
   SyncStreamMessagesRequest,
   SyncStreamMessagesResponse
 } from '@wake-surfer/realtime-chat-contracts';
-import type { RealtimeChatApiClientPort } from '@wake-surfer/realtime-chat/gateway';
+import type {
+  GatewayTicketConsumePort,
+  RealtimeChatApiClientPort
+} from '@wake-surfer/realtime-chat/gateway';
 
 export function createHttpRealtimeChatApiClient(
   apiBaseUrl: string
@@ -55,6 +59,24 @@ export function createHttpRealtimeChatApiClient(
     syncStreamMessages(request) {
       return getJson<SyncStreamMessagesResponse>(
         buildSyncMessagesUrl(baseUrl, request)
+      );
+    }
+  };
+}
+
+export function createHttpGatewayTicketConsumePort(
+  apiBaseUrl: string
+): GatewayTicketConsumePort {
+  const baseUrl = normalizeBaseUrl(apiBaseUrl);
+
+  return {
+    consume(ticketValue) {
+      return postJson<ConsumeGatewayTicketResponse>(
+        baseUrl,
+        '/internal/gateway-tickets/consume',
+        {
+          ticket: ticketValue
+        }
       );
     }
   };

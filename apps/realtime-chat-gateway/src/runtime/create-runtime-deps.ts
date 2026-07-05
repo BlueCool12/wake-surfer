@@ -3,12 +3,14 @@ import type { LoggerPort } from '@wake-surfer/realtime-chat/gateway';
 import type { AppEnv } from '../config/env';
 import { createNodeIdGenerator } from './id-generator';
 import { createNoopMetrics } from './metrics';
-import { createLoggingOutboundEventBus } from './outbound-event-bus';
-import { createHttpRealtimeChatApiClient } from './realtime-chat-api-client';
-import { createPostgresGatewayTicketConsumePort } from './postgres-gateway-ticket-port';
-import { createNodeGatewayTicketHasher } from './ticket-hasher';
+import { createRedisOutboundEventBus } from './redis-outbound-event-bus';
+import {
+  createHttpGatewayTicketConsumePort,
+  createHttpRealtimeChatApiClient
+} from './realtime-chat-api-client';
 
-type RuntimeTicketPort = RealtimeChatGatewayRuntimeDeps['gatewayTicketPort'] & {
+type RuntimeOutboundEventBus =
+  RealtimeChatGatewayRuntimeDeps['outboundEventBus'] & {
   destroy?: () => Promise<void>;
 };
 
@@ -21,19 +23,22 @@ export async function createRealtimeChatGatewayRuntimeDeps(
   env: AppEnv,
   logger: LoggerPort
 ): Promise<RealtimeChatGatewayRuntimeHandle> {
-  const ticketPort: RuntimeTicketPort =
-    await createPostgresGatewayTicketConsumePort(
-      env.DATABASE_URL,
-      createNodeGatewayTicketHasher()
-    );
+  const outboundEventBus: RuntimeOutboundEventBus =
+    await createRedisOutboundEventBus({
+      redisUrl: env.REDIS_URL,
+      channel: env.REALTIME_CHAT_OUTBOUND_CHANNEL,
+      logger
+    });
 
   return {
     deps: {
       chatApiClient: createHttpRealtimeChatApiClient(
         env.REALTIME_CHAT_API_BASE_URL
       ),
-      gatewayTicketPort: ticketPort,
-      outboundEventBus: createLoggingOutboundEventBus(logger),
+      gatewayTicketPort: createHttpGatewayTicketConsumePort(
+        env.REALTIME_CHAT_API_BASE_URL
+      ),
+      outboundEventBus,
       clock: {
         now: () => new Date()
       },
@@ -42,7 +47,7 @@ export async function createRealtimeChatGatewayRuntimeDeps(
       metrics: createNoopMetrics()
     },
     close: async () => {
-      await ticketPort.destroy?.();
+      await outboundEventBus.destroy?.();
     }
   };
 }

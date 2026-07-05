@@ -28,6 +28,7 @@ describe('consumer API mount flow', () => {
       http.routes.map((route) => `${route.method} ${route.path}`)
     ).toEqual([
       'POST /api/realtime-chat/gateway-tickets',
+      'POST /api/realtime-chat/internal/gateway-tickets/consume',
       'POST /api/realtime-chat/internal/messages/channel',
       'POST /api/realtime-chat/internal/messages/dm',
       'POST /api/realtime-chat/internal/messages/thread-replies',
@@ -113,6 +114,45 @@ describe('consumer API mount flow', () => {
         workspaceId: 'workspace-1'
       })
     );
+  });
+
+  it('gateway ticket consume endpoint는 raw ticket을 hash해서 db port에 전달한다', async () => {
+    const http = createHttpServerDouble();
+    const deps = createApiRuntimeDeps();
+
+    await mountRealtimeChatApi(
+      http.server,
+      {
+        basePath: '/api/realtime-chat'
+      },
+      deps
+    );
+
+    const response = await http
+      .findRoute('POST', '/api/realtime-chat/internal/gateway-tickets/consume')
+      .handler(
+        httpRequest({
+          body: {
+            ticket: ' raw-ticket '
+          }
+        })
+      );
+
+    expect(response).toEqual({
+      status: 200,
+      body: {
+        status: 'consumed',
+        ticket: {
+          actorId: 'user-1',
+          workspaceId: 'workspace-1',
+          consumedAt: fixedNow.toISOString()
+        }
+      }
+    });
+    expect(deps.db.consumeGatewayTicket).toHaveBeenCalledWith({
+      ticketValueHash: 'hash:raw-ticket',
+      consumedAt: fixedNow.toISOString()
+    });
   });
 
   it('channel message 저장 후 outbound publish 실패가 accepted response를 막지 않는다', async () => {

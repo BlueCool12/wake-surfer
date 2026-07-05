@@ -8,20 +8,19 @@
   "scripts": {
     "build": "pnpm --filter @wake-surfer/realtime-chat-contracts build && pnpm --filter @wake-surfer/realtime-chat build && tsc -p tsconfig.json",
     "start": "node dist/main.js",
+    "test:e2e": "vitest run --config vitest.e2e.config.mts",
     "test:smoke": "vitest run --config vitest.config.mts"
   },
   "dependencies": {
     "@wake-surfer/realtime-chat": "workspace:*",
     "@wake-surfer/realtime-chat-contracts": "workspace:*",
-    "kysely": "^0.28.8",
-    "pg": "^8.16.3",
     "pino": "^10.1.0",
+    "redis": "^5.10.0",
     "ws": "^8.18.3",
     "zod": "^4.2.1"
   },
   "devDependencies": {
     "@types/node": "^24.10.1",
-    "@types/pg": "^8.15.6",
     "@types/ws": "^8.18.1",
     "vitest": "^4.1.9"
   }

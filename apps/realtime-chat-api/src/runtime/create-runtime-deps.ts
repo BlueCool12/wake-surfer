@@ -4,12 +4,16 @@ import type { AppEnv } from '../config/env';
 import { createInMemoryRealtimeChatDb } from './in-memory-realtime-chat-db';
 import { createNodeIdGenerator } from './id-generator';
 import { createNoopMetrics } from './metrics';
-import { createLoggingOutboundEventBus } from './outbound-event-bus';
 import { createAllowAllPermissionPort } from './permission-port';
 import { createPostgresRealtimeChatDb } from './postgres-realtime-chat-db';
+import { createRedisOutboundEventBus } from './redis-outbound-event-bus';
 import { createNodeGatewayTicketHasher } from './ticket-hasher';
 
 type RuntimeDb = RealtimeChatApiRuntimeDeps['db'] & {
+  destroy?: () => Promise<void>;
+};
+
+type RuntimeOutboundEventBus = RealtimeChatApiRuntimeDeps['outboundEventBus'] & {
   destroy?: () => Promise<void>;
 };
 
@@ -25,12 +29,18 @@ export async function createRealtimeChatApiRuntimeDeps(
   const db: RuntimeDb = env.DATABASE_URL
     ? await createPostgresRealtimeChatDb(env.DATABASE_URL)
     : createInMemoryRealtimeChatDb();
+  const outboundEventBus: RuntimeOutboundEventBus =
+    await createRedisOutboundEventBus({
+      redisUrl: env.REDIS_URL,
+      channel: env.REALTIME_CHAT_OUTBOUND_CHANNEL,
+      logger
+    });
 
   return {
     deps: {
       db,
       permissionPort: createAllowAllPermissionPort(),
-      outboundEventBus: createLoggingOutboundEventBus(logger),
+      outboundEventBus,
       clock: {
         now: () => new Date()
       },
@@ -40,6 +50,7 @@ export async function createRealtimeChatApiRuntimeDeps(
       ticketHasher: createNodeGatewayTicketHasher()
     },
     close: async () => {
+      await outboundEventBus.destroy?.();
       await db.destroy?.();
     }
   };

@@ -1,4 +1,6 @@
 import type {
+  ConsumeGatewayTicketRequest,
+  ConsumeGatewayTicketResponse,
   IssueGatewayTicketRequest,
   MarkReadCursorRequest,
   MessageCommandResponse,
@@ -10,6 +12,7 @@ import type {
 } from '@wake-surfer/realtime-chat-contracts';
 import type { RealtimeChatApiMountOptions } from '../http/mount';
 import type { RealtimeChatApiRuntimeDeps } from '../runtime-deps';
+import { consumeGatewayTicket } from './consume-gateway-ticket.usecase';
 import { issueGatewayTicket, type IssueGatewayTicketResult } from './issue-gateway-ticket.usecase';
 import { markAsRead, type MarkAsReadResult } from './mark-as-read.usecase';
 import { postSessionStartedSystemMessage } from './post-system-message.usecase';
@@ -24,6 +27,9 @@ export type RealtimeChatUsecases = {
   issueGatewayTicket: (
     request: IssueGatewayTicketRequest
   ) => Promise<IssueGatewayTicketResult>;
+  consumeGatewayTicket: (
+    request: ConsumeGatewayTicketRequest
+  ) => Promise<ConsumeGatewayTicketResponse>;
   sendChannelMessage: (
     request: SendChannelMessageRequest
   ) => Promise<MessageCommandResponse>;
@@ -48,6 +54,7 @@ export function createRealtimeChatUsecases(
 ): RealtimeChatUsecases {
   return {
     issueGatewayTicket: (request) => issueGatewayTicket(request, deps, options),
+    consumeGatewayTicket: (request) => consumeGatewayTicket(request, deps),
     sendChannelMessage: (request) => sendChannelMessage(request, deps, options),
     sendDMMessage: (request) => sendDMMessage(request, deps, options),
     replyThreadMessage: (request) => replyThreadMessage(request, deps, options),

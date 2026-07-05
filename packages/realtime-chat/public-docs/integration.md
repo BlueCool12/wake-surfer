@@ -65,7 +65,9 @@ Gateway는 API internal command/usecase를 직접 호출하지 않습니다. Gat
 | `markReadCursor` | `POST /internal/read-cursors` |
 | `syncStreamMessages` | `GET /streams/:streamId/messages` |
 
-`issueGatewayTicket`은 Gateway client port에 optional로 존재하지만, Gateway socket connect flow는 `gatewayTicketPort.consume(ticketValue)`를 사용합니다.
+`issueGatewayTicket`은 Gateway client port에 optional로 존재하지만, Gateway socket connect flow는 `gatewayTicketPort.consume(ticketValue)`를 사용합니다. app-owned `GatewayTicketConsumePort`는 일반적으로 `POST /internal/gateway-tickets/consume`을 호출합니다.
+
+outbound delivery는 API app의 `OutboundEventBusPort.publish`와 Gateway app의 `OutboundEventBusPort.subscribe`를 같은 broker channel에 연결해 process boundary를 넘깁니다. 현재 app 구현은 Redis Pub/Sub channel을 사용합니다.
 
 ## Operational parameters
 

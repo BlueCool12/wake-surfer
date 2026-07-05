@@ -10,6 +10,8 @@
 - Gateway side는 최종 chat permission decision이나 message persistence를 수행하지 않습니다.
 - gateway ticket TTL과 advertised gateway URL은 app이 mount option으로 주입하지만, request DTO가 override하지 않습니다.
 - `IssueGatewayTicketRequest`의 actor는 body `actorId` 또는 HTTP header `x-actor-id` fallback으로 결정됩니다.
+- gateway ticket consume은 API adapter가 raw ticket을 hash한 뒤 `db.consumeGatewayTicket`으로 atomic consume합니다.
+- gateway app은 gateway ticket table을 직접 읽거나 쓰지 않습니다.
 - HTTP DTO/socket event validation은 required field를 검사하고 현재 extra field를 거부하지 않습니다.
 - text message는 trim 후 빈 문자열이면 invalid이고, 기본 최대 길이는 4000자입니다.
 - message ordering 기준은 `streamId + sequence`입니다.
@@ -19,4 +21,5 @@
 - stream sync limit은 요청 limit을 최소 1, 최대 `syncMaxLimit`으로 clamp합니다.
 - Gateway socket payload는 JSON object여야 하고 server event는 JSON string으로 전송됩니다.
 - Gateway outbound fan-out은 `OutboundMessageDeliveryRequested.recipientUserIds`에 해당하는 local session에만 push합니다.
+- process 간 outbound delivery 전달은 app-owned broker adapter 책임입니다.
 - 현재 `mountRealtimeChatGateway`는 outbound subscription cleanup handle을 반환하지 않습니다.

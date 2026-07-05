@@ -4,7 +4,7 @@ Realtime chat API process shell입니다.
 
 이 app은 Hono HTTP server를 만들고 `@wake-surfer/realtime-chat/api`의 `mountRealtimeChatApi`를 호출하는 composition root입니다. chat command, usecase, handler, domain model은 app에서 직접 만들지 않습니다.
 
-현재 runtime은 smoke/demo용 in-memory adapter를 사용합니다. PostgreSQL schema와 migration ADR이 정리되면 Kysely/pg 기반 `RealtimeChatDbPort` adapter를 추가합니다.
+현재 runtime은 PostgreSQL `RealtimeChatDbPort` adapter와 Redis outbound event bus를 사용합니다. `DATABASE_URL`이 없으면 빠른 smoke용 in-memory DB adapter로 실행하지만, outbound delivery publish에는 Redis가 필요합니다.
 
 ```bash
 pnpm --filter @wake-surfer/realtime-chat-api build
@@ -22,6 +22,8 @@ pnpm --filter @wake-surfer/realtime-chat-api start
 - `MAX_MESSAGE_TEXT_LENGTH=4000`
 - `SYNC_DEFAULT_LIMIT=50`
 - `SYNC_MAX_LIMIT=100`
+- `REDIS_URL=redis://127.0.0.1:6379`
+- `REALTIME_CHAT_OUTBOUND_CHANNEL=realtime-chat:outbound`
 
 PostgreSQL을 사용할 때:
 

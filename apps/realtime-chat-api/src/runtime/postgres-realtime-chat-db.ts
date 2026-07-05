@@ -29,6 +29,13 @@ type ReadCursorRow = {
   updated_at: Date | string;
 };
 
+type GatewayTicketRow = {
+  actor_id: string;
+  workspace_id: string | null;
+  consumed_at: Date | string | null;
+  expires_at: Date | string;
+};
+
 export async function createPostgresRealtimeChatDb(
   connectionString: string
 ): Promise<PostgresRealtimeChatDb> {
@@ -116,6 +123,57 @@ export class PostgresRealtimeChatDb implements RealtimeChatDbPort {
         ${ticket.expiresAt}
       )
     `.execute(this.db);
+  }
+
+  async consumeGatewayTicket(
+    input: Parameters<RealtimeChatDbPort['consumeGatewayTicket']>[0]
+  ): Promise<Awaited<ReturnType<RealtimeChatDbPort['consumeGatewayTicket']>>> {
+    const consumed = await sql<GatewayTicketRow>`
+      update realtime_chat_gateway_tickets
+      set consumed_at = ${input.consumedAt}
+      where ticket_value_hash = ${input.ticketValueHash}
+        and expires_at > ${input.consumedAt}
+        and consumed_at is null
+      returning actor_id, workspace_id, consumed_at, expires_at
+    `.execute(this.db);
+    const consumedRow = consumed.rows[0];
+
+    if (consumedRow) {
+      const consumedAt = toIsoDateTime(
+        consumedRow.consumed_at ?? input.consumedAt
+      );
+
+      return {
+        status: 'consumed',
+        ticket: {
+          actorId: consumedRow.actor_id,
+          ...(consumedRow.workspace_id
+            ? { workspaceId: consumedRow.workspace_id }
+            : {}),
+          consumedAt
+        }
+      };
+    }
+
+    const existing = await sql<GatewayTicketRow>`
+      select actor_id, workspace_id, consumed_at, expires_at
+      from realtime_chat_gateway_tickets
+      where ticket_value_hash = ${input.ticketValueHash}
+      limit 1
+    `.execute(this.db);
+    const existingRow = existing.rows[0];
+
+    if (existingRow?.consumed_at) {
+      return {
+        status: 'rejected',
+        reason: 'GATEWAY_TICKET_ALREADY_CONSUMED'
+      };
+    }
+
+    return {
+      status: 'rejected',
+      reason: 'GATEWAY_TICKET_INVALID_OR_EXPIRED'
+    };
   }
 
   async findMessageByIdempotencyKey(

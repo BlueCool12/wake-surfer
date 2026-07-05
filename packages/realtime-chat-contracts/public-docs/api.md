@@ -21,7 +21,7 @@ import type {
 | socket client event | `ChatChannelMessageSendEvent`, `ChatDMMessageSendEvent`, `ChatThreadMessageReplyEvent`, `ChatChannelReadMarkEvent`, `ChatStreamSyncEvent`, `RealtimeChatClientEvent` |
 | socket server event | `GatewayConnectedEvent`, `GatewayConnectionRejectedEvent`, `GatewayErrorEvent`, `ChatMessageAcceptedEvent`, `ChatMessageRejectedEvent`, `ChatMessageCreatedEvent`, `ChatStreamSyncedEvent`, `ChatReadCursorUpdatedEvent`, `RealtimeChatServerEvent` |
 | socket union | `RealtimeChatSocketEvent`, `RealtimeChatClientEventType`, `RealtimeChatServerEventType` |
-| HTTP DTO | `IssueGatewayTicketRequest`, `IssueGatewayTicketResponse`, `SendChannelMessageRequest`, `SendDMMessageRequest`, `ReplyThreadMessageRequest`, `PostSessionStartedSystemMessageRequest`, `MessageAcceptedResponse`, `MessageRejectedResponse`, `MessageCommandResponse`, `PublicMessageDto`, `MarkReadCursorRequest`, `MarkReadCursorResponse`, `SyncStreamMessagesRequest`, `SyncStreamMessagesResponse` |
+| HTTP DTO | `IssueGatewayTicketRequest`, `IssueGatewayTicketResponse`, `ConsumeGatewayTicketRequest`, `ConsumeGatewayTicketResponse`, `SendChannelMessageRequest`, `SendDMMessageRequest`, `ReplyThreadMessageRequest`, `PostSessionStartedSystemMessageRequest`, `MessageAcceptedResponse`, `MessageRejectedResponse`, `MessageCommandResponse`, `PublicMessageDto`, `MarkReadCursorRequest`, `MarkReadCursorResponse`, `SyncStreamMessagesRequest`, `SyncStreamMessagesResponse` |
 | integration event | `OutboundMessageDeliveryRequested`, `CollaborationSessionStarted`, `PresenceChanged` |
 
 ## Primitive semantics
@@ -82,9 +82,29 @@ type IssueGatewayTicketResponse = {
   gatewayUrl?: string;
   expiresAt: ISODateTime;
 };
+
+type ConsumeGatewayTicketRequest = {
+  ticket: GatewayTicket;
+};
+
+type ConsumeGatewayTicketResponse =
+  | {
+      status: 'consumed';
+      ticket: {
+        actorId: UserId;
+        workspaceId?: WorkspaceId;
+        consumedAt: ISODateTime;
+      };
+    }
+  | {
+      status: 'rejected';
+      reason: RealtimeChatErrorCode;
+      message?: string;
+    };
 ```
 
 `IssueGatewayTicketRequest`는 actor/workspace 식별 정보만 표현합니다. gateway URL과 ticket TTL은 feature package mount configuration의 영역이며 request DTO에 포함하지 않습니다.
+`ConsumeGatewayTicketRequest`는 gateway process가 API internal endpoint로 전달하는 raw ticket만 표현합니다. ticket hash 계산과 atomic consume 정책은 feature package API adapter/usecase가 처리합니다.
 
 Message command DTOs:
 

@@ -14,7 +14,10 @@ import {
   type RealtimeChatGatewayMountOptions,
   type WebSocketServerLike
 } from '@wake-surfer/realtime-chat/gateway';
-import type { IssueGatewayTicketRequest } from '@wake-surfer/realtime-chat-contracts';
+import type {
+  ConsumeGatewayTicketRequest,
+  IssueGatewayTicketRequest
+} from '@wake-surfer/realtime-chat-contracts';
 
 declare const httpServer: HttpServerLike;
 declare const webSocketServer: WebSocketServerLike;
@@ -49,12 +52,16 @@ const removedApiOption: RealtimeChatApiMountOptions = {
 };
 
 declare const issueGatewayTicketRequest: IssueGatewayTicketRequest;
+declare const consumeGatewayTicketRequest: ConsumeGatewayTicketRequest;
 
 const actorId: string | undefined = issueGatewayTicketRequest.actorId;
 const workspaceId: string | undefined = issueGatewayTicketRequest.workspaceId;
 
 void actorId;
 void workspaceId;
+const rawTicket: string = consumeGatewayTicketRequest.ticket;
+
+void rawTicket;
 
 // @ts-expect-error request DTO는 gateway ticket TTL override를 노출하지 않는다.
 issueGatewayTicketRequest.ttlSeconds;

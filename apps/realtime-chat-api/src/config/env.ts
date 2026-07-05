@@ -17,6 +17,8 @@ const envSchema = z.object({
   MAX_MESSAGE_TEXT_LENGTH: z.coerce.number().int().positive(),
   SYNC_DEFAULT_LIMIT: z.coerce.number().int().positive(),
   SYNC_MAX_LIMIT: z.coerce.number().int().positive(),
+  REDIS_URL: z.string().url(),
+  REALTIME_CHAT_OUTBOUND_CHANNEL: z.string().min(1),
   DATABASE_URL: z.preprocess(emptyStringToUndefined, z.string().optional())
 });
 

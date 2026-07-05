@@ -76,6 +76,14 @@ export function createApiRuntimeDeps(
   const deps: RealtimeChatApiRuntimeDeps = {
     db: {
       issueGatewayTicket: vi.fn(async () => undefined),
+      consumeGatewayTicket: vi.fn(async (input) => ({
+        status: 'consumed' as const,
+        ticket: {
+          actorId: 'user-1',
+          workspaceId: 'workspace-1',
+          consumedAt: input.consumedAt
+        }
+      })),
       findMessageByIdempotencyKey: vi.fn(async () => undefined),
       appendMessage: vi.fn(async (input) => ({
         messageId: input.messageId,

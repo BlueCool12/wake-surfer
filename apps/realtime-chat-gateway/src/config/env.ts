@@ -9,7 +9,8 @@ const envSchema = z.object({
   GATEWAY_ID: z.string().min(1),
   REALTIME_CHAT_API_BASE_URL: z.string().url(),
   MAX_PAYLOAD_BYTES: z.coerce.number().int().positive(),
-  DATABASE_URL: z.string().min(1)
+  REDIS_URL: z.string().url(),
+  REALTIME_CHAT_OUTBOUND_CHANNEL: z.string().min(1)
 });
 
 export type AppEnv = z.infer<typeof envSchema>;
