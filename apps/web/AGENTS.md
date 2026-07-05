@@ -31,7 +31,8 @@ wake-surfer의 프론트엔드. React 19 + Vite + TypeScript 기반 SPA.
 
 ## 에셋 관리
 
-- 코드가 색상·크기 등을 제어해야 하는 아이콘/로고는 React 컴포넌트로 만들어 해당 컴포넌트 옆에 둔다 (예: `pages/LoginPage/GithubIcon.tsx`). `<img>`나 `public/`으로 두지 않는다.
+- 범용 UI 아이콘(전송, 첨부, 닫기 등)은 `lucide-react`를 쓴다. `import { Send } from "lucide-react"` → `<Send size={18} />`. 아이콘별로 트리셰이킹되고 `currentColor`로 색을 상속하니 부모의 `color`로 제어한다. (아이콘 라이브러리는 디자인 시스템을 강제하지 않으므로 "컴포넌트 라이브러리 미사용" 방침과 무관하다.)
+- 브랜드 로고(GitHub 등 lucide에 없는 마크)는 React 컴포넌트로 직접 만들어 해당 컴포넌트 옆에 둔다 (예: `pages/LoginPage/GithubIcon.tsx`). 색을 상속시키려면 `fill="currentColor"`를 쓴다. `<img>`나 `public/`으로 두지 않는다.
 - 사진처럼 코드가 내용을 몰라도 되는 이미지는 `src/assets/`에 두고 `import`해서 쓴다. Vite가 빌드 시 해시를 붙여 최적화한다.
 - 파일명·경로가 고정되어야 하는 것(favicon, `robots.txt` 등)만 `public/`에 둔다.
 
