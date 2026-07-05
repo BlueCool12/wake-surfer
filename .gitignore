@@ -6,9 +6,12 @@ build/
 coverage/
 
 .idea/
+.obsidian/
 
 .env
 .env.*
 !.env.example
 
 *.log
+AGENTS.override.md
+.codex
