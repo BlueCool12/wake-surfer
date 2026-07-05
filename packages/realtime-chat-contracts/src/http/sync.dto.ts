@@ -1,5 +1,5 @@
-import type { PublicMessageDto } from './message.dto';
-import type { RequestId, StreamId, UserId } from '../primitives';
+import type { PublicMessageDto } from "./message.dto";
+import type { RequestId, StreamId, UserId } from "../primitives";
 
 export type SyncStreamMessagesRequest = {
   requestId: RequestId;

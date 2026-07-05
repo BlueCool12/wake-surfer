@@ -1,4 +1,4 @@
-import type { RealtimeChatErrorCode } from '../error-codes';
+import type { RealtimeChatErrorCode } from "../error-codes";
 import type {
   ChannelId,
   ClientMessageId,
@@ -13,8 +13,8 @@ import type {
   TextMessageContentDto,
   ThreadId,
   UserId,
-  WorkspaceId
-} from '../primitives';
+  WorkspaceId,
+} from "../primitives";
 
 export type SendChannelMessageRequest = {
   requestId: RequestId;
@@ -56,7 +56,7 @@ export type PostSessionStartedSystemMessageRequest = {
 };
 
 export type MessageAcceptedResponse = {
-  status: 'accepted';
+  status: "accepted";
   commandId: CommandId;
   clientMessageId?: ClientMessageId;
   messageId: MessageId;
@@ -67,16 +67,14 @@ export type MessageAcceptedResponse = {
 };
 
 export type MessageRejectedResponse = {
-  status: 'rejected';
+  status: "rejected";
   commandId: CommandId;
   clientMessageId?: ClientMessageId;
   reason: RealtimeChatErrorCode;
   message?: string;
 };
 
-export type MessageCommandResponse =
-  | MessageAcceptedResponse
-  | MessageRejectedResponse;
+export type MessageCommandResponse = MessageAcceptedResponse | MessageRejectedResponse;
 
 export type PublicMessageDto = {
   messageId: MessageId;
@@ -84,7 +82,7 @@ export type PublicMessageDto = {
   streamType: StreamType;
   sequence: number;
   senderId?: UserId;
-  messageType: 'USER' | 'SYSTEM';
+  messageType: "USER" | "SYSTEM";
   content: MessageContentDto;
   createdAt: ISODateTime;
 };

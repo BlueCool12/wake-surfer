@@ -1,13 +1,13 @@
-import pino, { type Logger } from 'pino';
-import type { LoggerPort } from '@wake-surfer/realtime-chat/api';
-import type { AppEnv } from '../config/env';
+import pino, { type Logger } from "pino";
+import type { LoggerPort } from "@wake-surfer/realtime-chat/api";
+import type { AppEnv } from "../config/env";
 
 export function createLogger(env: AppEnv): Logger {
   return pino({
     level: env.LOG_LEVEL,
     base: {
-      service: '@wake-surfer/realtime-chat-api'
-    }
+      service: "@wake-surfer/realtime-chat-api",
+    },
   });
 }
 
@@ -21,6 +21,6 @@ export function toLoggerPort(logger: Logger): LoggerPort {
     },
     error(message, fields) {
       logger.error(fields ?? {}, message);
-    }
+    },
   };
 }

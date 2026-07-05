@@ -1,10 +1,10 @@
-import type { EventId, ISODateTime, UserId, WorkspaceId } from '../primitives';
+import type { EventId, ISODateTime, UserId, WorkspaceId } from "../primitives";
 
 export type PresenceChanged = {
   eventId: EventId;
-  eventType: 'PresenceChanged';
+  eventType: "PresenceChanged";
   occurredAt: ISODateTime;
   workspaceId: WorkspaceId;
   userId: UserId;
-  status: 'online' | 'away' | 'offline';
+  status: "online" | "away" | "offline";
 };

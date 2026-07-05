@@ -4,8 +4,8 @@ export type {
   HttpResponseLike,
   HttpRouteDefinition,
   HttpRouteHandler,
-  HttpServerLike
-} from './http/http-server-like';
+  HttpServerLike,
+} from "./http/http-server-like";
 export type {
   ClockPort,
   IdGeneratorPort,
@@ -21,7 +21,7 @@ export type {
   StoredGatewayTicket,
   StoredReadCursor,
   StoredRealtimeChatMessage,
-  TicketHasherPort
-} from './runtime-deps';
-export type { RealtimeChatApiMountOptions } from './http/mount';
-export { mountRealtimeChatApi } from './http/mount';
+  TicketHasherPort,
+} from "./runtime-deps";
+export type { RealtimeChatApiMountOptions } from "./http/mount";
+export { mountRealtimeChatApi } from "./http/mount";

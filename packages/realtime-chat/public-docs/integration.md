@@ -57,13 +57,13 @@ WebSocket adapter 요구사항:
 
 Gateway는 API internal command/usecase를 직접 호출하지 않습니다. Gateway app은 `RealtimeChatApiClientPort`를 구현해 API app의 public HTTP DTO endpoint와 통신합니다.
 
-| Gateway client method | 일반적인 HTTP route |
-| --- | --- |
-| `sendChannelMessage` | `POST /internal/messages/channel` |
-| `sendDMMessage` | `POST /internal/messages/dm` |
-| `replyThreadMessage` | `POST /internal/messages/thread-replies` |
-| `markReadCursor` | `POST /internal/read-cursors` |
-| `syncStreamMessages` | `GET /streams/:streamId/messages` |
+| Gateway client method | 일반적인 HTTP route                      |
+| --------------------- | ---------------------------------------- |
+| `sendChannelMessage`  | `POST /internal/messages/channel`        |
+| `sendDMMessage`       | `POST /internal/messages/dm`             |
+| `replyThreadMessage`  | `POST /internal/messages/thread-replies` |
+| `markReadCursor`      | `POST /internal/read-cursors`            |
+| `syncStreamMessages`  | `GET /streams/:streamId/messages`        |
 
 `issueGatewayTicket`은 Gateway client port에 optional로 존재하지만, Gateway socket connect flow는 `gatewayTicketPort.consume(ticketValue)`를 사용합니다. app-owned `GatewayTicketConsumePort`는 일반적으로 `POST /internal/gateway-tickets/consume`을 호출합니다.
 
@@ -73,14 +73,14 @@ outbound delivery는 API app의 `OutboundEventBusPort.publish`와 Gateway app의
 
 Gateway ticket TTL과 advertised gateway URL 같은 운영 파라미터는 API mount option으로 주입합니다. request DTO가 이를 override하지 않습니다.
 
-| 값 | 주입 위치 | 기본값 |
-| --- | --- | --- |
-| gateway ticket TTL | `RealtimeChatApiMountOptions.gatewayTicketTtlSeconds` | `60` |
-| advertised gateway URL | `RealtimeChatApiMountOptions.gatewayUrl` | 없음 |
-| max text length | `RealtimeChatApiMountOptions.maxMessageTextLength` | `4000` |
-| stream sync default limit | `RealtimeChatApiMountOptions.syncDefaultLimit` | `50` |
-| stream sync max limit | `RealtimeChatApiMountOptions.syncMaxLimit` | `100` |
-| max socket payload bytes | `RealtimeChatGatewayMountOptions.maxPayloadBytes` | `65536` |
+| 값                        | 주입 위치                                             | 기본값  |
+| ------------------------- | ----------------------------------------------------- | ------- |
+| gateway ticket TTL        | `RealtimeChatApiMountOptions.gatewayTicketTtlSeconds` | `60`    |
+| advertised gateway URL    | `RealtimeChatApiMountOptions.gatewayUrl`              | 없음    |
+| max text length           | `RealtimeChatApiMountOptions.maxMessageTextLength`    | `4000`  |
+| stream sync default limit | `RealtimeChatApiMountOptions.syncDefaultLimit`        | `50`    |
+| stream sync max limit     | `RealtimeChatApiMountOptions.syncMaxLimit`            | `100`   |
+| max socket payload bytes  | `RealtimeChatGatewayMountOptions.maxPayloadBytes`     | `65536` |
 
 ## Lifecycle
 

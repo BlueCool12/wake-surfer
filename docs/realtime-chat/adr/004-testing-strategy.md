@@ -23,11 +23,11 @@ Realtime chat feature는 pure domain policy뿐 아니라 DB 동시성, WebSocket
 
 테스트 도구는 다음을 기준으로 합니다.
 
-| 용도 | 결정 | 이유 |
-| --- | --- | --- |
-| Unit test runner | Vitest | TypeScript 단위 테스트와 package integration test 실행기로 사용합니다. |
+| 용도                | 결정                        | 이유                                                                               |
+| ------------------- | --------------------------- | ---------------------------------------------------------------------------------- |
+| Unit test runner    | Vitest                      | TypeScript 단위 테스트와 package integration test 실행기로 사용합니다.             |
 | DB integration test | Testcontainers + PostgreSQL | sequence, lock, idempotency, ticket consume은 실제 PostgreSQL에서 검증해야 합니다. |
-| Browser E2E | Playwright | frontend app이 생긴 뒤 도입합니다. |
+| Browser E2E         | Playwright                  | frontend app이 생긴 뒤 도입합니다.                                                 |
 
 단위 테스트는 Vitest를 사용합니다.
 
@@ -65,9 +65,9 @@ package/unit test에서 확인할 항목:
 
 ## 보류한 대안
 
-| 항목 | 보류 이유 |
-| --- | --- |
-| Playwright 즉시 도입 | frontend app이 아직 없으므로 현재는 보류합니다. |
+| 항목                         | 보류 이유                                           |
+| ---------------------------- | --------------------------------------------------- |
+| Playwright 즉시 도입         | frontend app이 아직 없으므로 현재는 보류합니다.     |
 | SQLite 기반 integration test | PostgreSQL 동시성/locking 검증을 대체하지 못합니다. |
 
 ## 결과

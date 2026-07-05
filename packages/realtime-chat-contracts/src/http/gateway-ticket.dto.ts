@@ -1,10 +1,5 @@
-import type {
-  GatewayTicket,
-  ISODateTime,
-  UserId,
-  WorkspaceId
-} from '../primitives';
-import type { RealtimeChatErrorCode } from '../error-codes';
+import type { GatewayTicket, ISODateTime, UserId, WorkspaceId } from "../primitives";
+import type { RealtimeChatErrorCode } from "../error-codes";
 
 export type IssueGatewayTicketRequest = {
   actorId: UserId;
@@ -23,7 +18,7 @@ export type ConsumeGatewayTicketRequest = {
 
 export type ConsumeGatewayTicketResponse =
   | {
-      status: 'consumed';
+      status: "consumed";
       ticket: {
         actorId: UserId;
         workspaceId?: WorkspaceId;
@@ -31,7 +26,7 @@ export type ConsumeGatewayTicketResponse =
       };
     }
   | {
-      status: 'rejected';
+      status: "rejected";
       reason: RealtimeChatErrorCode;
       message?: string;
     };

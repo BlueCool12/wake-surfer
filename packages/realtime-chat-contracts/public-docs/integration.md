@@ -2,12 +2,12 @@
 
 consumer는 보통 feature package를 통해 이 패키지를 사용합니다.
 
-| 소비자 | 일반적인 사용 |
-| --- | --- |
-| `packages/realtime-chat` | API/Gateway adapter에서 HTTP DTO, socket event, outbound delivery event payload 사용 |
-| frontend client | socket event와 HTTP DTO compile-time shape |
-| app-owned API client adapter | Gateway `RealtimeChatApiClientPort` 구현 시 HTTP DTO request/response shape 사용 |
-| app-owned broker adapter | outbound delivery event publish/subscribe payload shape 사용 |
+| 소비자                       | 일반적인 사용                                                                        |
+| ---------------------------- | ------------------------------------------------------------------------------------ |
+| `packages/realtime-chat`     | API/Gateway adapter에서 HTTP DTO, socket event, outbound delivery event payload 사용 |
+| frontend client              | socket event와 HTTP DTO compile-time shape                                           |
+| app-owned API client adapter | Gateway `RealtimeChatApiClientPort` 구현 시 HTTP DTO request/response shape 사용     |
+| app-owned broker adapter     | outbound delivery event publish/subscribe payload shape 사용                         |
 
 Boundary 규칙:
 
@@ -35,7 +35,7 @@ Gateway ticket consume은 gateway app이 DB를 직접 보지 않고 API internal
 지원되는 import path는 package root뿐입니다.
 
 ```ts
-import type { OutboundMessageDeliveryRequested } from '@wake-surfer/realtime-chat-contracts';
+import type { OutboundMessageDeliveryRequested } from "@wake-surfer/realtime-chat-contracts";
 ```
 
 `@wake-surfer/realtime-chat-contracts/src/**`와 파일별 subpath는 public integration point가 아닙니다.

@@ -6,9 +6,7 @@ export type WebSocketConnectionLike = {
   headers: Record<string, string | undefined>;
   send: (payload: string) => void | Promise<void>;
   close: (code?: number, reason?: string) => void | Promise<void>;
-  onMessage: (
-    handler: (payload: WebSocketMessagePayload) => void | Promise<void>
-  ) => void;
+  onMessage: (handler: (payload: WebSocketMessagePayload) => void | Promise<void>) => void;
   onClose: (handler: () => void | Promise<void>) => void;
 };
 

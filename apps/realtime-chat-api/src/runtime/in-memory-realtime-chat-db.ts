@@ -3,8 +3,8 @@ import type {
   RealtimeChatMessageTarget,
   StoredGatewayTicket,
   StoredReadCursor,
-  StoredRealtimeChatMessage
-} from '@wake-surfer/realtime-chat/api';
+  StoredRealtimeChatMessage,
+} from "@wake-surfer/realtime-chat/api";
 
 export function createInMemoryRealtimeChatDb(): RealtimeChatDbPort {
   return new InMemoryRealtimeChatDb();
@@ -26,57 +26,55 @@ class InMemoryRealtimeChatDb implements RealtimeChatDbPort {
   }
 
   async consumeGatewayTicket(
-    input: Parameters<RealtimeChatDbPort['consumeGatewayTicket']>[0]
-  ): Promise<Awaited<ReturnType<RealtimeChatDbPort['consumeGatewayTicket']>>> {
+    input: Parameters<RealtimeChatDbPort["consumeGatewayTicket"]>[0],
+  ): Promise<Awaited<ReturnType<RealtimeChatDbPort["consumeGatewayTicket"]>>> {
     const ticket = this.gatewayTickets.get(input.ticketValueHash);
 
     if (!ticket) {
       return {
-        status: 'rejected',
-        reason: 'GATEWAY_TICKET_INVALID_OR_EXPIRED'
+        status: "rejected",
+        reason: "GATEWAY_TICKET_INVALID_OR_EXPIRED",
       };
     }
 
     if (ticket.consumedAt) {
       return {
-        status: 'rejected',
-        reason: 'GATEWAY_TICKET_ALREADY_CONSUMED'
+        status: "rejected",
+        reason: "GATEWAY_TICKET_ALREADY_CONSUMED",
       };
     }
 
     if (new Date(ticket.expiresAt).getTime() <= new Date(input.consumedAt).getTime()) {
       return {
-        status: 'rejected',
-        reason: 'GATEWAY_TICKET_INVALID_OR_EXPIRED'
+        status: "rejected",
+        reason: "GATEWAY_TICKET_INVALID_OR_EXPIRED",
       };
     }
 
     const consumedTicket: InMemoryGatewayTicket = {
       ...ticket,
-      consumedAt: input.consumedAt
+      consumedAt: input.consumedAt,
     };
     this.gatewayTickets.set(input.ticketValueHash, consumedTicket);
 
     return {
-      status: 'consumed',
+      status: "consumed",
       ticket: {
         actorId: consumedTicket.actorId,
-        ...(consumedTicket.workspaceId
-          ? { workspaceId: consumedTicket.workspaceId }
-          : {}),
-        consumedAt: input.consumedAt
-      }
+        ...(consumedTicket.workspaceId ? { workspaceId: consumedTicket.workspaceId } : {}),
+        consumedAt: input.consumedAt,
+      },
     };
   }
 
   async findMessageByIdempotencyKey(
-    idempotencyKey: string
+    idempotencyKey: string,
   ): Promise<StoredRealtimeChatMessage | undefined> {
     return this.messagesByIdempotencyKey.get(idempotencyKey);
   }
 
   async appendMessage(
-    input: Parameters<RealtimeChatDbPort['appendMessage']>[0]
+    input: Parameters<RealtimeChatDbPort["appendMessage"]>[0],
   ): Promise<StoredRealtimeChatMessage> {
     const streamId = streamIdForTarget(input.target);
     const sequence = (this.streamSequences.get(streamId) ?? 0) + 1;
@@ -91,7 +89,7 @@ class InMemoryRealtimeChatDb implements RealtimeChatDbPort {
       messageType: input.messageType,
       content: input.content,
       createdAt: input.createdAt,
-      ...(input.idempotencyKey ? { idempotencyKey: input.idempotencyKey } : {})
+      ...(input.idempotencyKey ? { idempotencyKey: input.idempotencyKey } : {}),
     };
 
     const streamMessages = this.messagesByStream.get(streamId) ?? [];
@@ -106,20 +104,17 @@ class InMemoryRealtimeChatDb implements RealtimeChatDbPort {
   }
 
   async markReadCursor(
-    input: Parameters<RealtimeChatDbPort['markReadCursor']>[0]
+    input: Parameters<RealtimeChatDbPort["markReadCursor"]>[0],
   ): Promise<StoredReadCursor> {
     const key = `${input.actorId}:${input.streamId}`;
     const current = this.readCursors.get(key);
-    const nextSequence = Math.max(
-      current?.lastReadSequence ?? 0,
-      input.lastReadSequence
-    );
+    const nextSequence = Math.max(current?.lastReadSequence ?? 0, input.lastReadSequence);
     const cursor: StoredReadCursor = {
       actorId: input.actorId,
       streamId: input.streamId,
       lastReadSequence: nextSequence,
       updatedAt: input.updatedAt,
-      advanced: nextSequence > (current?.lastReadSequence ?? 0)
+      advanced: nextSequence > (current?.lastReadSequence ?? 0),
     };
 
     this.readCursors.set(key, cursor);
@@ -127,21 +122,15 @@ class InMemoryRealtimeChatDb implements RealtimeChatDbPort {
   }
 
   async listMessages(
-    input: Parameters<RealtimeChatDbPort['listMessages']>[0]
-  ): Promise<Awaited<ReturnType<RealtimeChatDbPort['listMessages']>>> {
+    input: Parameters<RealtimeChatDbPort["listMessages"]>[0],
+  ): Promise<Awaited<ReturnType<RealtimeChatDbPort["listMessages"]>>> {
     const messages = [...(this.messagesByStream.get(input.streamId) ?? [])];
     const filtered = messages.filter((message) => {
-      if (
-        input.afterSequence !== undefined &&
-        message.sequence <= input.afterSequence
-      ) {
+      if (input.afterSequence !== undefined && message.sequence <= input.afterSequence) {
         return false;
       }
 
-      if (
-        input.beforeSequence !== undefined &&
-        message.sequence >= input.beforeSequence
-      ) {
+      if (input.beforeSequence !== undefined && message.sequence >= input.beforeSequence) {
         return false;
       }
 
@@ -152,7 +141,7 @@ class InMemoryRealtimeChatDb implements RealtimeChatDbPort {
     return {
       messages: page,
       hasMoreBefore: hasMoreBefore(messages, page),
-      hasMoreAfter: filtered.length > page.length
+      hasMoreAfter: filtered.length > page.length,
     };
   }
 
@@ -167,7 +156,7 @@ class InMemoryRealtimeChatDb implements RealtimeChatDbPort {
 
 function hasMoreBefore(
   allMessages: StoredRealtimeChatMessage[],
-  page: StoredRealtimeChatMessage[]
+  page: StoredRealtimeChatMessage[],
 ): boolean {
   const first = page[0];
 
@@ -179,11 +168,11 @@ function hasMoreBefore(
 }
 
 function streamIdForTarget(target: RealtimeChatMessageTarget): string {
-  if (target.kind === 'channel') {
+  if (target.kind === "channel") {
     return `channel:${target.workspaceId}:${target.channelId}`;
   }
 
-  if (target.kind === 'dm') {
+  if (target.kind === "dm") {
     return `dm:${target.dmConversationId}`;
   }
 

@@ -8,37 +8,37 @@ import type {
   RealtimeChatServerEvent,
   RealtimeChatSocketEvent,
   MessageCommandResponse,
-  OutboundMessageDeliveryRequested
-} from '@wake-surfer/realtime-chat-contracts';
+  OutboundMessageDeliveryRequested,
+} from "@wake-surfer/realtime-chat-contracts";
 ```
 
 ## Export groups
 
-| 그룹 | exports |
-| --- | --- |
-| primitive | `UserId`, `WorkspaceId`, `ChannelId`, `DMConversationId`, `ThreadId`, `StreamId`, `MessageId`, `ClientMessageId`, `CommandId`, `EventId`, `GatewayId`, `GatewaySessionId`, `GatewayTicket`, `RequestId`, `ISODateTime`, `StreamType`, `MessageType`, `TextMessageContentDto`, `SystemMessageContentDto`, `MessageContentDto` |
-| error code | `RealtimeChatErrorCode`, `REALTIME_CHAT_ERROR_CODES` |
-| socket client event | `ChatChannelMessageSendEvent`, `ChatDMMessageSendEvent`, `ChatThreadMessageReplyEvent`, `ChatChannelReadMarkEvent`, `ChatStreamSyncEvent`, `RealtimeChatClientEvent` |
-| socket server event | `GatewayConnectedEvent`, `GatewayConnectionRejectedEvent`, `GatewayErrorEvent`, `ChatMessageAcceptedEvent`, `ChatMessageRejectedEvent`, `ChatMessageCreatedEvent`, `ChatStreamSyncedEvent`, `ChatReadCursorUpdatedEvent`, `RealtimeChatServerEvent` |
-| socket union | `RealtimeChatSocketEvent`, `RealtimeChatClientEventType`, `RealtimeChatServerEventType` |
-| HTTP DTO | `IssueGatewayTicketRequest`, `IssueGatewayTicketResponse`, `ConsumeGatewayTicketRequest`, `ConsumeGatewayTicketResponse`, `SendChannelMessageRequest`, `SendDMMessageRequest`, `ReplyThreadMessageRequest`, `PostSessionStartedSystemMessageRequest`, `MessageAcceptedResponse`, `MessageRejectedResponse`, `MessageCommandResponse`, `PublicMessageDto`, `MarkReadCursorRequest`, `MarkReadCursorResponse`, `SyncStreamMessagesRequest`, `SyncStreamMessagesResponse` |
-| integration event | `OutboundMessageDeliveryRequested`, `CollaborationSessionStarted`, `PresenceChanged` |
+| 그룹                | exports                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| primitive           | `UserId`, `WorkspaceId`, `ChannelId`, `DMConversationId`, `ThreadId`, `StreamId`, `MessageId`, `ClientMessageId`, `CommandId`, `EventId`, `GatewayId`, `GatewaySessionId`, `GatewayTicket`, `RequestId`, `ISODateTime`, `StreamType`, `MessageType`, `TextMessageContentDto`, `SystemMessageContentDto`, `MessageContentDto`                                                                                                                                           |
+| error code          | `RealtimeChatErrorCode`, `REALTIME_CHAT_ERROR_CODES`                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| socket client event | `ChatChannelMessageSendEvent`, `ChatDMMessageSendEvent`, `ChatThreadMessageReplyEvent`, `ChatChannelReadMarkEvent`, `ChatStreamSyncEvent`, `RealtimeChatClientEvent`                                                                                                                                                                                                                                                                                                   |
+| socket server event | `GatewayConnectedEvent`, `GatewayConnectionRejectedEvent`, `GatewayErrorEvent`, `ChatMessageAcceptedEvent`, `ChatMessageRejectedEvent`, `ChatMessageCreatedEvent`, `ChatStreamSyncedEvent`, `ChatReadCursorUpdatedEvent`, `RealtimeChatServerEvent`                                                                                                                                                                                                                    |
+| socket union        | `RealtimeChatSocketEvent`, `RealtimeChatClientEventType`, `RealtimeChatServerEventType`                                                                                                                                                                                                                                                                                                                                                                                |
+| HTTP DTO            | `IssueGatewayTicketRequest`, `IssueGatewayTicketResponse`, `ConsumeGatewayTicketRequest`, `ConsumeGatewayTicketResponse`, `SendChannelMessageRequest`, `SendDMMessageRequest`, `ReplyThreadMessageRequest`, `PostSessionStartedSystemMessageRequest`, `MessageAcceptedResponse`, `MessageRejectedResponse`, `MessageCommandResponse`, `PublicMessageDto`, `MarkReadCursorRequest`, `MarkReadCursorResponse`, `SyncStreamMessagesRequest`, `SyncStreamMessagesResponse` |
+| integration event   | `OutboundMessageDeliveryRequested`, `CollaborationSessionStarted`, `PresenceChanged`                                                                                                                                                                                                                                                                                                                                                                                   |
 
 ## Primitive semantics
 
 All ID aliases are string contracts. `ISODateTime` is also a string contract and producers must serialize it with `Date#toISOString()`.
 
 ```ts
-type StreamType = 'CHANNEL' | 'DM' | 'THREAD';
-type MessageType = 'USER' | 'SYSTEM';
+type StreamType = "CHANNEL" | "DM" | "THREAD";
+type MessageType = "USER" | "SYSTEM";
 
 type TextMessageContentDto = {
-  kind: 'text';
+  kind: "text";
   text: string;
 };
 
 type SystemMessageContentDto = {
-  kind: 'system';
+  kind: "system";
   text: string;
   metadata?: Record<string, string>;
 };
@@ -50,21 +50,21 @@ type MessageContentDto = TextMessageContentDto | SystemMessageContentDto;
 
 ```ts
 type RealtimeChatErrorCode =
-  | 'INVALID_PAYLOAD'
-  | 'PAYLOAD_TOO_LARGE'
-  | 'UNSUPPORTED_EVENT_TYPE'
-  | 'GATEWAY_TICKET_MISSING'
-  | 'GATEWAY_TICKET_INVALID_OR_EXPIRED'
-  | 'GATEWAY_TICKET_ALREADY_CONSUMED'
-  | 'GATEWAY_SESSION_NOT_FOUND'
-  | 'CHANNEL_ACCESS_DENIED'
-  | 'DM_ACCESS_DENIED'
-  | 'THREAD_ACCESS_DENIED'
-  | 'MESSAGE_CONTENT_INVALID'
-  | 'MESSAGE_SAVE_FAILED'
-  | 'STREAM_NOT_FOUND'
-  | 'API_UNAVAILABLE'
-  | 'INTERNAL_ERROR';
+  | "INVALID_PAYLOAD"
+  | "PAYLOAD_TOO_LARGE"
+  | "UNSUPPORTED_EVENT_TYPE"
+  | "GATEWAY_TICKET_MISSING"
+  | "GATEWAY_TICKET_INVALID_OR_EXPIRED"
+  | "GATEWAY_TICKET_ALREADY_CONSUMED"
+  | "GATEWAY_SESSION_NOT_FOUND"
+  | "CHANNEL_ACCESS_DENIED"
+  | "DM_ACCESS_DENIED"
+  | "THREAD_ACCESS_DENIED"
+  | "MESSAGE_CONTENT_INVALID"
+  | "MESSAGE_SAVE_FAILED"
+  | "STREAM_NOT_FOUND"
+  | "API_UNAVAILABLE"
+  | "INTERNAL_ERROR";
 ```
 
 ## HTTP DTOs
@@ -89,7 +89,7 @@ type ConsumeGatewayTicketRequest = {
 
 type ConsumeGatewayTicketResponse =
   | {
-      status: 'consumed';
+      status: "consumed";
       ticket: {
         actorId: UserId;
         workspaceId?: WorkspaceId;
@@ -97,7 +97,7 @@ type ConsumeGatewayTicketResponse =
       };
     }
   | {
-      status: 'rejected';
+      status: "rejected";
       reason: RealtimeChatErrorCode;
       message?: string;
     };
@@ -157,7 +157,7 @@ Message response DTOs:
 
 ```ts
 type MessageAcceptedResponse = {
-  status: 'accepted';
+  status: "accepted";
   commandId: CommandId;
   clientMessageId?: ClientMessageId;
   messageId: MessageId;
@@ -168,16 +168,14 @@ type MessageAcceptedResponse = {
 };
 
 type MessageRejectedResponse = {
-  status: 'rejected';
+  status: "rejected";
   commandId: CommandId;
   clientMessageId?: ClientMessageId;
   reason: RealtimeChatErrorCode;
   message?: string;
 };
 
-type MessageCommandResponse =
-  | MessageAcceptedResponse
-  | MessageRejectedResponse;
+type MessageCommandResponse = MessageAcceptedResponse | MessageRejectedResponse;
 ```
 
 Read cursor and sync DTOs:
@@ -191,7 +189,7 @@ type MarkReadCursorRequest = {
 };
 
 type MarkReadCursorResponse = {
-  status: 'advanced' | 'unchanged';
+  status: "advanced" | "unchanged";
   commandId: CommandId;
   streamId: StreamId;
   lastReadSequence: number;
@@ -224,7 +222,7 @@ type PublicMessageDto = {
   streamType: StreamType;
   sequence: number;
   senderId?: UserId;
-  messageType: 'USER' | 'SYSTEM';
+  messageType: "USER" | "SYSTEM";
   content: MessageContentDto;
   createdAt: ISODateTime;
 };
@@ -244,7 +242,7 @@ Client event payloads use `commandId` as the request correlation id. Gateway map
 
 ```ts
 type ChatChannelMessageSendEvent = {
-  type: 'chat.channel.message.send';
+  type: "chat.channel.message.send";
   commandId: CommandId;
   clientMessageId: ClientMessageId;
   workspaceId: WorkspaceId;
@@ -254,7 +252,7 @@ type ChatChannelMessageSendEvent = {
 };
 
 type ChatDMMessageSendEvent = {
-  type: 'chat.dm.message.send';
+  type: "chat.dm.message.send";
   commandId: CommandId;
   clientMessageId: ClientMessageId;
   dmConversationId: DMConversationId;
@@ -263,7 +261,7 @@ type ChatDMMessageSendEvent = {
 };
 
 type ChatThreadMessageReplyEvent = {
-  type: 'chat.thread.message.reply';
+  type: "chat.thread.message.reply";
   commandId: CommandId;
   clientMessageId: ClientMessageId;
   threadId: ThreadId;
@@ -272,14 +270,14 @@ type ChatThreadMessageReplyEvent = {
 };
 
 type ChatChannelReadMarkEvent = {
-  type: 'chat.channel.read.mark';
+  type: "chat.channel.read.mark";
   commandId: CommandId;
   streamId: StreamId;
   lastReadSequence: number;
 };
 
 type ChatStreamSyncEvent = {
-  type: 'chat.stream.sync';
+  type: "chat.stream.sync";
   commandId: CommandId;
   streamId: StreamId;
   afterSequence: number;
@@ -308,7 +306,7 @@ Server event payloads are serialized by the gateway as JSON strings.
 ```ts
 type OutboundMessageDeliveryRequested = {
   eventId: EventId;
-  eventType: 'OutboundMessageDeliveryRequested';
+  eventType: "OutboundMessageDeliveryRequested";
   occurredAt: ISODateTime;
   streamId: StreamId;
   streamType: StreamType;
@@ -320,7 +318,7 @@ type OutboundMessageDeliveryRequested = {
 
 type CollaborationSessionStarted = {
   eventId: EventId;
-  eventType: 'CollaborationSessionStarted';
+  eventType: "CollaborationSessionStarted";
   occurredAt: ISODateTime;
   workspaceId: WorkspaceId;
   channelId: ChannelId;
@@ -331,10 +329,10 @@ type CollaborationSessionStarted = {
 
 type PresenceChanged = {
   eventId: EventId;
-  eventType: 'PresenceChanged';
+  eventType: "PresenceChanged";
   occurredAt: ISODateTime;
   workspaceId: WorkspaceId;
   userId: UserId;
-  status: 'online' | 'away' | 'offline';
+  status: "online" | "away" | "offline";
 };
 ```

@@ -1,11 +1,9 @@
-import type { RealtimeChatUsecases } from '../../application/create-usecases';
-import type { HttpRouteHandler } from '../http-server-like';
-import { badRequest, forbidden, ok } from './response';
-import { parseSyncStreamMessagesRequest } from '../schemas/stream-sync.schema';
+import type { RealtimeChatUsecases } from "../../application/create-usecases";
+import type { HttpRouteHandler } from "../http-server-like";
+import { badRequest, forbidden, ok } from "./response";
+import { parseSyncStreamMessagesRequest } from "../schemas/stream-sync.schema";
 
-export function createSyncStreamHandler(
-  usecases: RealtimeChatUsecases
-): HttpRouteHandler {
+export function createSyncStreamHandler(usecases: RealtimeChatUsecases): HttpRouteHandler {
   return async (request) => {
     const parsed = parseSyncStreamMessagesRequest(request.params, request.query);
 
@@ -15,7 +13,7 @@ export function createSyncStreamHandler(
 
     const result = await usecases.syncStreamMessages(parsed.value);
 
-    if (result.status === 'rejected') {
+    if (result.status === "rejected") {
       return forbidden(result.reason, result.message);
     }
 

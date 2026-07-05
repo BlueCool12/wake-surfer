@@ -55,17 +55,14 @@ packages/
 public import는 다음 형태를 허용합니다.
 
 ```ts
-import {
-  mountRealtimeChatApi,
-  mountRealtimeChatGateway
-} from '@wake-surfer/realtime-chat';
+import { mountRealtimeChatApi, mountRealtimeChatGateway } from "@wake-surfer/realtime-chat";
 ```
 
 세부 adapter별 import가 필요하면 public subpath를 사용합니다.
 
 ```ts
-import { mountRealtimeChatApi } from '@wake-surfer/realtime-chat/api';
-import { mountRealtimeChatGateway } from '@wake-surfer/realtime-chat/gateway';
+import { mountRealtimeChatApi } from "@wake-surfer/realtime-chat/api";
+import { mountRealtimeChatGateway } from "@wake-surfer/realtime-chat/gateway";
 ```
 
 ## contracts 분리 기준

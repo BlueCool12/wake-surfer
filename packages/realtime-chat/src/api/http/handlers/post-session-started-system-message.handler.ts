@@ -1,10 +1,10 @@
-import type { RealtimeChatUsecases } from '../../application/create-usecases';
-import type { HttpRouteHandler } from '../http-server-like';
-import { badRequest, ok } from './response';
-import { parsePostSessionStartedSystemMessageRequest } from '../schemas/message-command.schema';
+import type { RealtimeChatUsecases } from "../../application/create-usecases";
+import type { HttpRouteHandler } from "../http-server-like";
+import { badRequest, ok } from "./response";
+import { parsePostSessionStartedSystemMessageRequest } from "../schemas/message-command.schema";
 
 export function createPostSessionStartedSystemMessageHandler(
-  usecases: RealtimeChatUsecases
+  usecases: RealtimeChatUsecases,
 ): HttpRouteHandler {
   return async (request) => {
     const parsed = parsePostSessionStartedSystemMessageRequest(request.body);

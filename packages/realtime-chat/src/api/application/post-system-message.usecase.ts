@@ -1,27 +1,24 @@
 import type {
   MessageCommandResponse,
-  PostSessionStartedSystemMessageRequest
-} from '@wake-surfer/realtime-chat-contracts';
-import type { RealtimeChatApiRuntimeDeps } from '../runtime-deps';
-import {
-  toAcceptedResponse,
-  toChatMessageCreatedEvent
-} from '../domain/message';
-import { buildUserMessageIdempotencyKey } from '../domain/policies';
+  PostSessionStartedSystemMessageRequest,
+} from "@wake-surfer/realtime-chat-contracts";
+import type { RealtimeChatApiRuntimeDeps } from "../runtime-deps";
+import { toAcceptedResponse, toChatMessageCreatedEvent } from "../domain/message";
+import { buildUserMessageIdempotencyKey } from "../domain/policies";
 
 export async function postSessionStartedSystemMessage(
   request: PostSessionStartedSystemMessageRequest,
-  deps: RealtimeChatApiRuntimeDeps
+  deps: RealtimeChatApiRuntimeDeps,
 ): Promise<MessageCommandResponse> {
   const target = {
-    kind: 'channel' as const,
+    kind: "channel" as const,
     workspaceId: request.workspaceId,
-    channelId: request.channelId
+    channelId: request.channelId,
   };
   const idempotencyKey = buildUserMessageIdempotencyKey(
-    request.actorId ?? 'system',
+    request.actorId ?? "system",
     target,
-    request.sourceEventId
+    request.sourceEventId,
   );
   const existing = await deps.db.findMessageByIdempotencyKey(idempotencyKey);
 
@@ -31,54 +28,52 @@ export async function postSessionStartedSystemMessage(
 
   try {
     const message = await deps.db.appendMessage({
-      messageId: deps.idGenerator.generateId('message'),
+      messageId: deps.idGenerator.generateId("message"),
       target,
-      streamType: 'CHANNEL',
+      streamType: "CHANNEL",
       ...(request.actorId ? { senderId: request.actorId } : {}),
-      messageType: 'SYSTEM',
+      messageType: "SYSTEM",
       content: {
-        kind: 'system',
-        text: request.title
-          ? `Session started: ${request.title}`
-          : 'Session started',
+        kind: "system",
+        text: request.title ? `Session started: ${request.title}` : "Session started",
         metadata: {
           sessionId: request.sessionId,
-          sourceEventId: request.sourceEventId
-        }
+          sourceEventId: request.sourceEventId,
+        },
       },
       idempotencyKey,
-      createdAt: request.occurredAt
+      createdAt: request.occurredAt,
     });
     const recipientUserIds = await deps.permissionPort.resolveMessageRecipients({
       ...(request.actorId ? { actorId: request.actorId } : {}),
       target,
-      streamId: message.streamId
+      streamId: message.streamId,
     });
 
     await deps.outboundEventBus.publish({
-      eventId: deps.idGenerator.generateId('outbound-message-delivery-requested'),
-      eventType: 'OutboundMessageDeliveryRequested',
+      eventId: deps.idGenerator.generateId("outbound-message-delivery-requested"),
+      eventType: "OutboundMessageDeliveryRequested",
       occurredAt: deps.clock.now().toISOString(),
       streamId: message.streamId,
       streamType: message.streamType,
       messageId: message.messageId,
       sequence: message.sequence,
       recipientUserIds,
-      payload: toChatMessageCreatedEvent(message)
+      payload: toChatMessageCreatedEvent(message),
     });
 
     return toAcceptedResponse(request.requestId, message);
   } catch (error) {
-    deps.logger.error('failed to save realtime chat system message', {
+    deps.logger.error("failed to save realtime chat system message", {
       error,
       channelId: request.channelId,
-      sessionId: request.sessionId
+      sessionId: request.sessionId,
     });
 
     return {
-      status: 'rejected',
+      status: "rejected",
       commandId: request.requestId,
-      reason: 'MESSAGE_SAVE_FAILED'
+      reason: "MESSAGE_SAVE_FAILED",
     };
   }
 }

@@ -11,36 +11,31 @@ export type ValidationResult<T> =
 export function valid<T>(value: T): ValidationResult<T> {
   return {
     ok: true,
-    value
+    value,
   };
 }
 
 export function invalid<T>(message: string): ValidationResult<T> {
   return {
     ok: false,
-    message
+    message,
   };
 }
 
 export function asRecord(value: unknown): Record<string, unknown> | undefined {
-  return value !== null && typeof value === 'object' && !Array.isArray(value)
+  return value !== null && typeof value === "object" && !Array.isArray(value)
     ? (value as Record<string, unknown>)
     : undefined;
 }
 
-export function stringField(
-  record: Record<string, unknown>,
-  field: string
-): string | undefined {
+export function stringField(record: Record<string, unknown>, field: string): string | undefined {
   const value = record[field];
-  return typeof value === 'string' && value.trim() !== ''
-    ? value.trim()
-    : undefined;
+  return typeof value === "string" && value.trim() !== "" ? value.trim() : undefined;
 }
 
 export function optionalStringField(
   record: Record<string, unknown>,
-  field: string
+  field: string,
 ): string | undefined {
   const value = record[field];
 
@@ -48,23 +43,19 @@ export function optionalStringField(
     return undefined;
   }
 
-  return typeof value === 'string' && value.trim() !== ''
-    ? value.trim()
-    : undefined;
+  return typeof value === "string" && value.trim() !== "" ? value.trim() : undefined;
 }
 
 export function positiveIntegerField(
   record: Record<string, unknown>,
-  field: string
+  field: string,
 ): number | undefined {
   const value = record[field];
-  return typeof value === 'number' && Number.isInteger(value) && value > 0
-    ? value
-    : undefined;
+  return typeof value === "number" && Number.isInteger(value) && value > 0 ? value : undefined;
 }
 
 export function nonNegativeIntegerFromString(value: string | undefined): number | undefined {
-  if (value === undefined || value.trim() === '') {
+  if (value === undefined || value.trim() === "") {
     return undefined;
   }
 

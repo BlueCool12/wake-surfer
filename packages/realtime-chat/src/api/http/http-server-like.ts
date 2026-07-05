@@ -1,4 +1,4 @@
-export type HttpMethod = 'GET' | 'POST';
+export type HttpMethod = "GET" | "POST";
 
 export type HttpRequestLike = {
   params: Record<string, string | undefined>;
@@ -13,7 +13,7 @@ export type HttpResponseLike = {
 };
 
 export type HttpRouteHandler = (
-  request: HttpRequestLike
+  request: HttpRequestLike,
 ) => HttpResponseLike | Promise<HttpResponseLike>;
 
 export type HttpRouteDefinition = {

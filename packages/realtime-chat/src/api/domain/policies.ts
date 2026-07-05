@@ -1,19 +1,19 @@
-import type { RealtimeChatMessageTarget } from '../runtime-deps';
+import type { RealtimeChatMessageTarget } from "../runtime-deps";
 
 export function buildUserMessageIdempotencyKey(
   senderId: string,
   target: RealtimeChatMessageTarget,
-  clientMessageId: string
+  clientMessageId: string,
 ): string {
   return `USER_MESSAGE:${senderId}:${targetKey(target)}:${clientMessageId}`;
 }
 
 export function targetKey(target: RealtimeChatMessageTarget): string {
-  if (target.kind === 'channel') {
+  if (target.kind === "channel") {
     return `CHANNEL:${target.workspaceId}:${target.channelId}`;
   }
 
-  if (target.kind === 'dm') {
+  if (target.kind === "dm") {
     return `DM:${target.dmConversationId}`;
   }
 

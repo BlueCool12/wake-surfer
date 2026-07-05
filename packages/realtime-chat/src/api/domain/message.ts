@@ -2,24 +2,22 @@ import type {
   ChatMessageCreatedEvent,
   MessageAcceptedResponse,
   PublicMessageDto,
-  RealtimeChatErrorCode
-} from '@wake-surfer/realtime-chat-contracts';
-import type { StoredRealtimeChatMessage } from '../runtime-deps';
+  RealtimeChatErrorCode,
+} from "@wake-surfer/realtime-chat-contracts";
+import type { StoredRealtimeChatMessage } from "../runtime-deps";
 
 export function validateMessageText(
   text: string,
-  maxLength: number
+  maxLength: number,
 ): RealtimeChatErrorCode | undefined {
-  if (text.trim() === '' || text.length > maxLength) {
-    return 'MESSAGE_CONTENT_INVALID';
+  if (text.trim() === "" || text.length > maxLength) {
+    return "MESSAGE_CONTENT_INVALID";
   }
 
   return undefined;
 }
 
-export function toPublicMessageDto(
-  message: StoredRealtimeChatMessage
-): PublicMessageDto {
+export function toPublicMessageDto(message: StoredRealtimeChatMessage): PublicMessageDto {
   return {
     messageId: message.messageId,
     streamId: message.streamId,
@@ -28,15 +26,15 @@ export function toPublicMessageDto(
     ...(message.senderId ? { senderId: message.senderId } : {}),
     messageType: message.messageType,
     content: message.content,
-    createdAt: message.createdAt
+    createdAt: message.createdAt,
   };
 }
 
 export function toChatMessageCreatedEvent(
-  message: StoredRealtimeChatMessage
+  message: StoredRealtimeChatMessage,
 ): ChatMessageCreatedEvent {
   return {
-    type: 'chat.message.created',
+    type: "chat.message.created",
     messageId: message.messageId,
     streamId: message.streamId,
     streamType: message.streamType,
@@ -44,23 +42,23 @@ export function toChatMessageCreatedEvent(
     ...(message.senderId ? { senderId: message.senderId } : {}),
     messageType: message.messageType,
     content: message.content,
-    createdAt: message.createdAt
+    createdAt: message.createdAt,
   };
 }
 
 export function toAcceptedResponse(
   commandId: string,
   message: StoredRealtimeChatMessage,
-  clientMessageId?: string
+  clientMessageId?: string,
 ): MessageAcceptedResponse {
   return {
-    status: 'accepted',
+    status: "accepted",
     commandId,
     ...(clientMessageId ? { clientMessageId } : {}),
     messageId: message.messageId,
     streamId: message.streamId,
     streamType: message.streamType,
     sequence: message.sequence,
-    serverCreatedAt: message.createdAt
+    serverCreatedAt: message.createdAt,
   };
 }

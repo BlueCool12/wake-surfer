@@ -1,4 +1,4 @@
-export { mountRealtimeChatApi } from './api/public';
+export { mountRealtimeChatApi } from "./api/public";
 export type {
   HttpMethod,
   HttpRequestLike,
@@ -7,15 +7,15 @@ export type {
   HttpRouteHandler,
   HttpServerLike,
   RealtimeChatApiMountOptions,
-  RealtimeChatApiRuntimeDeps
-} from './api/public';
+  RealtimeChatApiRuntimeDeps,
+} from "./api/public";
 
-export { mountRealtimeChatGateway } from './gateway/public';
+export { mountRealtimeChatGateway } from "./gateway/public";
 export type {
   RealtimeChatGatewayMountOptions,
   RealtimeChatGatewayRuntimeDeps,
   WebSocketConnectionLike,
   WebSocketMessagePayload,
   WebSocketRouteDefinition,
-  WebSocketServerLike
-} from './gateway/public';
+  WebSocketServerLike,
+} from "./gateway/public";

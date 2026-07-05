@@ -4,13 +4,13 @@
 
 현재 source layout:
 
-| 경로 | 책임 |
-| --- | --- |
-| `src/primitives.ts` | 공유 ID와 enum-like primitive alias |
-| `src/error-codes.ts` | 공개 realtime chat error name |
-| `src/socket/*` | client/server WebSocket event contract |
-| `src/http/*` | HTTP 및 process-boundary DTO |
-| `src/integration-events/*` | cross-context event contract |
-| `src/index.ts` | package root export surface |
+| 경로                       | 책임                                   |
+| -------------------------- | -------------------------------------- |
+| `src/primitives.ts`        | 공유 ID와 enum-like primitive alias    |
+| `src/error-codes.ts`       | 공개 realtime chat error name          |
+| `src/socket/*`             | client/server WebSocket event contract |
+| `src/http/*`               | HTTP 및 process-boundary DTO           |
+| `src/integration-events/*` | cross-context event contract           |
+| `src/index.ts`             | package root export surface            |
 
 package root는 모든 public contract를 re-export합니다. 파일 배치는 deep-import contract가 아닙니다.

@@ -6,7 +6,5 @@
     "moduleResolution": "Node16",
     "noEmit": true
   },
-  "include": [
-    "test/consumer/**/*.ts"
-  ]
+  "include": ["test/consumer/**/*.ts"]
 }

@@ -1,9 +1,6 @@
-import { createClient } from 'redis';
-import type {
-  LoggerPort,
-  OutboundEventBusPort
-} from '@wake-surfer/realtime-chat/gateway';
-import type { OutboundMessageDeliveryRequested } from '@wake-surfer/realtime-chat-contracts';
+import { createClient } from "redis";
+import type { LoggerPort, OutboundEventBusPort } from "@wake-surfer/realtime-chat/gateway";
+import type { OutboundMessageDeliveryRequested } from "@wake-surfer/realtime-chat-contracts";
 
 export type RedisOutboundEventBus = OutboundEventBusPort & {
   destroy: () => Promise<void>;
@@ -15,11 +12,11 @@ export async function createRedisOutboundEventBus(input: {
   logger: LoggerPort;
 }): Promise<RedisOutboundEventBus> {
   const subscriber = createClient({
-    url: input.redisUrl
+    url: input.redisUrl,
   });
 
-  subscriber.on('error', (error) => {
-    input.logger.error('realtime chat redis subscriber error', { error });
+  subscriber.on("error", (error) => {
+    input.logger.error("realtime chat redis subscriber error", { error });
   });
 
   await subscriber.connect();
@@ -36,9 +33,9 @@ export async function createRedisOutboundEventBus(input: {
         try {
           await handler(event);
         } catch (error) {
-          input.logger.warn('failed to handle realtime chat outbound event', {
+          input.logger.warn("failed to handle realtime chat outbound event", {
             error,
-            eventId: event.eventId
+            eventId: event.eventId,
           });
         }
       });
@@ -46,35 +43,35 @@ export async function createRedisOutboundEventBus(input: {
       return {
         async unsubscribe() {
           await subscriber.unsubscribe(input.channel);
-        }
+        },
       };
     },
     async destroy() {
       if (subscriber.isOpen) {
         await subscriber.quit();
       }
-    }
+    },
   };
 }
 
 function parseOutboundEvent(
   message: string,
-  logger: LoggerPort
+  logger: LoggerPort,
 ): OutboundMessageDeliveryRequested | undefined {
   try {
     const parsed = JSON.parse(message) as Partial<OutboundMessageDeliveryRequested>;
 
-    if (parsed.eventType !== 'OutboundMessageDeliveryRequested') {
-      logger.warn('unsupported realtime chat outbound event ignored', {
-        eventType: parsed.eventType
+    if (parsed.eventType !== "OutboundMessageDeliveryRequested") {
+      logger.warn("unsupported realtime chat outbound event ignored", {
+        eventType: parsed.eventType,
       });
       return undefined;
     }
 
     return parsed as OutboundMessageDeliveryRequested;
   } catch (error) {
-    logger.warn('invalid realtime chat outbound event payload ignored', {
-      error
+    logger.warn("invalid realtime chat outbound event payload ignored", {
+      error,
     });
     return undefined;
   }

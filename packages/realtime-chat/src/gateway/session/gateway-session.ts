@@ -3,9 +3,9 @@ import type {
   GatewaySessionId,
   ISODateTime,
   UserId,
-  WorkspaceId
-} from '@wake-surfer/realtime-chat-contracts';
-import type { WebSocketConnectionLike } from '../websocket/websocket-server-like';
+  WorkspaceId,
+} from "@wake-surfer/realtime-chat-contracts";
+import type { WebSocketConnectionLike } from "../websocket/websocket-server-like";
 
 export type GatewaySession = {
   sessionId: GatewaySessionId;

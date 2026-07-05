@@ -8,8 +8,8 @@ consumer는 package root에만 의존합니다.
 import type {
   RealtimeChatClientEvent,
   MessageCommandResponse,
-  OutboundMessageDeliveryRequested
-} from '@wake-surfer/realtime-chat-contracts';
+  OutboundMessageDeliveryRequested,
+} from "@wake-surfer/realtime-chat-contracts";
 ```
 
 이 패키지는 DTO, socket event, integration event, 공개 primitive alias, 공개 error code만 포함합니다. feature-private command, usecase input, domain model, repository, runtime state는 포함하지 않습니다.

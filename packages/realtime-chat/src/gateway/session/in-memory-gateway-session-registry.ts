@@ -1,5 +1,5 @@
-import type { GatewaySessionId, UserId } from '@wake-surfer/realtime-chat-contracts';
-import type { GatewaySession } from './gateway-session';
+import type { GatewaySessionId, UserId } from "@wake-surfer/realtime-chat-contracts";
+import type { GatewaySession } from "./gateway-session";
 
 export class InMemoryGatewaySessionRegistry {
   private readonly sessions = new Map<GatewaySessionId, GatewaySession>();

@@ -1,4 +1,4 @@
-import type { TicketHasherPort } from '../runtime-deps';
+import type { TicketHasherPort } from "../runtime-deps";
 
 export const defaultTicketHasher: TicketHasherPort = {
   async hash(ticketValue: string): Promise<string> {
@@ -6,14 +6,14 @@ export const defaultTicketHasher: TicketHasherPort = {
 
     if (cryptoApi?.subtle) {
       const digest = await cryptoApi.subtle.digest(
-        'SHA-256',
-        new TextEncoder().encode(ticketValue)
+        "SHA-256",
+        new TextEncoder().encode(ticketValue),
       );
       const bytes = new Uint8Array(digest);
-      let hex = '';
+      let hex = "";
 
       for (const byte of bytes) {
-        hex += byte.toString(16).padStart(2, '0');
+        hex += byte.toString(16).padStart(2, "0");
       }
 
       return `sha256:${hex}`;
@@ -27,5 +27,5 @@ export const defaultTicketHasher: TicketHasherPort = {
     }
 
     return `fnv1a:${(hash >>> 0).toString(16)}`;
-  }
+  },
 };

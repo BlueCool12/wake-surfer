@@ -10,22 +10,22 @@ import type {
   StreamType,
   ThreadId,
   UserId,
-  WorkspaceId
-} from '@wake-surfer/realtime-chat-contracts';
-import type { OutboundMessageDeliveryRequested } from '@wake-surfer/realtime-chat-contracts';
+  WorkspaceId,
+} from "@wake-surfer/realtime-chat-contracts";
+import type { OutboundMessageDeliveryRequested } from "@wake-surfer/realtime-chat-contracts";
 
 export type RealtimeChatMessageTarget =
   | {
-      kind: 'channel';
+      kind: "channel";
       workspaceId: WorkspaceId;
       channelId: ChannelId;
     }
   | {
-      kind: 'dm';
+      kind: "dm";
       dmConversationId: DMConversationId;
     }
   | {
-      kind: 'thread';
+      kind: "thread";
       threadId: ThreadId;
     };
 
@@ -48,10 +48,7 @@ export type PermissionPort = {
     actorId: UserId;
     target: RealtimeChatMessageTarget;
   }) => Promise<PermissionDecision>;
-  canReadStream: (input: {
-    actorId: UserId;
-    streamId: StreamId;
-  }) => Promise<PermissionDecision>;
+  canReadStream: (input: { actorId: UserId; streamId: StreamId }) => Promise<PermissionDecision>;
   resolveMessageRecipients: (input: {
     actorId?: UserId;
     target: RealtimeChatMessageTarget;
@@ -81,7 +78,7 @@ export type StoredGatewayTicket = {
 
 export type StoredGatewayTicketConsumeResult =
   | {
-      status: 'consumed';
+      status: "consumed";
       ticket: {
         actorId: UserId;
         workspaceId?: WorkspaceId;
@@ -89,7 +86,7 @@ export type StoredGatewayTicketConsumeResult =
       };
     }
   | {
-      status: 'rejected';
+      status: "rejected";
       reason: RealtimeChatErrorCode;
       message?: string;
     };
@@ -109,7 +106,7 @@ export type RealtimeChatDbPort = {
     consumedAt: ISODateTime;
   }) => Promise<StoredGatewayTicketConsumeResult>;
   findMessageByIdempotencyKey: (
-    idempotencyKey: string
+    idempotencyKey: string,
   ) => Promise<StoredRealtimeChatMessage | undefined>;
   appendMessage: (input: {
     messageId: MessageId;

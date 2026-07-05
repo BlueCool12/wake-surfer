@@ -9,15 +9,15 @@ import type {
   RealtimeChatClientEvent,
   RealtimeChatServerEvent,
   SendChannelMessageRequest,
-  MessageCommandResponse
-} from '@wake-surfer/realtime-chat-contracts';
+  MessageCommandResponse,
+} from "@wake-surfer/realtime-chat-contracts";
 ```
 
 금지되는 사용:
 
 ```ts
 // 금지: 파일 배치는 public contract가 아닙니다.
-import type { SendChannelMessageRequest } from '@wake-surfer/realtime-chat-contracts/src/http/message.dto';
+import type { SendChannelMessageRequest } from "@wake-surfer/realtime-chat-contracts/src/http/message.dto";
 ```
 
 이 패키지를 내부 domain model을 공유하는 보관소로 사용하지 않습니다. application command, usecase input, repository shape, runtime session state는 해당 behavior를 소유하는 feature package에 둡니다.
@@ -30,16 +30,16 @@ client는 socket으로 `RealtimeChatClientEvent` union 중 하나를 JSON object
 
 ```ts
 const event: RealtimeChatClientEvent = {
-  type: 'chat.channel.message.send',
+  type: "chat.channel.message.send",
   commandId: crypto.randomUUID(),
-  clientMessageId: 'local-1',
-  workspaceId: 'workspace-1',
-  channelId: 'channel-1',
+  clientMessageId: "local-1",
+  workspaceId: "workspace-1",
+  channelId: "channel-1",
   content: {
-    kind: 'text',
-    text: '안녕하세요'
+    kind: "text",
+    text: "안녕하세요",
   },
-  sentAtClient: new Date().toISOString()
+  sentAtClient: new Date().toISOString(),
 };
 ```
 
@@ -49,16 +49,16 @@ process boundary에서 API를 호출하는 consumer는 HTTP DTO를 사용합니�
 
 ```ts
 const request: SendChannelMessageRequest = {
-  requestId: 'command-1',
-  actorId: 'user-1',
-  workspaceId: 'workspace-1',
-  channelId: 'channel-1',
-  clientMessageId: 'local-1',
+  requestId: "command-1",
+  actorId: "user-1",
+  workspaceId: "workspace-1",
+  channelId: "channel-1",
+  clientMessageId: "local-1",
   content: {
-    kind: 'text',
-    text: '안녕하세요'
+    kind: "text",
+    text: "안녕하세요",
   },
-  sentAtClient: new Date().toISOString()
+  sentAtClient: new Date().toISOString(),
 };
 ```
 

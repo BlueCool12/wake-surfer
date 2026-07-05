@@ -7,17 +7,14 @@ Realtime chat feature 구현 패키지입니다.
 consumer는 package root 또는 명시적 subpath에만 의존합니다.
 
 ```ts
-import {
-  mountRealtimeChatApi,
-  mountRealtimeChatGateway
-} from '@wake-surfer/realtime-chat';
+import { mountRealtimeChatApi, mountRealtimeChatGateway } from "@wake-surfer/realtime-chat";
 ```
 
 세부 public surface를 분리해서 보고 싶으면 다음 subpath를 사용합니다.
 
 ```ts
-import { mountRealtimeChatApi } from '@wake-surfer/realtime-chat/api';
-import { mountRealtimeChatGateway } from '@wake-surfer/realtime-chat/gateway';
+import { mountRealtimeChatApi } from "@wake-surfer/realtime-chat/api";
+import { mountRealtimeChatGateway } from "@wake-surfer/realtime-chat/gateway";
 ```
 
 공개 계약 상세 문서는 다음 경로에 둡니다.

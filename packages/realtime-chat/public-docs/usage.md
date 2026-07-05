@@ -8,8 +8,8 @@ API app과 Gateway app은 이 패키지를 mounted feature module로 사용합�
 import {
   mountRealtimeChatApi,
   type HttpServerLike,
-  type RealtimeChatApiRuntimeDeps
-} from '@wake-surfer/realtime-chat/api';
+  type RealtimeChatApiRuntimeDeps,
+} from "@wake-surfer/realtime-chat/api";
 
 const server: HttpServerLike = {
   route(definition) {
@@ -21,13 +21,13 @@ const server: HttpServerLike = {
           params: request.params,
           query: request.query,
           headers: request.headers,
-          body: request.body
+          body: request.body,
         });
 
         return httpFramework.response(response.status, response.body);
-      }
+      },
     });
-  }
+  },
 };
 
 const deps: RealtimeChatApiRuntimeDeps = {
@@ -38,20 +38,20 @@ const deps: RealtimeChatApiRuntimeDeps = {
   idGenerator,
   logger,
   metrics,
-  ticketHasher
+  ticketHasher,
 };
 
 await mountRealtimeChatApi(
   server,
   {
-    basePath: '/api/realtime-chat',
-    gatewayUrl: 'wss://example.test/ws/realtime-chat',
+    basePath: "/api/realtime-chat",
+    gatewayUrl: "wss://example.test/ws/realtime-chat",
     gatewayTicketTtlSeconds: 60,
     maxMessageTextLength: 4000,
     syncDefaultLimit: 50,
-    syncMaxLimit: 100
+    syncMaxLimit: 100,
   },
-  deps
+  deps,
 );
 ```
 
@@ -61,8 +61,8 @@ await mountRealtimeChatApi(
 import {
   mountRealtimeChatGateway,
   type RealtimeChatGatewayRuntimeDeps,
-  type WebSocketServerLike
-} from '@wake-surfer/realtime-chat/gateway';
+  type WebSocketServerLike,
+} from "@wake-surfer/realtime-chat/gateway";
 
 const server: WebSocketServerLike = {
   route(definition) {
@@ -73,11 +73,11 @@ const server: WebSocketServerLike = {
         headers: socket.headers,
         send: (payload) => socket.send(payload),
         close: (code, reason) => socket.close(code, reason),
-        onMessage: (handler) => socket.on('message', handler),
-        onClose: (handler) => socket.on('close', handler)
+        onMessage: (handler) => socket.on("message", handler),
+        onClose: (handler) => socket.on("close", handler),
       });
     });
-  }
+  },
 };
 
 const deps: RealtimeChatGatewayRuntimeDeps = {
@@ -87,17 +87,17 @@ const deps: RealtimeChatGatewayRuntimeDeps = {
   clock,
   idGenerator,
   logger,
-  metrics
+  metrics,
 };
 
 await mountRealtimeChatGateway(
   server,
   {
-    path: '/ws/realtime-chat',
+    path: "/ws/realtime-chat",
     gatewayId: env.GATEWAY_ID,
-    maxPayloadBytes: 64 * 1024
+    maxPayloadBytes: 64 * 1024,
   },
-  deps
+  deps,
 );
 ```
 

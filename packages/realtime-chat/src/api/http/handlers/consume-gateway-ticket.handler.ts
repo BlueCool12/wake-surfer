@@ -1,10 +1,10 @@
-import type { RealtimeChatUsecases } from '../../application/create-usecases';
-import type { HttpRouteHandler } from '../http-server-like';
-import { badRequest, ok } from './response';
-import { parseConsumeGatewayTicketRequest } from '../schemas/consume-gateway-ticket.schema';
+import type { RealtimeChatUsecases } from "../../application/create-usecases";
+import type { HttpRouteHandler } from "../http-server-like";
+import { badRequest, ok } from "./response";
+import { parseConsumeGatewayTicketRequest } from "../schemas/consume-gateway-ticket.schema";
 
 export function createConsumeGatewayTicketHandler(
-  usecases: RealtimeChatUsecases
+  usecases: RealtimeChatUsecases,
 ): HttpRouteHandler {
   return async (request) => {
     const parsed = parseConsumeGatewayTicketRequest(request.body);

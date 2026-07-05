@@ -33,9 +33,9 @@ ADR이 많아져 현재 문서 테이블만으로 찾기 어려워지면 축별 
 
 ## 현재 문서
 
-| ADR | 축 | 상태 | 날짜 |
-| --- | --- | --- | --- |
-| [ADR 001. realtime-chat package boundary 결정](./001-package-boundary.md) | 패키지 경계 | Accepted | 2026-07-04 |
+| ADR                                                                             | 축            | 상태     | 날짜       |
+| ------------------------------------------------------------------------------- | ------------- | -------- | ---------- |
+| [ADR 001. realtime-chat package boundary 결정](./001-package-boundary.md)       | 패키지 경계   | Accepted | 2026-07-04 |
 | [ADR 002. realtime-chat runtime dependency 선택](./002-runtime-dependencies.md) | 런타임 의존성 | Accepted | 2026-07-04 |
-| [ADR 003. realtime-chat 개발 DB 방향](./003-development-database.md) | 데이터베이스 | Accepted | 2026-07-04 |
-| [ADR 004. realtime-chat 테스트 전략](./004-testing-strategy.md) | 테스트 전략 | Accepted | 2026-07-04 |
+| [ADR 003. realtime-chat 개발 DB 방향](./003-development-database.md)            | 데이터베이스  | Accepted | 2026-07-04 |
+| [ADR 004. realtime-chat 테스트 전략](./004-testing-strategy.md)                 | 테스트 전략   | Accepted | 2026-07-04 |

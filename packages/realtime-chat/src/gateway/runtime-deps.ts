@@ -11,8 +11,8 @@ import type {
   SyncStreamMessagesRequest,
   SyncStreamMessagesResponse,
   UserId,
-  WorkspaceId
-} from '@wake-surfer/realtime-chat-contracts';
+  WorkspaceId,
+} from "@wake-surfer/realtime-chat-contracts";
 
 export type ConsumedGatewayTicket = {
   actorId: UserId;
@@ -22,11 +22,11 @@ export type ConsumedGatewayTicket = {
 
 export type GatewayTicketConsumeResult =
   | {
-      status: 'consumed';
+      status: "consumed";
       ticket: ConsumedGatewayTicket;
     }
   | {
-      status: 'rejected';
+      status: "rejected";
       reason: RealtimeChatErrorCode;
       message?: string;
     };
@@ -40,21 +40,11 @@ export type RealtimeChatApiClientPort = {
     actorId: UserId;
     workspaceId?: WorkspaceId;
   }) => Promise<IssueGatewayTicketResponse>;
-  sendChannelMessage: (
-    request: SendChannelMessageRequest
-  ) => Promise<MessageCommandResponse>;
-  sendDMMessage: (
-    request: SendDMMessageRequest
-  ) => Promise<MessageCommandResponse>;
-  replyThreadMessage: (
-    request: ReplyThreadMessageRequest
-  ) => Promise<MessageCommandResponse>;
-  markReadCursor: (
-    request: MarkReadCursorRequest
-  ) => Promise<MarkReadCursorResponse>;
-  syncStreamMessages: (
-    request: SyncStreamMessagesRequest
-  ) => Promise<SyncStreamMessagesResponse>;
+  sendChannelMessage: (request: SendChannelMessageRequest) => Promise<MessageCommandResponse>;
+  sendDMMessage: (request: SendDMMessageRequest) => Promise<MessageCommandResponse>;
+  replyThreadMessage: (request: ReplyThreadMessageRequest) => Promise<MessageCommandResponse>;
+  markReadCursor: (request: MarkReadCursorRequest) => Promise<MarkReadCursorResponse>;
+  syncStreamMessages: (request: SyncStreamMessagesRequest) => Promise<SyncStreamMessagesResponse>;
 };
 
 export type OutboundEventSubscription = {
@@ -63,7 +53,7 @@ export type OutboundEventSubscription = {
 
 export type OutboundEventBusPort = {
   subscribe: (
-    handler: (event: OutboundMessageDeliveryRequested) => void | Promise<void>
+    handler: (event: OutboundMessageDeliveryRequested) => void | Promise<void>,
   ) => OutboundEventSubscription | Promise<OutboundEventSubscription>;
 };
 

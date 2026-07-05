@@ -14,16 +14,16 @@ export type GatewayTicket = string;
 export type RequestId = string;
 export type ISODateTime = string;
 
-export type StreamType = 'CHANNEL' | 'DM' | 'THREAD';
-export type MessageType = 'USER' | 'SYSTEM';
+export type StreamType = "CHANNEL" | "DM" | "THREAD";
+export type MessageType = "USER" | "SYSTEM";
 
 export type TextMessageContentDto = {
-  kind: 'text';
+  kind: "text";
   text: string;
 };
 
 export type SystemMessageContentDto = {
-  kind: 'system';
+  kind: "system";
   text: string;
   metadata?: Record<string, string>;
 };

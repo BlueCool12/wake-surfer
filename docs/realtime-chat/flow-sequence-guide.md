@@ -49,20 +49,20 @@ flowchart LR
 
 ### 책임 경계 요약
 
-| 구분 | realtime-chat-gateway | realtime-chat-api |
-| --- | --- | --- |
-| WebSocket 연결 | 담당 | 담당하지 않음 |
-| Gateway ticket 발급 | 담당하지 않음 | 담당 |
-| Gateway ticket 소비 | 담당 | RDB 저장소 제공 |
-| socket session 저장 | local memory에 저장 | 저장하지 않음 |
-| JSON parse / payload size | 담당 | 보통 도달 전 차단 |
-| 채팅 권한 판단 | 하지 않음 | 담당 |
-| 메시지 저장 | 하지 않음 | 담당 |
-| stream sequence 발급 | 하지 않음 | 담당 |
-| sender ACK 생성 | API 결과를 relay | 담당 |
-| recipient 계산 | 하지 않음 | 가능하면 API가 `recipientUserIds` resolve |
-| socket push | 담당 | 직접 push하지 않음 |
-| afterSequence sync | Gateway가 relay | API가 조회 |
+| 구분                      | realtime-chat-gateway | realtime-chat-api                         |
+| ------------------------- | --------------------- | ----------------------------------------- |
+| WebSocket 연결            | 담당                  | 담당하지 않음                             |
+| Gateway ticket 발급       | 담당하지 않음         | 담당                                      |
+| Gateway ticket 소비       | 담당                  | RDB 저장소 제공                           |
+| socket session 저장       | local memory에 저장   | 저장하지 않음                             |
+| JSON parse / payload size | 담당                  | 보통 도달 전 차단                         |
+| 채팅 권한 판단            | 하지 않음             | 담당                                      |
+| 메시지 저장               | 하지 않음             | 담당                                      |
+| stream sequence 발급      | 하지 않음             | 담당                                      |
+| sender ACK 생성           | API 결과를 relay      | 담당                                      |
+| recipient 계산            | 하지 않음             | 가능하면 API가 `recipientUserIds` resolve |
+| socket push               | 담당                  | 직접 push하지 않음                        |
+| afterSequence sync        | Gateway가 relay       | API가 조회                                |
 
 ---
 
@@ -187,12 +187,12 @@ sequenceDiagram
 
 ### app별 구현 포인트
 
-| 단계 | 담당 app | 구현 포인트 |
-| --- | --- | --- |
-| ticket 발급 | API | 원문 ticket은 client에게만 반환하고 DB에는 hash 저장 |
-| ticket consume | Gateway | `consumed_at IS NULL AND expires_at > now` 조건으로 원자적 update |
-| session 등록 | Gateway | local memory registry에만 저장 |
-| ONLINE 전환 | Presence 또는 Gateway 연동 | 여러 탭을 고려해 첫 활성 세션일 때만 ONLINE 처리 |
+| 단계           | 담당 app                   | 구현 포인트                                                       |
+| -------------- | -------------------------- | ----------------------------------------------------------------- |
+| ticket 발급    | API                        | 원문 ticket은 client에게만 반환하고 DB에는 hash 저장              |
+| ticket consume | Gateway                    | `consumed_at IS NULL AND expires_at > now` 조건으로 원자적 update |
+| session 등록   | Gateway                    | local memory registry에만 저장                                    |
+| ONLINE 전환    | Presence 또는 Gateway 연동 | 여러 탭을 고려해 첫 활성 세션일 때만 ONLINE 처리                  |
 
 ---
 
@@ -789,25 +789,25 @@ MVP에서는 channel read cursor와 thread read cursor를 분리하지 않을 �
 
 ### Client → Gateway
 
-| event type | Gateway 처리 | API command |
-| --- | --- | --- |
-| `chat.message.send` | transport validation 후 forward | `SendChannelMessage` 또는 target 기준 분기 |
-| `chat.dm.message.send` | transport validation 후 forward | `SendDMMessage` |
-| `chat.thread.reply.send` | transport validation 후 forward | `ReplyThreadMessage` |
-| `chat.stream.markRead` | session validation 후 forward | `MarkAsRead` |
-| `chat.stream.sync` | session validation 후 forward | `SyncStream` |
+| event type               | Gateway 처리                    | API command                                |
+| ------------------------ | ------------------------------- | ------------------------------------------ |
+| `chat.message.send`      | transport validation 후 forward | `SendChannelMessage` 또는 target 기준 분기 |
+| `chat.dm.message.send`   | transport validation 후 forward | `SendDMMessage`                            |
+| `chat.thread.reply.send` | transport validation 후 forward | `ReplyThreadMessage`                       |
+| `chat.stream.markRead`   | session validation 후 forward   | `MarkAsRead`                               |
+| `chat.stream.sync`       | session validation 후 forward   | `SyncStream`                               |
 
 ### Gateway → Client
 
-| event type | 의미 |
-| --- | --- |
-| `chat.message.accepted` | sender 메시지 저장 성공 ACK |
-| `chat.message.rejected` | sender 메시지 저장 거절 |
-| `chat.message.created` | recipient에게 새 메시지 push |
-| `chat.stream.synced` | afterSequence sync 결과 |
-| `chat.stream.markRead.accepted` | read cursor 처리 결과 |
-| `gateway.error` | transport-level 오류 |
-| `presence.userStatusChanged` | presence 상태 변경 push |
+| event type                      | 의미                         |
+| ------------------------------- | ---------------------------- |
+| `chat.message.accepted`         | sender 메시지 저장 성공 ACK  |
+| `chat.message.rejected`         | sender 메시지 저장 거절      |
+| `chat.message.created`          | recipient에게 새 메시지 push |
+| `chat.stream.synced`            | afterSequence sync 결과      |
+| `chat.stream.markRead.accepted` | read cursor 처리 결과        |
+| `gateway.error`                 | transport-level 오류         |
+| `presence.userStatusChanged`    | presence 상태 변경 push      |
 
 ---
 
@@ -872,19 +872,19 @@ MVP에서는 channel read cursor와 thread read cursor를 분리하지 않을 �
 
 ## 18. 실패 흐름별 책임 정리
 
-| 실패 상황 | 발견 위치 | 처리 방식 | DB 저장 여부 | client 결과 |
-| --- | --- | --- | --- | --- |
-| ticket 만료 | Gateway | 연결 거절 | 없음 | `WebSocketConnectionRejected` |
-| ticket 재사용 | Gateway | 연결 거절 | 없음 | `WebSocketConnectionRejected` |
-| JSON parse 실패 | Gateway | event 거절 | 없음 | `gateway.error` |
-| payload size 초과 | Gateway | event 거절 | 없음 | `gateway.error` |
-| socket session 없음 | Gateway | event 거절 | 없음 | `gateway.error` |
-| channel write 권한 없음 | API | command 거절 | 없음 | `chat.message.rejected` |
-| DM participant 아님 | API | command 거절 | 없음 | `chat.message.rejected` |
-| DB 저장 실패 | API | command 실패 | 없음 또는 rollback | `chat.message.rejected` 또는 retryable error |
-| 저장 성공 후 ACK 유실 | Client/Gateway network | same clientMessageId retry | 이미 저장됨 | 기존 accepted 반환 |
-| delivery publish 실패 | API/EventBus | MVP에서는 rollback 안 함 | 저장됨 | sender는 accepted, receiver는 sync로 복구 |
-| recipient offline | Gateway | local session 없음이면 skip | 저장됨 | receiver는 재접속 후 sync |
+| 실패 상황               | 발견 위치              | 처리 방식                   | DB 저장 여부       | client 결과                                  |
+| ----------------------- | ---------------------- | --------------------------- | ------------------ | -------------------------------------------- |
+| ticket 만료             | Gateway                | 연결 거절                   | 없음               | `WebSocketConnectionRejected`                |
+| ticket 재사용           | Gateway                | 연결 거절                   | 없음               | `WebSocketConnectionRejected`                |
+| JSON parse 실패         | Gateway                | event 거절                  | 없음               | `gateway.error`                              |
+| payload size 초과       | Gateway                | event 거절                  | 없음               | `gateway.error`                              |
+| socket session 없음     | Gateway                | event 거절                  | 없음               | `gateway.error`                              |
+| channel write 권한 없음 | API                    | command 거절                | 없음               | `chat.message.rejected`                      |
+| DM participant 아님     | API                    | command 거절                | 없음               | `chat.message.rejected`                      |
+| DB 저장 실패            | API                    | command 실패                | 없음 또는 rollback | `chat.message.rejected` 또는 retryable error |
+| 저장 성공 후 ACK 유실   | Client/Gateway network | same clientMessageId retry  | 이미 저장됨        | 기존 accepted 반환                           |
+| delivery publish 실패   | API/EventBus           | MVP에서는 rollback 안 함    | 저장됨             | sender는 accepted, receiver는 sync로 복구    |
+| recipient offline       | Gateway                | local session 없음이면 skip | 저장됨             | receiver는 재접속 후 sync                    |
 
 ---
 

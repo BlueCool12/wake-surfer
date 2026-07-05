@@ -1,8 +1,5 @@
-import { createClient } from 'redis';
-import type {
-  LoggerPort,
-  OutboundEventBusPort
-} from '@wake-surfer/realtime-chat/api';
+import { createClient } from "redis";
+import type { LoggerPort, OutboundEventBusPort } from "@wake-surfer/realtime-chat/api";
 
 export type RedisOutboundEventBus = OutboundEventBusPort & {
   destroy: () => Promise<void>;
@@ -14,11 +11,11 @@ export async function createRedisOutboundEventBus(input: {
   logger: LoggerPort;
 }): Promise<RedisOutboundEventBus> {
   const client = createClient({
-    url: input.redisUrl
+    url: input.redisUrl,
   });
 
-  client.on('error', (error) => {
-    input.logger.error('realtime chat redis publisher error', { error });
+  client.on("error", (error) => {
+    input.logger.error("realtime chat redis publisher error", { error });
   });
 
   await client.connect();
@@ -31,6 +28,6 @@ export async function createRedisOutboundEventBus(input: {
       if (client.isOpen) {
         await client.quit();
       }
-    }
+    },
   };
 }

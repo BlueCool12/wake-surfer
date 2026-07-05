@@ -13,8 +13,8 @@ import {
   type RealtimeChatApiMountOptions,
   type RealtimeChatApiRuntimeDeps,
   type RealtimeChatGatewayMountOptions,
-  type RealtimeChatGatewayRuntimeDeps
-} from '@wake-surfer/realtime-chat';
+  type RealtimeChatGatewayRuntimeDeps,
+} from "@wake-surfer/realtime-chat";
 ```
 
 API adapter 전용 import:
@@ -27,8 +27,8 @@ import {
   type HttpResponseLike,
   type HttpRouteDefinition,
   type RealtimeChatApiMountOptions,
-  type RealtimeChatApiRuntimeDeps
-} from '@wake-surfer/realtime-chat/api';
+  type RealtimeChatApiRuntimeDeps,
+} from "@wake-surfer/realtime-chat/api";
 ```
 
 Gateway adapter 전용 import:
@@ -40,41 +40,41 @@ import {
   type WebSocketRouteDefinition,
   type WebSocketServerLike,
   type RealtimeChatGatewayMountOptions,
-  type RealtimeChatGatewayRuntimeDeps
-} from '@wake-surfer/realtime-chat/gateway';
+  type RealtimeChatGatewayRuntimeDeps,
+} from "@wake-surfer/realtime-chat/gateway";
 ```
 
 ## Root exports
 
-| export | 목적 |
-| --- | --- |
-| `mountRealtimeChatApi` | app-owned HTTP server에 realtime chat API route 전체 등록 |
-| `mountRealtimeChatGateway` | app-owned WebSocket server에 realtime chat gateway route 등록 |
-| `RealtimeChatApiMountOptions` | API adapter mount 설정 |
-| `RealtimeChatGatewayMountOptions` | Gateway adapter mount 설정 |
-| `RealtimeChatApiRuntimeDeps` | API side app-supplied runtime dependency contract |
-| `RealtimeChatGatewayRuntimeDeps` | Gateway side app-supplied runtime dependency contract |
-| `HttpServerLike`, `HttpRequestLike`, `HttpResponseLike`, `HttpRouteDefinition`, `HttpRouteHandler` | API adapter용 최소 HTTP server contract |
-| `WebSocketServerLike`, `WebSocketConnectionLike`, `WebSocketRouteDefinition`, `WebSocketMessagePayload` | Gateway adapter용 최소 WebSocket server contract |
+| export                                                                                                  | 목적                                                          |
+| ------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------- |
+| `mountRealtimeChatApi`                                                                                  | app-owned HTTP server에 realtime chat API route 전체 등록     |
+| `mountRealtimeChatGateway`                                                                              | app-owned WebSocket server에 realtime chat gateway route 등록 |
+| `RealtimeChatApiMountOptions`                                                                           | API adapter mount 설정                                        |
+| `RealtimeChatGatewayMountOptions`                                                                       | Gateway adapter mount 설정                                    |
+| `RealtimeChatApiRuntimeDeps`                                                                            | API side app-supplied runtime dependency contract             |
+| `RealtimeChatGatewayRuntimeDeps`                                                                        | Gateway side app-supplied runtime dependency contract         |
+| `HttpServerLike`, `HttpRequestLike`, `HttpResponseLike`, `HttpRouteDefinition`, `HttpRouteHandler`      | API adapter용 최소 HTTP server contract                       |
+| `WebSocketServerLike`, `WebSocketConnectionLike`, `WebSocketRouteDefinition`, `WebSocketMessagePayload` | Gateway adapter용 최소 WebSocket server contract              |
 
 `@wake-surfer/realtime-chat/api`는 API side port type도 export합니다.
 
-| export | 목적 |
-| --- | --- |
-| `RealtimeChatDbPort` | API side persistence port |
-| `PermissionPort`, `PermissionDecision`, `RealtimeChatMessageTarget` | API side permission/recipient resolution port |
-| `OutboundEventBusPort` | API side outbound delivery publish port |
-| `ClockPort`, `IdGeneratorPort`, `LoggerPort`, `MetricsPort`, `TicketHasherPort` | API side common infrastructure port |
+| export                                                                                                     | 목적                                                                       |
+| ---------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
+| `RealtimeChatDbPort`                                                                                       | API side persistence port                                                  |
+| `PermissionPort`, `PermissionDecision`, `RealtimeChatMessageTarget`                                        | API side permission/recipient resolution port                              |
+| `OutboundEventBusPort`                                                                                     | API side outbound delivery publish port                                    |
+| `ClockPort`, `IdGeneratorPort`, `LoggerPort`, `MetricsPort`, `TicketHasherPort`                            | API side common infrastructure port                                        |
 | `StoredRealtimeChatMessage`, `StoredGatewayTicket`, `StoredGatewayTicketConsumeResult`, `StoredReadCursor` | app-owned persistence adapter가 반환하거나 저장하는 public port data shape |
 
 `@wake-surfer/realtime-chat/gateway`는 Gateway side port type도 export합니다.
 
-| export | 목적 |
-| --- | --- |
-| `RealtimeChatApiClientPort` | Gateway가 API app과 통신할 때 사용하는 client port |
-| `GatewayTicketConsumePort`, `GatewayTicketConsumeResult`, `ConsumedGatewayTicket` | gateway ticket consume port |
-| `OutboundEventBusPort`, `OutboundEventSubscription` | Gateway side outbound delivery subscribe port |
-| `ClockPort`, `IdGeneratorPort`, `LoggerPort`, `MetricsPort` | Gateway side common infrastructure port |
+| export                                                                            | 목적                                               |
+| --------------------------------------------------------------------------------- | -------------------------------------------------- |
+| `RealtimeChatApiClientPort`                                                       | Gateway가 API app과 통신할 때 사용하는 client port |
+| `GatewayTicketConsumePort`, `GatewayTicketConsumeResult`, `ConsumedGatewayTicket` | gateway ticket consume port                        |
+| `OutboundEventBusPort`, `OutboundEventSubscription`                               | Gateway side outbound delivery subscribe port      |
+| `ClockPort`, `IdGeneratorPort`, `LoggerPort`, `MetricsPort`                       | Gateway side common infrastructure port            |
 
 ## API mount contract
 
@@ -92,28 +92,28 @@ type RealtimeChatApiMountOptions = {
 function mountRealtimeChatApi(
   server: HttpServerLike,
   options: RealtimeChatApiMountOptions,
-  deps: RealtimeChatApiRuntimeDeps
+  deps: RealtimeChatApiRuntimeDeps,
 ): Promise<void>;
 ```
 
 `basePath`는 trim 후 leading slash를 보정하고 trailing slash를 제거합니다. `''` 또는 `'/'`는 root path로 취급합니다.
 
-| option | 기본값 | 의미 |
-| --- | --- | --- |
-| `basePath` | 없음 | 등록할 HTTP route prefix |
-| `gatewayUrl` | 없음 | gateway ticket response에 포함할 advertised gateway URL |
-| `gatewayTicketTtlSeconds` | `60` | gateway ticket 만료 시간 |
-| `maxMessageTextLength` | `4000` | text message 최대 길이 |
-| `syncDefaultLimit` | `50` | stream sync 요청에 `limit`이 없을 때 사용하는 개수 |
-| `syncMaxLimit` | `100` | stream sync 요청 limit 상한 |
-| `exposeOpenApi` | `false` | 현재 public option으로 존재하지만 별도 OpenAPI route를 등록하지 않습니다 |
+| option                    | 기본값  | 의미                                                                     |
+| ------------------------- | ------- | ------------------------------------------------------------------------ |
+| `basePath`                | 없음    | 등록할 HTTP route prefix                                                 |
+| `gatewayUrl`              | 없음    | gateway ticket response에 포함할 advertised gateway URL                  |
+| `gatewayTicketTtlSeconds` | `60`    | gateway ticket 만료 시간                                                 |
+| `maxMessageTextLength`    | `4000`  | text message 최대 길이                                                   |
+| `syncDefaultLimit`        | `50`    | stream sync 요청에 `limit`이 없을 때 사용하는 개수                       |
+| `syncMaxLimit`            | `100`   | stream sync 요청 limit 상한                                              |
+| `exposeOpenApi`           | `false` | 현재 public option으로 존재하지만 별도 OpenAPI route를 등록하지 않습니다 |
 
 ## HTTP server adapter contract
 
 app은 사용하는 HTTP framework를 다음 contract로 감싸서 넘깁니다.
 
 ```ts
-type HttpMethod = 'GET' | 'POST';
+type HttpMethod = "GET" | "POST";
 
 type HttpRequestLike = {
   params: Record<string, string | undefined>;
@@ -127,9 +127,7 @@ type HttpResponseLike = {
   body?: unknown;
 };
 
-type HttpRouteHandler = (
-  request: HttpRequestLike
-) => HttpResponseLike | Promise<HttpResponseLike>;
+type HttpRouteHandler = (request: HttpRequestLike) => HttpResponseLike | Promise<HttpResponseLike>;
 
 type HttpRouteDefinition = {
   method: HttpMethod;
@@ -175,10 +173,7 @@ type PermissionPort = {
     actorId: UserId;
     target: RealtimeChatMessageTarget;
   }) => Promise<PermissionDecision>;
-  canReadStream: (input: {
-    actorId: UserId;
-    streamId: StreamId;
-  }) => Promise<PermissionDecision>;
+  canReadStream: (input: { actorId: UserId; streamId: StreamId }) => Promise<PermissionDecision>;
   resolveMessageRecipients: (input: {
     actorId?: UserId;
     target: RealtimeChatMessageTarget;
@@ -197,7 +192,7 @@ type RealtimeChatDbPort = {
     consumedAt: ISODateTime;
   }): Promise<StoredGatewayTicketConsumeResult>;
   findMessageByIdempotencyKey(
-    idempotencyKey: string
+    idempotencyKey: string,
   ): Promise<StoredRealtimeChatMessage | undefined>;
   appendMessage(input: {
     messageId: MessageId;
@@ -232,16 +227,16 @@ type RealtimeChatDbPort = {
 
 ## API route semantics
 
-| method | `basePath` 아래 suffix | input 위치 | 성공 응답 | 실패 응답 |
-| --- | --- | --- | --- | --- |
-| `POST` | `/gateway-tickets` | body `IssueGatewayTicketRequest`, 또는 header `x-actor-id` fallback | `201 IssueGatewayTicketResponse` | `400 INVALID_PAYLOAD`, `403 <permission reason>` |
-| `POST` | `/internal/gateway-tickets/consume` | body `ConsumeGatewayTicketRequest` | `200 ConsumeGatewayTicketResponse` | `400 INVALID_PAYLOAD` |
-| `POST` | `/internal/messages/channel` | body `SendChannelMessageRequest` | `200 MessageCommandResponse` | `400 INVALID_PAYLOAD` |
-| `POST` | `/internal/messages/dm` | body `SendDMMessageRequest` | `200 MessageCommandResponse` | `400 INVALID_PAYLOAD` |
-| `POST` | `/internal/messages/thread-replies` | body `ReplyThreadMessageRequest` | `200 MessageCommandResponse` | `400 INVALID_PAYLOAD` |
-| `POST` | `/internal/read-cursors` | body `MarkReadCursorRequest` | `200 MarkReadCursorResponse` | `400 INVALID_PAYLOAD`, `403 <permission reason>` |
-| `GET` | `/streams/:streamId/messages` | params `streamId`, query `requestId`, `actorId`, optional sequence/limit | `200 SyncStreamMessagesResponse` | `400 INVALID_PAYLOAD`, `403 <permission reason>` |
-| `POST` | `/internal/system-messages/session-started` | body `PostSessionStartedSystemMessageRequest` | `200 MessageCommandResponse` | `400 INVALID_PAYLOAD` |
+| method | `basePath` 아래 suffix                      | input 위치                                                               | 성공 응답                          | 실패 응답                                        |
+| ------ | ------------------------------------------- | ------------------------------------------------------------------------ | ---------------------------------- | ------------------------------------------------ |
+| `POST` | `/gateway-tickets`                          | body `IssueGatewayTicketRequest`, 또는 header `x-actor-id` fallback      | `201 IssueGatewayTicketResponse`   | `400 INVALID_PAYLOAD`, `403 <permission reason>` |
+| `POST` | `/internal/gateway-tickets/consume`         | body `ConsumeGatewayTicketRequest`                                       | `200 ConsumeGatewayTicketResponse` | `400 INVALID_PAYLOAD`                            |
+| `POST` | `/internal/messages/channel`                | body `SendChannelMessageRequest`                                         | `200 MessageCommandResponse`       | `400 INVALID_PAYLOAD`                            |
+| `POST` | `/internal/messages/dm`                     | body `SendDMMessageRequest`                                              | `200 MessageCommandResponse`       | `400 INVALID_PAYLOAD`                            |
+| `POST` | `/internal/messages/thread-replies`         | body `ReplyThreadMessageRequest`                                         | `200 MessageCommandResponse`       | `400 INVALID_PAYLOAD`                            |
+| `POST` | `/internal/read-cursors`                    | body `MarkReadCursorRequest`                                             | `200 MarkReadCursorResponse`       | `400 INVALID_PAYLOAD`, `403 <permission reason>` |
+| `GET`  | `/streams/:streamId/messages`               | params `streamId`, query `requestId`, `actorId`, optional sequence/limit | `200 SyncStreamMessagesResponse`   | `400 INVALID_PAYLOAD`, `403 <permission reason>` |
+| `POST` | `/internal/system-messages/session-started` | body `PostSessionStartedSystemMessageRequest`                            | `200 MessageCommandResponse`       | `400 INVALID_PAYLOAD`                            |
 
 Error response shape:
 
@@ -290,15 +285,15 @@ type RealtimeChatGatewayMountOptions = {
 function mountRealtimeChatGateway(
   server: WebSocketServerLike,
   options: RealtimeChatGatewayMountOptions,
-  deps: RealtimeChatGatewayRuntimeDeps
+  deps: RealtimeChatGatewayRuntimeDeps,
 ): Promise<void>;
 ```
 
-| option | 기본값 | 의미 |
-| --- | --- | --- |
-| `path` | 없음 | 등록할 WebSocket route path |
-| `gatewayId` | 없음 | `gateway.connected` event에 포함할 gateway id |
-| `maxPayloadBytes` | `65536` | client socket payload byte limit |
+| option            | 기본값  | 의미                                          |
+| ----------------- | ------- | --------------------------------------------- |
+| `path`            | 없음    | 등록할 WebSocket route path                   |
+| `gatewayId`       | 없음    | `gateway.connected` event에 포함할 gateway id |
+| `maxPayloadBytes` | `65536` | client socket payload byte limit              |
 
 현재 public mount는 `Promise<void>`만 반환하며 dispose handle을 반환하지 않습니다. Gateway mount는 `deps.outboundEventBus.subscribe(...)`를 호출해 outbound delivery subscriber를 시작합니다.
 
@@ -313,9 +308,7 @@ type WebSocketConnectionLike = {
   headers: Record<string, string | undefined>;
   send: (payload: string) => void | Promise<void>;
   close: (code?: number, reason?: string) => void | Promise<void>;
-  onMessage: (
-    handler: (payload: WebSocketMessagePayload) => void | Promise<void>
-  ) => void;
+  onMessage: (handler: (payload: WebSocketMessagePayload) => void | Promise<void>) => void;
   onClose: (handler: () => void | Promise<void>) => void;
 };
 
@@ -339,7 +332,7 @@ type RealtimeChatGatewayRuntimeDeps = {
   gatewayTicketPort: GatewayTicketConsumePort;
   outboundEventBus: {
     subscribe(
-      handler: (event: OutboundMessageDeliveryRequested) => void | Promise<void>
+      handler: (event: OutboundMessageDeliveryRequested) => void | Promise<void>,
     ): OutboundEventSubscription | Promise<OutboundEventSubscription>;
   };
   clock: { now(): Date };
@@ -373,8 +366,11 @@ Gateway ticket port:
 
 ```ts
 type GatewayTicketConsumeResult =
-  | { status: 'consumed'; ticket: { actorId: UserId; workspaceId?: WorkspaceId; consumedAt?: string } }
-  | { status: 'rejected'; reason: RealtimeChatErrorCode; message?: string };
+  | {
+      status: "consumed";
+      ticket: { actorId: UserId; workspaceId?: WorkspaceId; consumedAt?: string };
+    }
+  | { status: "rejected"; reason: RealtimeChatErrorCode; message?: string };
 
 type GatewayTicketConsumePort = {
   consume(ticketValue: string): Promise<GatewayTicketConsumeResult>;

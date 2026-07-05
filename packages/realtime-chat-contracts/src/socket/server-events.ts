@@ -1,4 +1,4 @@
-import type { RealtimeChatErrorCode } from '../error-codes';
+import type { RealtimeChatErrorCode } from "../error-codes";
 import type {
   ClientMessageId,
   CommandId,
@@ -10,24 +10,24 @@ import type {
   MessageType,
   StreamId,
   StreamType,
-  UserId
-} from '../primitives';
+  UserId,
+} from "../primitives";
 
 export type GatewayConnectedEvent = {
-  type: 'gateway.connected';
+  type: "gateway.connected";
   sessionId: GatewaySessionId;
   gatewayId: GatewayId;
   connectedAt: ISODateTime;
 };
 
 export type GatewayConnectionRejectedEvent = {
-  type: 'gateway.connection.rejected';
+  type: "gateway.connection.rejected";
   reason: RealtimeChatErrorCode;
   message?: string;
 };
 
 export type GatewayErrorEvent = {
-  type: 'gateway.error';
+  type: "gateway.error";
   reason: RealtimeChatErrorCode;
   commandId?: CommandId;
   message?: string;
@@ -35,7 +35,7 @@ export type GatewayErrorEvent = {
 };
 
 export type ChatMessageAcceptedEvent = {
-  type: 'chat.message.accepted';
+  type: "chat.message.accepted";
   commandId: CommandId;
   clientMessageId: ClientMessageId;
   messageId: MessageId;
@@ -45,7 +45,7 @@ export type ChatMessageAcceptedEvent = {
 };
 
 export type ChatMessageRejectedEvent = {
-  type: 'chat.message.rejected';
+  type: "chat.message.rejected";
   commandId: CommandId;
   clientMessageId?: ClientMessageId;
   reason: RealtimeChatErrorCode;
@@ -53,7 +53,7 @@ export type ChatMessageRejectedEvent = {
 };
 
 export type ChatMessageCreatedEvent = {
-  type: 'chat.message.created';
+  type: "chat.message.created";
   messageId: MessageId;
   streamId: StreamId;
   streamType: StreamType;
@@ -65,7 +65,7 @@ export type ChatMessageCreatedEvent = {
 };
 
 export type ChatStreamSyncedEvent = {
-  type: 'chat.stream.synced';
+  type: "chat.stream.synced";
   commandId: CommandId;
   streamId: StreamId;
   messages: ChatMessageCreatedEvent[];
@@ -74,7 +74,7 @@ export type ChatStreamSyncedEvent = {
 };
 
 export type ChatReadCursorUpdatedEvent = {
-  type: 'chat.read-cursor.updated';
+  type: "chat.read-cursor.updated";
   commandId: CommandId;
   streamId: StreamId;
   lastReadSequence: number;

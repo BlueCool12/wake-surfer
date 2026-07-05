@@ -1,4 +1,4 @@
-import type { CommandId, ISODateTime, StreamId, UserId } from '../primitives';
+import type { CommandId, ISODateTime, StreamId, UserId } from "../primitives";
 
 export type MarkReadCursorRequest = {
   requestId: string;
@@ -8,7 +8,7 @@ export type MarkReadCursorRequest = {
 };
 
 export type MarkReadCursorResponse = {
-  status: 'advanced' | 'unchanged';
+  status: "advanced" | "unchanged";
   commandId: CommandId;
   streamId: StreamId;
   lastReadSequence: number;

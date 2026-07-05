@@ -1,14 +1,8 @@
-import type {
-  ChannelId,
-  EventId,
-  ISODateTime,
-  UserId,
-  WorkspaceId
-} from '../primitives';
+import type { ChannelId, EventId, ISODateTime, UserId, WorkspaceId } from "../primitives";
 
 export type CollaborationSessionStarted = {
   eventId: EventId;
-  eventType: 'CollaborationSessionStarted';
+  eventType: "CollaborationSessionStarted";
   occurredAt: ISODateTime;
   workspaceId: WorkspaceId;
   channelId: ChannelId;

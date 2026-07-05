@@ -1,19 +1,14 @@
-import {
-  createServer,
-  type IncomingMessage,
-  type Server,
-  type ServerResponse
-} from 'node:http';
-import type { AddressInfo } from 'node:net';
-import { Buffer } from 'node:buffer';
-import { WebSocket, WebSocketServer, type RawData } from 'ws';
+import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
+import type { AddressInfo } from "node:net";
+import { Buffer } from "node:buffer";
+import { WebSocket, WebSocketServer, type RawData } from "ws";
 import type {
   LoggerPort,
   WebSocketConnectionLike,
   WebSocketMessagePayload,
   WebSocketRouteDefinition,
-  WebSocketServerLike
-} from '@wake-surfer/realtime-chat/gateway';
+  WebSocketServerLike,
+} from "@wake-surfer/realtime-chat/gateway";
 
 export type NodeRealtimeChatGatewayServer = {
   httpServer: Server;
@@ -24,7 +19,7 @@ export type NodeRealtimeChatGatewayServer = {
 };
 
 export function createNodeRealtimeChatGatewayServer(
-  logger: LoggerPort
+  logger: LoggerPort,
 ): NodeRealtimeChatGatewayServer {
   const routes = new Map<string, WebSocketRouteDefinition>();
   const socketServer = new WebSocketServer({ noServer: true });
@@ -32,7 +27,7 @@ export function createNodeRealtimeChatGatewayServer(
     respondToHealthRequest(request, response);
   });
 
-  httpServer.on('upgrade', (request, socket, head) => {
+  httpServer.on("upgrade", (request, socket, head) => {
     const route = routes.get(pathnameFromRequest(request));
 
     if (!route) {
@@ -42,18 +37,18 @@ export function createNodeRealtimeChatGatewayServer(
 
     socketServer.handleUpgrade(request, socket, head, (socketConnection) => {
       Promise.resolve(
-        route.onConnection(toConnectionLike(socketConnection, request, logger))
+        route.onConnection(toConnectionLike(socketConnection, request, logger)),
       ).catch((error: unknown) => {
-          logger.error('failed to handle realtime chat websocket connection', {
-            error
-          });
-          socketConnection.close(1011, 'INTERNAL_ERROR');
+        logger.error("failed to handle realtime chat websocket connection", {
+          error,
         });
+        socketConnection.close(1011, "INTERNAL_ERROR");
+      });
     });
   });
 
-  socketServer.on('error', (error) => {
-    logger.error('realtime chat websocket server error', { error });
+  socketServer.on("error", (error) => {
+    logger.error("realtime chat websocket server error", { error });
   });
 
   return {
@@ -61,13 +56,13 @@ export function createNodeRealtimeChatGatewayServer(
     wsServer: {
       route(definition) {
         routes.set(definition.path, definition);
-      }
+      },
     },
     listen({ host, port }) {
       return new Promise((resolve, reject) => {
-        httpServer.once('error', reject);
+        httpServer.once("error", reject);
         httpServer.listen(port, host, () => {
-          httpServer.off('error', reject);
+          httpServer.off("error", reject);
           resolve();
         });
       });
@@ -93,15 +88,12 @@ export function createNodeRealtimeChatGatewayServer(
           });
         });
       });
-    }
+    },
   };
 }
 
-function respondToHealthRequest(
-  request: IncomingMessage,
-  response: ServerResponse
-): void {
-  if (request.method !== 'GET') {
+function respondToHealthRequest(request: IncomingMessage, response: ServerResponse): void {
+  if (request.method !== "GET") {
     response.writeHead(404);
     response.end();
     return;
@@ -109,18 +101,18 @@ function respondToHealthRequest(
 
   const pathname = pathnameFromRequest(request);
 
-  if (pathname === '/healthz') {
+  if (pathname === "/healthz") {
     writeJson(response, 200, {
-      status: 'ok',
-      service: '@wake-surfer/realtime-chat-gateway'
+      status: "ok",
+      service: "@wake-surfer/realtime-chat-gateway",
     });
     return;
   }
 
-  if (pathname === '/readyz') {
+  if (pathname === "/readyz") {
     writeJson(response, 200, {
-      status: 'ready',
-      database: 'configured'
+      status: "ready",
+      database: "configured",
     });
     return;
   }
@@ -132,7 +124,7 @@ function respondToHealthRequest(
 function toConnectionLike(
   socket: WebSocket,
   request: IncomingMessage,
-  logger: LoggerPort
+  logger: LoggerPort,
 ): WebSocketConnectionLike {
   return {
     query: queryFromRequest(request),
@@ -157,30 +149,28 @@ function toConnectionLike(
       socket.close(code, reason);
     },
     onMessage(handler) {
-      socket.on('message', (data) => {
-        Promise.resolve(handler(toMessagePayload(data))).catch(
-          (error: unknown) => {
-            logger.error('failed to handle realtime chat websocket message', {
-              error
-            });
-          }
-        );
-      });
-    },
-    onClose(handler) {
-      socket.on('close', () => {
-        Promise.resolve(handler()).catch((error: unknown) => {
-          logger.error('failed to close realtime chat websocket session', {
-            error
+      socket.on("message", (data) => {
+        Promise.resolve(handler(toMessagePayload(data))).catch((error: unknown) => {
+          logger.error("failed to handle realtime chat websocket message", {
+            error,
           });
         });
       });
-    }
+    },
+    onClose(handler) {
+      socket.on("close", () => {
+        Promise.resolve(handler()).catch((error: unknown) => {
+          logger.error("failed to close realtime chat websocket session", {
+            error,
+          });
+        });
+      });
+    },
   };
 }
 
 function toMessagePayload(data: RawData): WebSocketMessagePayload {
-  if (typeof data === 'string') {
+  if (typeof data === "string") {
     return data;
   }
 
@@ -191,11 +181,9 @@ function toMessagePayload(data: RawData): WebSocketMessagePayload {
   return data;
 }
 
-function queryFromRequest(
-  request: IncomingMessage
-): Record<string, string | undefined> {
+function queryFromRequest(request: IncomingMessage): Record<string, string | undefined> {
   const query: Record<string, string | undefined> = {};
-  const url = new URL(request.url ?? '/', 'ws://localhost');
+  const url = new URL(request.url ?? "/", "ws://localhost");
 
   for (const [key, value] of url.searchParams.entries()) {
     query[key] = value;
@@ -204,31 +192,23 @@ function queryFromRequest(
   return query;
 }
 
-function headersFromRequest(
-  request: IncomingMessage
-): Record<string, string | undefined> {
+function headersFromRequest(request: IncomingMessage): Record<string, string | undefined> {
   const headers: Record<string, string | undefined> = {};
 
   for (const [key, value] of Object.entries(request.headers)) {
-    headers[key.toLowerCase()] = Array.isArray(value)
-      ? value.join(', ')
-      : value;
+    headers[key.toLowerCase()] = Array.isArray(value) ? value.join(", ") : value;
   }
 
   return headers;
 }
 
 function pathnameFromRequest(request: IncomingMessage): string {
-  return new URL(request.url ?? '/', 'http://localhost').pathname;
+  return new URL(request.url ?? "/", "http://localhost").pathname;
 }
 
-function writeJson(
-  response: ServerResponse,
-  status: number,
-  body: unknown
-): void {
+function writeJson(response: ServerResponse, status: number, body: unknown): void {
   response.writeHead(status, {
-    'content-type': 'application/json; charset=utf-8'
+    "content-type": "application/json; charset=utf-8",
   });
   response.end(JSON.stringify(body));
 }

@@ -1,11 +1,9 @@
-import type { RealtimeChatUsecases } from '../../application/create-usecases';
-import type { HttpRouteHandler } from '../http-server-like';
-import { badRequest, forbidden, ok } from './response';
-import { parseMarkReadCursorRequest } from '../schemas/read-cursor.schema';
+import type { RealtimeChatUsecases } from "../../application/create-usecases";
+import type { HttpRouteHandler } from "../http-server-like";
+import { badRequest, forbidden, ok } from "./response";
+import { parseMarkReadCursorRequest } from "../schemas/read-cursor.schema";
 
-export function createMarkAsReadHandler(
-  usecases: RealtimeChatUsecases
-): HttpRouteHandler {
+export function createMarkAsReadHandler(usecases: RealtimeChatUsecases): HttpRouteHandler {
   return async (request) => {
     const parsed = parseMarkReadCursorRequest(request.body);
 
@@ -15,7 +13,7 @@ export function createMarkAsReadHandler(
 
     const result = await usecases.markAsRead(parsed.value);
 
-    if (result.status === 'rejected') {
+    if (result.status === "rejected") {
       return forbidden(result.reason, result.message);
     }
 

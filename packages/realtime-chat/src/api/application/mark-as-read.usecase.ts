@@ -1,35 +1,35 @@
 import type {
   MarkReadCursorRequest,
   MarkReadCursorResponse,
-  RealtimeChatErrorCode
-} from '@wake-surfer/realtime-chat-contracts';
-import type { RealtimeChatApiRuntimeDeps } from '../runtime-deps';
+  RealtimeChatErrorCode,
+} from "@wake-surfer/realtime-chat-contracts";
+import type { RealtimeChatApiRuntimeDeps } from "../runtime-deps";
 
 export type MarkAsReadResult =
   | {
-      status: 'updated';
+      status: "updated";
       response: MarkReadCursorResponse;
     }
   | {
-      status: 'rejected';
+      status: "rejected";
       reason: RealtimeChatErrorCode;
       message?: string;
     };
 
 export async function markAsRead(
   request: MarkReadCursorRequest,
-  deps: RealtimeChatApiRuntimeDeps
+  deps: RealtimeChatApiRuntimeDeps,
 ): Promise<MarkAsReadResult> {
   const permission = await deps.permissionPort.canReadStream({
     actorId: request.actorId,
-    streamId: request.streamId
+    streamId: request.streamId,
   });
 
   if (!permission.allowed) {
     return {
-      status: 'rejected',
+      status: "rejected",
       reason: permission.reason,
-      ...(permission.message ? { message: permission.message } : {})
+      ...(permission.message ? { message: permission.message } : {}),
     };
   }
 
@@ -37,17 +37,17 @@ export async function markAsRead(
     actorId: request.actorId,
     streamId: request.streamId,
     lastReadSequence: request.lastReadSequence,
-    updatedAt: deps.clock.now().toISOString()
+    updatedAt: deps.clock.now().toISOString(),
   });
 
   return {
-    status: 'updated',
+    status: "updated",
     response: {
-      status: cursor.advanced ? 'advanced' : 'unchanged',
+      status: cursor.advanced ? "advanced" : "unchanged",
       commandId: request.requestId,
       streamId: cursor.streamId,
       lastReadSequence: cursor.lastReadSequence,
-      updatedAt: cursor.updatedAt
-    }
+      updatedAt: cursor.updatedAt,
+    },
   };
 }

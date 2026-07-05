@@ -8,49 +8,35 @@ import type {
   ReplyThreadMessageRequest,
   SendChannelMessageRequest,
   SendDMMessageRequest,
-  SyncStreamMessagesRequest
-} from '@wake-surfer/realtime-chat-contracts';
-import type { RealtimeChatApiMountOptions } from '../http/mount';
-import type { RealtimeChatApiRuntimeDeps } from '../runtime-deps';
-import { consumeGatewayTicket } from './consume-gateway-ticket.usecase';
-import { issueGatewayTicket, type IssueGatewayTicketResult } from './issue-gateway-ticket.usecase';
-import { markAsRead, type MarkAsReadResult } from './mark-as-read.usecase';
-import { postSessionStartedSystemMessage } from './post-system-message.usecase';
-import {
-  replyThreadMessage,
-  sendChannelMessage,
-  sendDMMessage
-} from './send-message.usecase';
-import { syncStreamMessages, type SyncStreamMessagesResult } from './sync-stream-messages.usecase';
+  SyncStreamMessagesRequest,
+} from "@wake-surfer/realtime-chat-contracts";
+import type { RealtimeChatApiMountOptions } from "../http/mount";
+import type { RealtimeChatApiRuntimeDeps } from "../runtime-deps";
+import { consumeGatewayTicket } from "./consume-gateway-ticket.usecase";
+import { issueGatewayTicket, type IssueGatewayTicketResult } from "./issue-gateway-ticket.usecase";
+import { markAsRead, type MarkAsReadResult } from "./mark-as-read.usecase";
+import { postSessionStartedSystemMessage } from "./post-system-message.usecase";
+import { replyThreadMessage, sendChannelMessage, sendDMMessage } from "./send-message.usecase";
+import { syncStreamMessages, type SyncStreamMessagesResult } from "./sync-stream-messages.usecase";
 
 export type RealtimeChatUsecases = {
-  issueGatewayTicket: (
-    request: IssueGatewayTicketRequest
-  ) => Promise<IssueGatewayTicketResult>;
+  issueGatewayTicket: (request: IssueGatewayTicketRequest) => Promise<IssueGatewayTicketResult>;
   consumeGatewayTicket: (
-    request: ConsumeGatewayTicketRequest
+    request: ConsumeGatewayTicketRequest,
   ) => Promise<ConsumeGatewayTicketResponse>;
-  sendChannelMessage: (
-    request: SendChannelMessageRequest
-  ) => Promise<MessageCommandResponse>;
-  sendDMMessage: (
-    request: SendDMMessageRequest
-  ) => Promise<MessageCommandResponse>;
-  replyThreadMessage: (
-    request: ReplyThreadMessageRequest
-  ) => Promise<MessageCommandResponse>;
+  sendChannelMessage: (request: SendChannelMessageRequest) => Promise<MessageCommandResponse>;
+  sendDMMessage: (request: SendDMMessageRequest) => Promise<MessageCommandResponse>;
+  replyThreadMessage: (request: ReplyThreadMessageRequest) => Promise<MessageCommandResponse>;
   markAsRead: (request: MarkReadCursorRequest) => Promise<MarkAsReadResult>;
-  syncStreamMessages: (
-    request: SyncStreamMessagesRequest
-  ) => Promise<SyncStreamMessagesResult>;
+  syncStreamMessages: (request: SyncStreamMessagesRequest) => Promise<SyncStreamMessagesResult>;
   postSessionStartedSystemMessage: (
-    request: PostSessionStartedSystemMessageRequest
+    request: PostSessionStartedSystemMessageRequest,
   ) => Promise<MessageCommandResponse>;
 };
 
 export function createRealtimeChatUsecases(
   deps: RealtimeChatApiRuntimeDeps,
-  options: RealtimeChatApiMountOptions
+  options: RealtimeChatApiMountOptions,
 ): RealtimeChatUsecases {
   return {
     issueGatewayTicket: (request) => issueGatewayTicket(request, deps, options),
@@ -60,7 +46,6 @@ export function createRealtimeChatUsecases(
     replyThreadMessage: (request) => replyThreadMessage(request, deps, options),
     markAsRead: (request) => markAsRead(request, deps),
     syncStreamMessages: (request) => syncStreamMessages(request, deps, options),
-    postSessionStartedSystemMessage: (request) =>
-      postSessionStartedSystemMessage(request, deps)
+    postSessionStartedSystemMessage: (request) => postSessionStartedSystemMessage(request, deps),
   };
 }

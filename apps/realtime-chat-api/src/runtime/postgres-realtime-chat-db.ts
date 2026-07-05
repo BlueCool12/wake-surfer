@@ -1,22 +1,22 @@
-import { Pool } from 'pg';
-import { Kysely, PostgresDialect, sql } from 'kysely';
+import { Pool } from "pg";
+import { Kysely, PostgresDialect, sql } from "kysely";
 import type {
   RealtimeChatDbPort,
   RealtimeChatMessageTarget,
   StoredGatewayTicket,
   StoredReadCursor,
-  StoredRealtimeChatMessage
-} from '@wake-surfer/realtime-chat/api';
+  StoredRealtimeChatMessage,
+} from "@wake-surfer/realtime-chat/api";
 
 type RuntimeDatabase = Record<string, never>;
 
 type MessageRow = {
   message_id: string;
   stream_id: string;
-  stream_type: StoredRealtimeChatMessage['streamType'];
+  stream_type: StoredRealtimeChatMessage["streamType"];
   sequence: number;
   sender_id: string | null;
-  message_type: StoredRealtimeChatMessage['messageType'];
+  message_type: StoredRealtimeChatMessage["messageType"];
   content: unknown;
   created_at: Date | string;
   idempotency_key: string | null;
@@ -37,14 +37,14 @@ type GatewayTicketRow = {
 };
 
 export async function createPostgresRealtimeChatDb(
-  connectionString: string
+  connectionString: string,
 ): Promise<PostgresRealtimeChatDb> {
   const db = new Kysely<RuntimeDatabase>({
     dialect: new PostgresDialect({
       pool: new Pool({
-        connectionString
-      })
-    })
+        connectionString,
+      }),
+    }),
   });
   const adapter = new PostgresRealtimeChatDb(db);
 
@@ -126,8 +126,8 @@ export class PostgresRealtimeChatDb implements RealtimeChatDbPort {
   }
 
   async consumeGatewayTicket(
-    input: Parameters<RealtimeChatDbPort['consumeGatewayTicket']>[0]
-  ): Promise<Awaited<ReturnType<RealtimeChatDbPort['consumeGatewayTicket']>>> {
+    input: Parameters<RealtimeChatDbPort["consumeGatewayTicket"]>[0],
+  ): Promise<Awaited<ReturnType<RealtimeChatDbPort["consumeGatewayTicket"]>>> {
     const consumed = await sql<GatewayTicketRow>`
       update realtime_chat_gateway_tickets
       set consumed_at = ${input.consumedAt}
@@ -139,19 +139,15 @@ export class PostgresRealtimeChatDb implements RealtimeChatDbPort {
     const consumedRow = consumed.rows[0];
 
     if (consumedRow) {
-      const consumedAt = toIsoDateTime(
-        consumedRow.consumed_at ?? input.consumedAt
-      );
+      const consumedAt = toIsoDateTime(consumedRow.consumed_at ?? input.consumedAt);
 
       return {
-        status: 'consumed',
+        status: "consumed",
         ticket: {
           actorId: consumedRow.actor_id,
-          ...(consumedRow.workspace_id
-            ? { workspaceId: consumedRow.workspace_id }
-            : {}),
-          consumedAt
-        }
+          ...(consumedRow.workspace_id ? { workspaceId: consumedRow.workspace_id } : {}),
+          consumedAt,
+        },
       };
     }
 
@@ -165,19 +161,19 @@ export class PostgresRealtimeChatDb implements RealtimeChatDbPort {
 
     if (existingRow?.consumed_at) {
       return {
-        status: 'rejected',
-        reason: 'GATEWAY_TICKET_ALREADY_CONSUMED'
+        status: "rejected",
+        reason: "GATEWAY_TICKET_ALREADY_CONSUMED",
       };
     }
 
     return {
-      status: 'rejected',
-      reason: 'GATEWAY_TICKET_INVALID_OR_EXPIRED'
+      status: "rejected",
+      reason: "GATEWAY_TICKET_INVALID_OR_EXPIRED",
     };
   }
 
   async findMessageByIdempotencyKey(
-    idempotencyKey: string
+    idempotencyKey: string,
   ): Promise<StoredRealtimeChatMessage | undefined> {
     const result = await sql<MessageRow>`
       select *
@@ -191,7 +187,7 @@ export class PostgresRealtimeChatDb implements RealtimeChatDbPort {
   }
 
   async appendMessage(
-    input: Parameters<RealtimeChatDbPort['appendMessage']>[0]
+    input: Parameters<RealtimeChatDbPort["appendMessage"]>[0],
   ): Promise<StoredRealtimeChatMessage> {
     return this.db.transaction().execute(async (trx) => {
       const streamId = streamIdForTarget(input.target);
@@ -205,7 +201,7 @@ export class PostgresRealtimeChatDb implements RealtimeChatDbPort {
       const sequence = sequenceResult.rows[0]?.next_sequence;
 
       if (sequence === undefined) {
-        throw new Error('failed to allocate realtime chat stream sequence');
+        throw new Error("failed to allocate realtime chat stream sequence");
       }
 
       const insertResult = await sql<MessageRow>`
@@ -256,12 +252,12 @@ export class PostgresRealtimeChatDb implements RealtimeChatDbPort {
         }
       }
 
-      throw new Error('failed to append realtime chat message');
+      throw new Error("failed to append realtime chat message");
     });
   }
 
   async markReadCursor(
-    input: Parameters<RealtimeChatDbPort['markReadCursor']>[0]
+    input: Parameters<RealtimeChatDbPort["markReadCursor"]>[0],
   ): Promise<StoredReadCursor> {
     return this.db.transaction().execute(async (trx) => {
       const currentResult = await sql<ReadCursorRow>`
@@ -279,7 +275,7 @@ export class PostgresRealtimeChatDb implements RealtimeChatDbPort {
           streamId: current.stream_id,
           lastReadSequence: current.last_read_sequence,
           updatedAt: toIsoDateTime(current.updated_at),
-          advanced: false
+          advanced: false,
         };
       }
 
@@ -305,7 +301,7 @@ export class PostgresRealtimeChatDb implements RealtimeChatDbPort {
       const row = upsertResult.rows[0];
 
       if (!row) {
-        throw new Error('failed to mark realtime chat read cursor');
+        throw new Error("failed to mark realtime chat read cursor");
       }
 
       return {
@@ -313,14 +309,14 @@ export class PostgresRealtimeChatDb implements RealtimeChatDbPort {
         streamId: row.stream_id,
         lastReadSequence: row.last_read_sequence,
         updatedAt: toIsoDateTime(row.updated_at),
-        advanced: true
+        advanced: true,
       };
     });
   }
 
   async listMessages(
-    input: Parameters<RealtimeChatDbPort['listMessages']>[0]
-  ): Promise<Awaited<ReturnType<RealtimeChatDbPort['listMessages']>>> {
+    input: Parameters<RealtimeChatDbPort["listMessages"]>[0],
+  ): Promise<Awaited<ReturnType<RealtimeChatDbPort["listMessages"]>>> {
     const result = await sql<MessageRow>`
       select *
       from realtime_chat_messages
@@ -339,7 +335,7 @@ export class PostgresRealtimeChatDb implements RealtimeChatDbPort {
     return {
       messages: rows.map(toStoredMessage),
       hasMoreBefore,
-      hasMoreAfter: result.rows.length > input.limit
+      hasMoreAfter: result.rows.length > input.limit,
     };
   }
 
@@ -347,10 +343,7 @@ export class PostgresRealtimeChatDb implements RealtimeChatDbPort {
     await this.db.destroy();
   }
 
-  private async hasMessageBefore(
-    streamId: string,
-    sequence: number
-  ): Promise<boolean> {
+  private async hasMessageBefore(streamId: string, sequence: number): Promise<boolean> {
     const result = await sql<{ exists: boolean }>`
       select exists (
         select 1
@@ -372,18 +365,18 @@ function toStoredMessage(row: MessageRow): StoredRealtimeChatMessage {
     sequence: row.sequence,
     ...(row.sender_id ? { senderId: row.sender_id } : {}),
     messageType: row.message_type,
-    content: row.content as StoredRealtimeChatMessage['content'],
+    content: row.content as StoredRealtimeChatMessage["content"],
     createdAt: toIsoDateTime(row.created_at),
-    ...(row.idempotency_key ? { idempotencyKey: row.idempotency_key } : {})
+    ...(row.idempotency_key ? { idempotencyKey: row.idempotency_key } : {}),
   };
 }
 
 function streamIdForTarget(target: RealtimeChatMessageTarget): string {
-  if (target.kind === 'channel') {
+  if (target.kind === "channel") {
     return `channel:${target.workspaceId}:${target.channelId}`;
   }
 
-  if (target.kind === 'dm') {
+  if (target.kind === "dm") {
     return `dm:${target.dmConversationId}`;
   }
 

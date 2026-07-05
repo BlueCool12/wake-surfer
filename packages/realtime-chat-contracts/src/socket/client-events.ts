@@ -7,11 +7,11 @@ import type {
   StreamId,
   TextMessageContentDto,
   ThreadId,
-  WorkspaceId
-} from '../primitives';
+  WorkspaceId,
+} from "../primitives";
 
 export type ChatChannelMessageSendEvent = {
-  type: 'chat.channel.message.send';
+  type: "chat.channel.message.send";
   commandId: CommandId;
   clientMessageId: ClientMessageId;
   workspaceId: WorkspaceId;
@@ -21,7 +21,7 @@ export type ChatChannelMessageSendEvent = {
 };
 
 export type ChatDMMessageSendEvent = {
-  type: 'chat.dm.message.send';
+  type: "chat.dm.message.send";
   commandId: CommandId;
   clientMessageId: ClientMessageId;
   dmConversationId: DMConversationId;
@@ -30,7 +30,7 @@ export type ChatDMMessageSendEvent = {
 };
 
 export type ChatThreadMessageReplyEvent = {
-  type: 'chat.thread.message.reply';
+  type: "chat.thread.message.reply";
   commandId: CommandId;
   clientMessageId: ClientMessageId;
   threadId: ThreadId;
@@ -39,14 +39,14 @@ export type ChatThreadMessageReplyEvent = {
 };
 
 export type ChatChannelReadMarkEvent = {
-  type: 'chat.channel.read.mark';
+  type: "chat.channel.read.mark";
   commandId: CommandId;
   streamId: StreamId;
   lastReadSequence: number;
 };
 
 export type ChatStreamSyncEvent = {
-  type: 'chat.stream.sync';
+  type: "chat.stream.sync";
   commandId: CommandId;
   streamId: StreamId;
   afterSequence: number;
