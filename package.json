@@ -7,7 +7,12 @@
   "scripts": {
     "lint": "eslint .",
     "format": "prettier . --write",
-    "format:check": "prettier . --check"
+    "format:check": "prettier . --check",
+    "docker:up": "docker compose up -d",
+    "docker:down": "docker compose down",
+    "docker:logs": "docker compose logs -f",
+    "docker:ps": "docker compose ps",
+    "test:e2e:realtime-chat": "pnpm --filter @wake-surfer/realtime-chat-api build && pnpm --filter @wake-surfer/realtime-chat-gateway build && pnpm --filter @wake-surfer/realtime-chat-gateway test:e2e"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
