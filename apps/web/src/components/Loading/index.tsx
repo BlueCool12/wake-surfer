@@ -1,7 +1,7 @@
 import Spinner from "./Spinner";
 import styles from "./Loading.module.css";
 
-type LoadingProps = {  
+type LoadingProps = {
   label?: string;
 };
 

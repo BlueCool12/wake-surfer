@@ -1,6 +1,6 @@
 import styles from "./Spinner.module.css";
 
-type SpinnerProps = {  
+type SpinnerProps = {
   size?: number;
 };
 
