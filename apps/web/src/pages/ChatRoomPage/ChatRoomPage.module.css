@@ -64,7 +64,10 @@
 .input {
   flex: 1;
   resize: none;
+  box-sizing: border-box;
+  height: auto;
   max-height: 8rem;
+  overflow-y: auto;
   padding: 0.4rem 0;
   border: none;
   background: transparent;

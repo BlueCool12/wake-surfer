@@ -9,10 +9,19 @@ import styles from "./ChatRoomPage.module.css";
 
 function ChatRoomPage() {
   const { channelId = "test" } = useParams();
-  const { messages, isLoading, sendMessage } = useChatRoom(channelId);
+  const { messages, isLoading, sendMessage, retryMessage } = useChatRoom(channelId);
   const [draft, setDraft] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
   const isAtBottomRef = useRef(true);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // 입력 내용에 따라 textarea 높이를 늘린다(최대 높이는 CSS max-height 가 제한).
+  useEffect(() => {
+    const el = textareaRef.current;
+    if (el === null) return;
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight}px`;
+  }, [draft]);
 
   const handleScroll = () => {
     const el = scrollRef.current;
@@ -55,13 +64,20 @@ function ChatRoomPage() {
         ) : messages.length === 0 ? (
           <p className={styles.placeholder}>아직 잔잔해요. 첫 파도를 일으켜보세요 🌊</p>
         ) : (
-          messages.map((message) => <MessageBubble key={message.key} message={message} />)
+          messages.map((message) => (
+            <MessageBubble
+              key={message.key}
+              message={message}
+              onRetry={message.status === "failed" ? () => retryMessage(message) : undefined}
+            />
+          ))
         )}
       </div>
 
       <div className={styles.composer}>
         <div className={styles.inputWrap}>
           <textarea
+            ref={textareaRef}
             className={styles.input}
             value={draft}
             onChange={(event) => setDraft(event.target.value)}
