@@ -89,6 +89,7 @@ function fakeRuntime(): RealtimeChatGatewayRuntimeHandle {
       chatApiClient: {
         issueGatewayTicket: async () => ({
           ticket: "test-ticket",
+          gatewayUrl: "wss://example.test/ws/realtime-chat",
           expiresAt: new Date().toISOString(),
         }),
         sendChannelMessage: async () => {
@@ -112,7 +113,6 @@ function fakeRuntime(): RealtimeChatGatewayRuntimeHandle {
           status: "consumed",
           ticket: {
             actorId: "user-1",
-            workspaceId: "workspace-1",
             consumedAt: new Date().toISOString(),
           },
         }),

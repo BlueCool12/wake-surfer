@@ -9,12 +9,12 @@
 | `src/index.ts`                | root public API export                                          |
 | `src/api/public.ts`           | API adapter public API                                          |
 | `src/api/http/*`              | API route registration, handler, request validation             |
-| `src/api/application/*`       | API side usecase orchestration                                  |
+| `src/api/usecases/*`          | API side usecase orchestration                                  |
 | `src/api/domain/*`            | message, ticket, idempotency policy                             |
 | `src/api/runtime-deps.ts`     | API side app-supplied port 및 runtime dependency type           |
 | `src/gateway/public.ts`       | Gateway adapter public API                                      |
 | `src/gateway/websocket/*`     | WebSocket mount, connection/message handling, socket validation |
-| `src/gateway/application/*`   | Gateway side usecase orchestration                              |
+| `src/gateway/usecases/*`      | Gateway side usecase orchestration                              |
 | `src/gateway/session/*`       | local session model 및 registry                                 |
 | `src/gateway/runtime-deps.ts` | Gateway side app-supplied port 및 runtime dependency type       |
 

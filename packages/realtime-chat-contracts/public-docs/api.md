@@ -53,6 +53,7 @@ type RealtimeChatErrorCode =
   | "INVALID_PAYLOAD"
   | "PAYLOAD_TOO_LARGE"
   | "UNSUPPORTED_EVENT_TYPE"
+  | "UNAUTHENTICATED"
   | "GATEWAY_TICKET_MISSING"
   | "GATEWAY_TICKET_INVALID_OR_EXPIRED"
   | "GATEWAY_TICKET_ALREADY_CONSUMED"
@@ -72,19 +73,17 @@ type RealtimeChatErrorCode =
 Gateway ticket:
 
 ```ts
-type IssueGatewayTicketRequest = {
-  actorId: UserId;
-  workspaceId?: WorkspaceId;
-};
+type IssueGatewayTicketRequest = Record<never, never>;
 
 type IssueGatewayTicketResponse = {
   ticket: GatewayTicket;
-  gatewayUrl?: string;
+  gatewayUrl: string;
   expiresAt: ISODateTime;
 };
 
 type ConsumeGatewayTicketRequest = {
   ticket: GatewayTicket;
+  gatewayId: GatewayId;
 };
 
 type ConsumeGatewayTicketResponse =
@@ -92,7 +91,6 @@ type ConsumeGatewayTicketResponse =
       status: "consumed";
       ticket: {
         actorId: UserId;
-        workspaceId?: WorkspaceId;
         consumedAt: ISODateTime;
       };
     }
@@ -103,8 +101,9 @@ type ConsumeGatewayTicketResponse =
     };
 ```
 
-`IssueGatewayTicketRequest`는 actor/workspace 식별 정보만 표현합니다. gateway URL과 ticket TTL은 feature package mount configuration의 영역이며 request DTO에 포함하지 않습니다.
-`ConsumeGatewayTicketRequest`는 gateway process가 API internal endpoint로 전달하는 raw ticket만 표현합니다. ticket hash 계산과 atomic consume 정책은 feature package API adapter/usecase가 처리합니다.
+`IssueGatewayTicketRequest`는 클라이언트가 주장하는 actor/workspace 식별 정보를 포함하지 않습니다. 인증 actor는 feature package API adapter가 authenticated context에서 결정합니다.
+`IssueGatewayTicketResponse.gatewayUrl`은 API side gateway assignment 결과입니다. 클라이언트는 이 URL로 WebSocket 접속을 시도합니다.
+`ConsumeGatewayTicketRequest`는 gateway process가 API internal endpoint로 전달하는 raw ticket과 현재 gateway id를 표현합니다. ticket hash 계산과 assigned gateway 검증을 포함한 atomic consume 정책은 feature package API adapter/usecase가 처리합니다.
 
 Message command DTOs:
 

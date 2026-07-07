@@ -31,7 +31,7 @@ type ReadCursorRow = {
 
 type GatewayTicketRow = {
   actor_id: string;
-  workspace_id: string | null;
+  assigned_gateway_id: string;
   consumed_at: Date | string | null;
   expires_at: Date | string;
 };
@@ -60,7 +60,7 @@ export class PostgresRealtimeChatDb implements RealtimeChatDbPort {
       create table if not exists realtime_chat_gateway_tickets (
         ticket_value_hash text primary key,
         actor_id text not null,
-        workspace_id text,
+        assigned_gateway_id text not null,
         issued_at timestamptz not null,
         expires_at timestamptz not null,
         consumed_at timestamptz
@@ -69,6 +69,10 @@ export class PostgresRealtimeChatDb implements RealtimeChatDbPort {
     await sql`
       alter table realtime_chat_gateway_tickets
       add column if not exists consumed_at timestamptz
+    `.execute(this.db);
+    await sql`
+      alter table realtime_chat_gateway_tickets
+      add column if not exists assigned_gateway_id text
     `.execute(this.db);
     await sql`
       create table if not exists realtime_chat_stream_sequences (
@@ -111,14 +115,14 @@ export class PostgresRealtimeChatDb implements RealtimeChatDbPort {
       insert into realtime_chat_gateway_tickets (
         ticket_value_hash,
         actor_id,
-        workspace_id,
+        assigned_gateway_id,
         issued_at,
         expires_at
       )
       values (
         ${ticket.ticketValueHash},
         ${ticket.actorId},
-        ${ticket.workspaceId ?? null},
+        ${ticket.assignedGatewayId},
         ${ticket.issuedAt},
         ${ticket.expiresAt}
       )
@@ -134,7 +138,8 @@ export class PostgresRealtimeChatDb implements RealtimeChatDbPort {
       where ticket_value_hash = ${input.ticketValueHash}
         and expires_at > ${input.consumedAt}
         and consumed_at is null
-      returning actor_id, workspace_id, consumed_at, expires_at
+        and assigned_gateway_id = ${input.gatewayId}
+      returning actor_id, assigned_gateway_id, consumed_at, expires_at
     `.execute(this.db);
     const consumedRow = consumed.rows[0];
 
@@ -145,14 +150,13 @@ export class PostgresRealtimeChatDb implements RealtimeChatDbPort {
         status: "consumed",
         ticket: {
           actorId: consumedRow.actor_id,
-          ...(consumedRow.workspace_id ? { workspaceId: consumedRow.workspace_id } : {}),
           consumedAt,
         },
       };
     }
 
     const existing = await sql<GatewayTicketRow>`
-      select actor_id, workspace_id, consumed_at, expires_at
+      select actor_id, assigned_gateway_id, consumed_at, expires_at
       from realtime_chat_gateway_tickets
       where ticket_value_hash = ${input.ticketValueHash}
       limit 1

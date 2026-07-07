@@ -33,6 +33,7 @@ const server: HttpServerLike = {
 const deps: RealtimeChatApiRuntimeDeps = {
   db,
   permissionPort,
+  gatewayAssignmentPort,
   outboundEventBus,
   clock,
   idGenerator,
@@ -45,7 +46,6 @@ await mountRealtimeChatApi(
   server,
   {
     basePath: "/api/realtime-chat",
-    gatewayUrl: "wss://example.test/ws/realtime-chat",
     gatewayTicketTtlSeconds: 60,
     maxMessageTextLength: 4000,
     syncDefaultLimit: 50,

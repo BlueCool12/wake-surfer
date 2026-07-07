@@ -41,7 +41,6 @@ export type { RealtimeChatApiRuntimeHandle };
 function createMountOptions(env: AppEnv): RealtimeChatApiMountOptions {
   return {
     basePath: env.REALTIME_CHAT_BASE_PATH,
-    ...(env.REALTIME_CHAT_GATEWAY_URL ? { gatewayUrl: env.REALTIME_CHAT_GATEWAY_URL } : {}),
     gatewayTicketTtlSeconds: env.GATEWAY_TICKET_TTL_SECONDS,
     maxMessageTextLength: env.MAX_MESSAGE_TEXT_LENGTH,
     syncDefaultLimit: env.SYNC_DEFAULT_LIMIT,

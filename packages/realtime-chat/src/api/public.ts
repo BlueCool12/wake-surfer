@@ -8,6 +8,8 @@ export type {
 } from "./http/http-server-like";
 export type {
   ClockPort,
+  AssignedGateway,
+  GatewayAssignmentPort,
   IdGeneratorPort,
   LoggerPort,
   MetricsPort,

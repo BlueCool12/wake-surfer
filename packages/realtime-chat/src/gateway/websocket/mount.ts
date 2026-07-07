@@ -1,5 +1,5 @@
 import type { RealtimeChatGatewayRuntimeDeps } from "../runtime-deps";
-import { pushOutboundEvent } from "../application/push-outbound-event.usecase";
+import { pushOutboundEvent } from "../usecases/push-outbound-event.usecase";
 import { InMemoryGatewaySessionRegistry } from "../session/in-memory-gateway-session-registry";
 import type { WebSocketServerLike } from "./websocket-server-like";
 import { createConnectionHandler } from "./connection-handler";

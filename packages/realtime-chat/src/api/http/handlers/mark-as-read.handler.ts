@@ -1,4 +1,4 @@
-import type { RealtimeChatUsecases } from "../../application/create-usecases";
+import type { RealtimeChatUsecases } from "../../usecases/create-usecases";
 import type { HttpRouteHandler } from "../http-server-like";
 import { badRequest, forbidden, ok } from "./response";
 import { parseMarkReadCursorRequest } from "../schemas/read-cursor.schema";

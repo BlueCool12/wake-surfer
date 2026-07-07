@@ -8,9 +8,9 @@
 - `RealtimeChatErrorCode` 이름은 transport/domain boundary에서 공유되는 안정적인 public error name입니다.
 - `ISODateTime`은 string contract입니다. producer는 `Date#toISOString()`으로 직렬화해야 합니다.
 - ID type alias는 runtime branded value가 아니라 string wire contract입니다.
-- gateway ticket request DTO는 ticket TTL 또는 gateway URL override를 포함하지 않습니다.
-- `IssueGatewayTicketResponse.gatewayUrl`은 optional입니다.
-- gateway ticket consume DTO는 raw ticket만 포함하고 actor/workspace는 consume response에서 결정됩니다.
+- gateway ticket request DTO는 actorId, workspaceId, ticket TTL, gateway URL override를 포함하지 않습니다.
+- `IssueGatewayTicketResponse.gatewayUrl`은 필수입니다.
+- gateway ticket consume DTO는 raw ticket과 현재 `gatewayId`만 포함하고 actor는 consume response에서 결정됩니다.
 - message ordering 기준은 `streamId + sequence`입니다.
 - message request의 `clientMessageId`는 retry/idempotency 식별에 사용됩니다.
 - socket client event의 `commandId`는 request correlation id이며 Gateway가 API DTO의 `requestId`로 전달합니다.

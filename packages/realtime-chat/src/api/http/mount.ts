@@ -1,12 +1,11 @@
 import type { RealtimeChatApiRuntimeDeps } from "../runtime-deps";
 import type { HttpServerLike } from "./http-server-like";
-import { createRealtimeChatUsecases } from "../application/create-usecases";
+import { createRealtimeChatUsecases } from "../usecases/create-usecases";
 import { registerRealtimeChatApiRoutes } from "./routes";
 
 export type RealtimeChatApiMountOptions = {
   basePath: string;
   exposeOpenApi?: boolean;
-  gatewayUrl?: string;
   gatewayTicketTtlSeconds?: number;
   maxMessageTextLength?: number;
   syncDefaultLimit?: number;

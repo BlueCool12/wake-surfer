@@ -8,7 +8,7 @@ app이 소유하는 것:
 
 - process startup, env parsing, listen/shutdown
 - concrete HTTP/WebSocket framework 선택
-- concrete DB, broker, permission, logger, metrics, API client 구현
+- concrete DB, broker, permission, gateway assignment, logger, metrics, API client 구현
 - `HttpServerLike` 또는 `WebSocketServerLike` adapter 작성
 - `RealtimeChatApiRuntimeDeps` 또는 `RealtimeChatGatewayRuntimeDeps` 구성
 
@@ -34,7 +34,7 @@ HTTP adapter 요구사항:
 - `definition.method`와 `definition.path` 그대로 framework에 등록합니다.
 - framework의 path parameter를 `request.params`로 전달합니다.
 - query string을 `request.query`로 전달합니다.
-- headers는 `request.headers`로 전달합니다. gateway ticket actor fallback을 쓰려면 `x-actor-id`를 전달해야 합니다.
+- headers는 `request.headers`로 전달합니다. gateway ticket 발급 actor context를 전달하려면 lowercase `x-actor-id`를 전달해야 합니다.
 - handler가 반환한 `{ status, body }`를 framework response로 변환합니다.
 
 ## Gateway app 연동 순서
@@ -65,18 +65,18 @@ Gateway는 API internal command/usecase를 직접 호출하지 않습니다. Gat
 | `markReadCursor`      | `POST /internal/read-cursors`            |
 | `syncStreamMessages`  | `GET /streams/:streamId/messages`        |
 
-`issueGatewayTicket`은 Gateway client port에 optional로 존재하지만, Gateway socket connect flow는 `gatewayTicketPort.consume(ticketValue)`를 사용합니다. app-owned `GatewayTicketConsumePort`는 일반적으로 `POST /internal/gateway-tickets/consume`을 호출합니다.
+`issueGatewayTicket`은 Gateway client port에 optional로 존재하지만, Gateway socket connect flow는 `gatewayTicketPort.consume({ ticketValue, gatewayId })`를 사용합니다. app-owned `GatewayTicketConsumePort`는 일반적으로 `POST /internal/gateway-tickets/consume`을 호출합니다. consume 응답의 rejected 값은 connection rejection으로 relay하고, HTTP 통신 실패나 API 사용 불가는 `API_UNAVAILABLE` connection rejection으로 변환합니다.
 
 outbound delivery는 API app의 `OutboundEventBusPort.publish`와 Gateway app의 `OutboundEventBusPort.subscribe`를 같은 broker channel에 연결해 process boundary를 넘깁니다. 현재 app 구현은 Redis Pub/Sub channel을 사용합니다.
 
 ## Operational parameters
 
-Gateway ticket TTL과 advertised gateway URL 같은 운영 파라미터는 API mount option으로 주입합니다. request DTO가 이를 override하지 않습니다.
+Gateway ticket TTL은 API mount option으로 주입합니다. Gateway assignment는 API runtime dependency인 `GatewayAssignmentPort`로 주입합니다. request DTO가 이를 override하지 않습니다.
 
 | 값                        | 주입 위치                                             | 기본값  |
 | ------------------------- | ----------------------------------------------------- | ------- |
 | gateway ticket TTL        | `RealtimeChatApiMountOptions.gatewayTicketTtlSeconds` | `60`    |
-| advertised gateway URL    | `RealtimeChatApiMountOptions.gatewayUrl`              | 없음    |
+| gateway assignment        | `RealtimeChatApiRuntimeDeps.gatewayAssignmentPort`    | 없음    |
 | max text length           | `RealtimeChatApiMountOptions.maxMessageTextLength`    | `4000`  |
 | stream sync default limit | `RealtimeChatApiMountOptions.syncDefaultLimit`        | `50`    |
 | stream sync max limit     | `RealtimeChatApiMountOptions.syncMaxLimit`            | `100`   |

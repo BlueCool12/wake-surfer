@@ -3,6 +3,7 @@ import type { LoggerPort } from "@wake-surfer/realtime-chat/api";
 import type { AppEnv } from "../config/env";
 import { createInMemoryRealtimeChatDb } from "./in-memory-realtime-chat-db";
 import { createNodeIdGenerator } from "./id-generator";
+import { createStaticGatewayAssignmentPort } from "./gateway-assignment-port";
 import { createNoopMetrics } from "./metrics";
 import { createAllowAllPermissionPort } from "./permission-port";
 import { createPostgresRealtimeChatDb } from "./postgres-realtime-chat-db";
@@ -39,6 +40,10 @@ export async function createRealtimeChatApiRuntimeDeps(
     deps: {
       db,
       permissionPort: createAllowAllPermissionPort(),
+      gatewayAssignmentPort: createStaticGatewayAssignmentPort({
+        gatewayId: env.REALTIME_CHAT_GATEWAY_ID,
+        gatewayUrl: env.REALTIME_CHAT_GATEWAY_URL,
+      }),
       outboundEventBus,
       clock: {
         now: () => new Date(),

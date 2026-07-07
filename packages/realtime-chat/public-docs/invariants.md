@@ -8,9 +8,11 @@
 - API side는 message permission check, idempotency lookup, append, ACK response, best-effort outbound publish를 소유합니다.
 - Gateway side는 ticket consume, local session registry, socket payload validation, API DTO forwarding, ACK relay, outbound fan-out을 소유합니다.
 - Gateway side는 최종 chat permission decision이나 message persistence를 수행하지 않습니다.
-- gateway ticket TTL과 advertised gateway URL은 app이 mount option으로 주입하지만, request DTO가 override하지 않습니다.
-- `IssueGatewayTicketRequest`의 actor는 body `actorId` 또는 HTTP header `x-actor-id` fallback으로 결정됩니다.
-- gateway ticket consume은 API adapter가 raw ticket을 hash한 뒤 `db.consumeGatewayTicket`으로 atomic consume합니다.
+- gateway ticket TTL은 app이 mount option으로 주입하지만, request DTO가 override하지 않습니다.
+- gateway assignment는 API side `GatewayAssignmentPort`가 결정하고, request DTO가 gateway URL 또는 workspace를 override하지 않습니다.
+- `IssueGatewayTicketRequest`의 actor는 body가 아니라 authenticated actor context에서 결정됩니다. 현재 HTTP adapter contract에서는 lowercase `x-actor-id` header가 이 context를 전달합니다.
+- gateway ticket consume은 API adapter가 raw ticket을 hash한 뒤 현재 `gatewayId`와 함께 `db.consumeGatewayTicket`으로 atomic consume합니다.
+- gateway ticket은 WebSocket 접속권이며 message permission을 의미하지 않습니다.
 - gateway app은 gateway ticket table을 직접 읽거나 쓰지 않습니다.
 - HTTP DTO/socket event validation은 required field를 검사하고 현재 extra field를 거부하지 않습니다.
 - text message는 trim 후 빈 문자열이면 invalid이고, 기본 최대 길이는 4000자입니다.

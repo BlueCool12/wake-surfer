@@ -14,13 +14,13 @@ Boundary 규칙:
 ```txt
 external boundary shape -> @wake-surfer/realtime-chat-contracts
 feature-private behavior -> owning feature package
-server-side policy/deployment config -> owning feature package mount options
+server-side policy/deployment config -> owning feature package runtime deps 또는 mount options
 ```
 
 consumer가 API 또는 gateway feature package 내부 타입을 필요로 하더라도, 그 타입이 process/client boundary를 넘지 않는다면 이 패키지로 옮기지 않습니다.
 
-Gateway ticket TTL과 advertised gateway URL은 public response 또는 feature mount configuration으로만 다루며, ticket issue request DTO가 override하지 않습니다.
-Gateway ticket consume은 gateway app이 DB를 직접 보지 않고 API internal endpoint에 `ConsumeGatewayTicketRequest`를 보내는 방식으로 연동합니다.
+Gateway ticket TTL, authenticated actor, gateway assignment는 ticket issue request DTO가 override하지 않습니다. 발급 응답의 `gatewayUrl`은 feature package가 API side gateway assignment 결과로 제공합니다.
+Gateway ticket consume은 gateway app이 DB를 직접 보지 않고 API internal endpoint에 `ConsumeGatewayTicketRequest`를 보내는 방식으로 연동합니다. 이 요청에는 raw ticket과 현재 `gatewayId`가 포함됩니다.
 
 ## Mapping conventions
 

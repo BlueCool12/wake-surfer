@@ -1,5 +1,7 @@
 import type {
   IssueGatewayTicketResponse,
+  GatewayId,
+  GatewayTicket,
   MarkReadCursorRequest,
   MarkReadCursorResponse,
   MessageCommandResponse,
@@ -11,12 +13,10 @@ import type {
   SyncStreamMessagesRequest,
   SyncStreamMessagesResponse,
   UserId,
-  WorkspaceId,
 } from "@wake-surfer/realtime-chat-contracts";
 
 export type ConsumedGatewayTicket = {
   actorId: UserId;
-  workspaceId?: WorkspaceId;
   consumedAt?: string;
 };
 
@@ -32,14 +32,14 @@ export type GatewayTicketConsumeResult =
     };
 
 export type GatewayTicketConsumePort = {
-  consume: (ticketValue: string) => Promise<GatewayTicketConsumeResult>;
+  consume: (input: {
+    ticketValue: GatewayTicket;
+    gatewayId: GatewayId;
+  }) => Promise<GatewayTicketConsumeResult>;
 };
 
 export type RealtimeChatApiClientPort = {
-  issueGatewayTicket?: (input: {
-    actorId: UserId;
-    workspaceId?: WorkspaceId;
-  }) => Promise<IssueGatewayTicketResponse>;
+  issueGatewayTicket?: () => Promise<IssueGatewayTicketResponse>;
   sendChannelMessage: (request: SendChannelMessageRequest) => Promise<MessageCommandResponse>;
   sendDMMessage: (request: SendDMMessageRequest) => Promise<MessageCommandResponse>;
   replyThreadMessage: (request: ReplyThreadMessageRequest) => Promise<MessageCommandResponse>;

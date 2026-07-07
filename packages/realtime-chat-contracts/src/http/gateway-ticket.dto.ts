@@ -1,19 +1,17 @@
-import type { GatewayTicket, ISODateTime, UserId, WorkspaceId } from "../primitives";
+import type { GatewayId, GatewayTicket, ISODateTime, UserId } from "../primitives";
 import type { RealtimeChatErrorCode } from "../error-codes";
 
-export type IssueGatewayTicketRequest = {
-  actorId: UserId;
-  workspaceId?: WorkspaceId;
-};
+export type IssueGatewayTicketRequest = Record<never, never>;
 
 export type IssueGatewayTicketResponse = {
   ticket: GatewayTicket;
-  gatewayUrl?: string;
+  gatewayUrl: string;
   expiresAt: ISODateTime;
 };
 
 export type ConsumeGatewayTicketRequest = {
   ticket: GatewayTicket;
+  gatewayId: GatewayId;
 };
 
 export type ConsumeGatewayTicketResponse =
@@ -21,7 +19,6 @@ export type ConsumeGatewayTicketResponse =
       status: "consumed";
       ticket: {
         actorId: UserId;
-        workspaceId?: WorkspaceId;
         consumedAt: ISODateTime;
       };
     }

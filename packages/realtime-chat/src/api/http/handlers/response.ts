@@ -19,6 +19,10 @@ export function badRequest(message: string): HttpResponseLike {
   return errorResponse(400, "INVALID_PAYLOAD", message);
 }
 
+export function unauthorized(message: string): HttpResponseLike {
+  return errorResponse(401, "UNAUTHENTICATED", message);
+}
+
 export function forbidden(reason: RealtimeChatErrorCode, message?: string): HttpResponseLike {
   return errorResponse(403, reason, message);
 }

@@ -36,7 +36,7 @@ describe("consumer API mount flow", () => {
     ]);
   });
 
-  it("gateway ticket은 mount option TTL과 gatewayUrl을 사용하고 request override를 무시한다", async () => {
+  it("gateway ticket은 인증 actor와 배정 정책 결과로 발급한다", async () => {
     const http = createHttpServerDouble();
     const deps = createApiRuntimeDeps();
 
@@ -45,15 +45,17 @@ describe("consumer API mount flow", () => {
       {
         basePath: "/api/realtime-chat",
         gatewayTicketTtlSeconds: 120,
-        gatewayUrl: "wss://public.example/ws/realtime-chat",
       },
       deps,
     );
 
     const response = await http.findRoute("POST", "/api/realtime-chat/gateway-tickets").handler(
       httpRequest({
+        headers: {
+          "x-actor-id": " user-1 ",
+        },
         body: {
-          actorId: "user-1",
+          actorId: "attacker",
           workspaceId: "workspace-1",
           ttlSeconds: 999,
           gatewayUrl: "wss://request.example/ws",
@@ -69,16 +71,19 @@ describe("consumer API mount flow", () => {
         expiresAt: "2026-01-01T00:02:00.000Z",
       },
     });
+    expect(deps.gatewayAssignmentPort.assignGatewayForTicket).toHaveBeenCalledWith({
+      actorId: "user-1",
+    });
     expect(deps.db.issueGatewayTicket).toHaveBeenCalledWith({
       ticketValueHash: "hash:gateway-ticket-1.gateway-ticket-secret-2",
       actorId: "user-1",
-      workspaceId: "workspace-1",
+      assignedGatewayId: "gateway-1",
       issuedAt: fixedNow.toISOString(),
       expiresAt: "2026-01-01T00:02:00.000Z",
     });
   });
 
-  it("gateway ticket actorId는 body가 없으면 x-actor-id header에서 읽는다", async () => {
+  it("gateway ticket actor는 request body가 아니라 인증 context에서 읽는다", async () => {
     const http = createHttpServerDouble();
     const deps = createApiRuntimeDeps();
 
@@ -96,6 +101,7 @@ describe("consumer API mount flow", () => {
           "x-actor-id": " user-from-header ",
         },
         body: {
+          actorId: "body-user",
           workspaceId: "workspace-1",
         },
       }),
@@ -105,12 +111,40 @@ describe("consumer API mount flow", () => {
     expect(deps.db.issueGatewayTicket).toHaveBeenCalledWith(
       expect.objectContaining({
         actorId: "user-from-header",
-        workspaceId: "workspace-1",
+        assignedGatewayId: "gateway-1",
       }),
     );
   });
 
-  it("gateway ticket consume endpoint는 raw ticket을 hash해서 db port에 전달한다", async () => {
+  it("gateway ticket 발급은 인증 actor가 없으면 거부한다", async () => {
+    const http = createHttpServerDouble();
+    const deps = createApiRuntimeDeps();
+
+    await mountRealtimeChatApi(
+      http.server,
+      {
+        basePath: "/api/realtime-chat",
+      },
+      deps,
+    );
+
+    const response = await http.findRoute("POST", "/api/realtime-chat/gateway-tickets").handler(
+      httpRequest({
+        body: {},
+      }),
+    );
+
+    expect(response).toEqual({
+      status: 401,
+      body: {
+        reason: "UNAUTHENTICATED",
+        message: "authenticated actor is required",
+      },
+    });
+    expect(deps.db.issueGatewayTicket).not.toHaveBeenCalled();
+  });
+
+  it("gateway ticket consume endpoint는 raw ticket과 gatewayId를 db port에 전달한다", async () => {
     const http = createHttpServerDouble();
     const deps = createApiRuntimeDeps();
 
@@ -128,6 +162,7 @@ describe("consumer API mount flow", () => {
         httpRequest({
           body: {
             ticket: " raw-ticket ",
+            gatewayId: " gateway-1 ",
           },
         }),
       );
@@ -138,13 +173,13 @@ describe("consumer API mount flow", () => {
         status: "consumed",
         ticket: {
           actorId: "user-1",
-          workspaceId: "workspace-1",
           consumedAt: fixedNow.toISOString(),
         },
       },
     });
     expect(deps.db.consumeGatewayTicket).toHaveBeenCalledWith({
       ticketValueHash: "hash:raw-ticket",
+      gatewayId: "gateway-1",
       consumedAt: fixedNow.toISOString(),
     });
   });

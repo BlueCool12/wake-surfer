@@ -1,7 +1,7 @@
-import type { RealtimeChatErrorCode } from "@wake-surfer/realtime-chat-contracts";
+import type { GatewaySessionId, RealtimeChatErrorCode } from "@wake-surfer/realtime-chat-contracts";
 import type { RealtimeChatGatewayRuntimeDeps } from "../runtime-deps";
-import { connectGatewaySession } from "../application/connect-gateway-session.usecase";
-import { closeGatewaySession } from "../application/close-gateway-session.usecase";
+import { connectGatewaySession } from "../usecases/connect-gateway-session.usecase";
+import { closeGatewaySession } from "../usecases/close-gateway-session.usecase";
 import type { InMemoryGatewaySessionRegistry } from "../session/in-memory-gateway-session-registry";
 import type { RealtimeChatGatewayMountOptions } from "./mount";
 import type { WebSocketConnectionLike } from "./websocket-server-like";
@@ -14,6 +14,17 @@ export function createConnectionHandler(
   deps: RealtimeChatGatewayRuntimeDeps,
 ): (connection: WebSocketConnectionLike) => Promise<void> {
   return async (connection) => {
+    const connectedSession: { sessionId?: GatewaySessionId } = {};
+    let connectionClosed = false;
+
+    connection.onClose(() => {
+      connectionClosed = true;
+
+      if (connectedSession.sessionId) {
+        closeGatewaySession(connectedSession.sessionId, sessionRegistry, deps);
+      }
+    });
+
     const ticket = extractTicket(connection);
 
     if (!ticket) {
@@ -22,11 +33,23 @@ export function createConnectionHandler(
     }
 
     const connectResult = await connectGatewaySession(
-      ticket,
-      connection,
-      sessionRegistry,
-      options,
-      deps,
+      {
+        ticketValue: ticket,
+        connection,
+      },
+      {
+        gatewayId: options.gatewayId,
+        consumeGatewayTicket: (input) => deps.gatewayTicketPort.consume(input),
+        now: () => deps.clock.now(),
+        generateGatewaySessionId: () => deps.idGenerator.generateId("gateway-session"),
+        registerGatewaySession: (session) => sessionRegistry.register(session),
+        warn: (message, fields) => deps.logger.warn(message, fields),
+        ...(deps.metrics
+          ? {
+              incrementMetric: (name, tags) => deps.metrics?.increment(name, tags),
+            }
+          : {}),
+      },
     );
 
     if (connectResult.status === "rejected") {
@@ -35,17 +58,32 @@ export function createConnectionHandler(
     }
 
     const session = connectResult.session;
-    await sendSocketEvent(connection, {
-      type: "gateway.connected",
-      sessionId: session.sessionId,
-      gatewayId: session.gatewayId,
-      connectedAt: session.connectedAt,
-    });
+    connectedSession.sessionId = session.sessionId;
+
+    if (connectionClosed) {
+      closeGatewaySession(session.sessionId, sessionRegistry, deps);
+      return;
+    }
+
+    try {
+      await sendSocketEvent(connection, {
+        type: "gateway.connected",
+        sessionId: session.sessionId,
+        gatewayId: session.gatewayId,
+        connectedAt: session.connectedAt,
+      });
+    } catch (error) {
+      closeGatewaySession(session.sessionId, sessionRegistry, deps);
+      deps.logger.warn("failed to send realtime chat gateway connected event", {
+        error,
+        sessionId: session.sessionId,
+      });
+      return;
+    }
 
     connection.onMessage((payload) =>
       handleSocketMessage(payload, session, sessionRegistry, options, deps),
     );
-    connection.onClose(() => closeGatewaySession(session.sessionId, sessionRegistry, deps));
   };
 }
 

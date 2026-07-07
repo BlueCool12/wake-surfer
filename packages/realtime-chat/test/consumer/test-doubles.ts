@@ -53,6 +53,7 @@ type ApiRuntimeDepsOverrides = {
   db?: Partial<RealtimeChatApiRuntimeDeps["db"]>;
   permissionPort?: Partial<RealtimeChatApiRuntimeDeps["permissionPort"]>;
   outboundEventBus?: Partial<RealtimeChatApiRuntimeDeps["outboundEventBus"]>;
+  gatewayAssignmentPort?: Partial<RealtimeChatApiRuntimeDeps["gatewayAssignmentPort"]>;
   clock?: Partial<RealtimeChatApiRuntimeDeps["clock"]>;
   idGenerator?: Partial<RealtimeChatApiRuntimeDeps["idGenerator"]>;
   logger?: Partial<RealtimeChatApiRuntimeDeps["logger"]>;
@@ -78,7 +79,6 @@ export function createApiRuntimeDeps(
         status: "consumed" as const,
         ticket: {
           actorId: "user-1",
-          workspaceId: "workspace-1",
           consumedAt: input.consumedAt,
         },
       })),
@@ -116,6 +116,12 @@ export function createApiRuntimeDeps(
     outboundEventBus: {
       publish: vi.fn(async () => undefined),
     },
+    gatewayAssignmentPort: {
+      assignGatewayForTicket: vi.fn(async () => ({
+        gatewayId: "gateway-1",
+        gatewayUrl: "wss://public.example/ws/realtime-chat",
+      })),
+    },
     clock: {
       now: vi.fn(() => fixedNow),
     },
@@ -143,6 +149,10 @@ export function createApiRuntimeDeps(
     outboundEventBus: {
       ...deps.outboundEventBus,
       ...overrides.outboundEventBus,
+    },
+    gatewayAssignmentPort: {
+      ...deps.gatewayAssignmentPort,
+      ...overrides.gatewayAssignmentPort,
     },
     clock: {
       ...deps.clock,
@@ -237,6 +247,7 @@ export function createGatewayRuntimeDeps(overrides: GatewayRuntimeDepsOverrides 
     chatApiClient: {
       issueGatewayTicket: vi.fn(async () => ({
         ticket: "ticket-1",
+        gatewayUrl: "wss://public.example/ws/realtime-chat",
         expiresAt: fixedNow.toISOString(),
       })),
       sendChannelMessage: vi.fn(async (request) => ({
@@ -266,11 +277,10 @@ export function createGatewayRuntimeDeps(overrides: GatewayRuntimeDepsOverrides 
       })),
     },
     gatewayTicketPort: {
-      consume: vi.fn(async (ticketValue) => ({
+      consume: vi.fn(async (input) => ({
         status: "consumed" as const,
         ticket: {
-          actorId: ticketValue,
-          workspaceId: "workspace-1",
+          actorId: input.ticketValue,
           consumedAt: fixedNow.toISOString(),
         },
       })),

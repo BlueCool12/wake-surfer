@@ -4,6 +4,7 @@ import { loadEnv } from "../src/config/env";
 import type { RealtimeChatApiRuntimeHandle } from "../src/runtime/create-runtime-deps";
 import { createInMemoryRealtimeChatDb } from "../src/runtime/in-memory-realtime-chat-db";
 import { createNodeIdGenerator } from "../src/runtime/id-generator";
+import { createStaticGatewayAssignmentPort } from "../src/runtime/gateway-assignment-port";
 import { createNoopMetrics } from "../src/runtime/metrics";
 import { createAllowAllPermissionPort } from "../src/runtime/permission-port";
 import { createNodeGatewayTicketHasher } from "../src/runtime/ticket-hasher";
@@ -35,6 +36,7 @@ describe("realtime-chat-api app smoke", () => {
   it("mounted realtime chat API route로 gateway ticket을 발급한다", async () => {
     const { app, close } = await createApp(
       testEnv({
+        REALTIME_CHAT_GATEWAY_ID: "test-gateway",
         REALTIME_CHAT_GATEWAY_URL: "wss://example.test/ws/realtime-chat",
       }),
       async () => fakeRuntime(),
@@ -45,11 +47,9 @@ describe("realtime-chat-api app smoke", () => {
         method: "POST",
         headers: {
           "content-type": "application/json",
+          "x-actor-id": "user-1",
         },
-        body: JSON.stringify({
-          actorId: "user-1",
-          workspaceId: "workspace-1",
-        }),
+        body: JSON.stringify({}),
       });
       const body = await response.json();
 
@@ -83,6 +83,8 @@ function testEnv(overrides: Record<string, string> = {}): ReturnType<typeof load
     PORT: "3001",
     LOG_LEVEL: "silent",
     REALTIME_CHAT_BASE_PATH: "/api/realtime-chat",
+    REALTIME_CHAT_GATEWAY_ID: "test-gateway",
+    REALTIME_CHAT_GATEWAY_URL: "wss://example.test/ws/realtime-chat",
     GATEWAY_TICKET_TTL_SECONDS: "60",
     MAX_MESSAGE_TEXT_LENGTH: "4000",
     SYNC_DEFAULT_LIMIT: "50",
@@ -100,6 +102,10 @@ function fakeRuntime(): RealtimeChatApiRuntimeHandle {
     deps: {
       db,
       permissionPort: createAllowAllPermissionPort(),
+      gatewayAssignmentPort: createStaticGatewayAssignmentPort({
+        gatewayId: "test-gateway",
+        gatewayUrl: "wss://example.test/ws/realtime-chat",
+      }),
       outboundEventBus: {
         publish: async () => {},
       },

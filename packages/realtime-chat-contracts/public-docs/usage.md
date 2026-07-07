@@ -22,7 +22,7 @@ import type { SendChannelMessageRequest } from "@wake-surfer/realtime-chat-contr
 
 이 패키지를 내부 domain model을 공유하는 보관소로 사용하지 않습니다. application command, usecase input, repository shape, runtime session state는 해당 behavior를 소유하는 feature package에 둡니다.
 
-server-side policy나 deployment configuration에 해당하는 값은 request DTO에 넣지 않습니다. 예를 들어 gateway ticket TTL과 advertised gateway URL은 `@wake-surfer/realtime-chat` mount option에서 결정합니다.
+server-side policy나 deployment configuration에 해당하는 값은 request DTO에 넣지 않습니다. 예를 들어 gateway ticket TTL, authenticated actor, gateway assignment 입력은 `@wake-surfer/realtime-chat` feature package 영역에서 결정합니다.
 
 ## Client event 작성
 

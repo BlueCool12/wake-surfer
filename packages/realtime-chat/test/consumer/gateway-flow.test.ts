@@ -1,5 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
-import { mountRealtimeChatGateway } from "@wake-surfer/realtime-chat/gateway";
+import {
+  mountRealtimeChatGateway,
+  type GatewayTicketConsumeResult,
+} from "@wake-surfer/realtime-chat/gateway";
 import {
   FakeWebSocketConnection,
   createGatewayRuntimeDeps,
@@ -51,7 +54,10 @@ describe("consumer Gateway mount flow", () => {
     });
     await ws.findRoute("/ws/realtime-chat").onConnection(connection);
 
-    expect(deps.gatewayTicketPort.consume).toHaveBeenCalledWith("ticket-1");
+    expect(deps.gatewayTicketPort.consume).toHaveBeenCalledWith({
+      ticketValue: "ticket-1",
+      gatewayId: "gateway-1",
+    });
     expect(connection.sentEvents()[0]).toEqual({
       type: "gateway.connected",
       sessionId: "gateway-session-1",
@@ -126,6 +132,100 @@ describe("consumer Gateway mount flow", () => {
       code: 4401,
       reason: "GATEWAY_TICKET_INVALID_OR_EXPIRED",
     });
+  });
+
+  it("ticket consume API 호출 실패는 API_UNAVAILABLE connection rejection으로 relay한다", async () => {
+    const ws = createWebSocketServerDouble();
+    const { deps } = createGatewayRuntimeDeps({
+      gatewayTicketPort: {
+        consume: vi.fn(async () => {
+          throw new Error("api down");
+        }),
+      },
+    });
+
+    await mountRealtimeChatGateway(
+      ws.server,
+      {
+        path: "/ws/realtime-chat",
+        gatewayId: "gateway-1",
+      },
+      deps,
+    );
+
+    const connection = new FakeWebSocketConnection({
+      query: {
+        ticket: "ticket-1",
+      },
+    });
+    await ws.findRoute("/ws/realtime-chat").onConnection(connection);
+
+    expect(connection.sentEvents()).toEqual([
+      {
+        type: "gateway.connection.rejected",
+        reason: "API_UNAVAILABLE",
+      },
+    ]);
+    expect(connection.closed).toEqual({
+      code: 4401,
+      reason: "API_UNAVAILABLE",
+    });
+    expect(deps.logger.warn).toHaveBeenCalledWith(
+      "failed to consume realtime chat gateway ticket",
+      expect.objectContaining({
+        gatewayId: "gateway-1",
+      }),
+    );
+  });
+
+  it("ticket consume 대기 중 닫힌 socket은 session으로 남기지 않는다", async () => {
+    const ws = createWebSocketServerDouble();
+    const pendingConsume = deferred<GatewayTicketConsumeResult>();
+    const { deps, outboundHandlers } = createGatewayRuntimeDeps({
+      gatewayTicketPort: {
+        consume: vi.fn(() => pendingConsume.promise),
+      },
+    });
+
+    await mountRealtimeChatGateway(
+      ws.server,
+      {
+        path: "/ws/realtime-chat",
+        gatewayId: "gateway-1",
+      },
+      deps,
+    );
+
+    const connection = new FakeWebSocketConnection({
+      query: {
+        ticket: "ticket-1",
+      },
+    });
+    const connectionPromise = ws.findRoute("/ws/realtime-chat").onConnection(connection);
+
+    await connection.disconnect();
+    pendingConsume.resolve({
+      status: "consumed",
+      ticket: {
+        actorId: "user-1",
+        consumedAt: fixedNow.toISOString(),
+      },
+    });
+    await connectionPromise;
+
+    await outboundHandlers[0]?.({
+      eventId: "event-1",
+      eventType: "OutboundMessageDeliveryRequested",
+      occurredAt: fixedNow.toISOString(),
+      streamId: "stream-channel-1",
+      streamType: "CHANNEL",
+      messageId: "message-1",
+      sequence: 10,
+      recipientUserIds: ["user-1"],
+      payload: createdMessageEvent(),
+    });
+
+    expect(connection.sentEvents()).toEqual([]);
   });
 
   it("client channel message event를 API DTO로 mapping하고 accepted event를 relay한다", async () => {
@@ -290,3 +390,22 @@ describe("consumer Gateway mount flow", () => {
     expect(recipient.sentEvents()[1]).toEqual(payload);
   });
 });
+
+function deferred<T>(): {
+  promise: Promise<T>;
+  resolve: (value: T) => void;
+  reject: (reason?: unknown) => void;
+} {
+  let resolve!: (value: T) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((promiseResolve, promiseReject) => {
+    resolve = promiseResolve;
+    reject = promiseReject;
+  });
+
+  return {
+    promise,
+    resolve,
+    reject,
+  };
+}

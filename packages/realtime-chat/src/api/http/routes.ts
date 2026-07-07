@@ -1,6 +1,6 @@
 import type { RealtimeChatApiMountOptions } from "./mount";
 import type { HttpServerLike } from "./http-server-like";
-import type { RealtimeChatUsecases } from "../application/create-usecases";
+import type { RealtimeChatUsecases } from "../usecases/create-usecases";
 import { createConsumeGatewayTicketHandler } from "./handlers/consume-gateway-ticket.handler";
 import { createIssueGatewayTicketHandler } from "./handlers/issue-gateway-ticket.handler";
 import { createMarkAsReadHandler } from "./handlers/mark-as-read.handler";

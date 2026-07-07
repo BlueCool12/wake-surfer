@@ -63,6 +63,7 @@ import {
 | ---------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
 | `RealtimeChatDbPort`                                                                                       | API side persistence port                                                  |
 | `PermissionPort`, `PermissionDecision`, `RealtimeChatMessageTarget`                                        | API side permission/recipient resolution port                              |
+| `GatewayAssignmentPort`, `AssignedGateway`                                                                 | API side gateway assignment port                                           |
 | `OutboundEventBusPort`                                                                                     | API side outbound delivery publish port                                    |
 | `ClockPort`, `IdGeneratorPort`, `LoggerPort`, `MetricsPort`, `TicketHasherPort`                            | API side common infrastructure port                                        |
 | `StoredRealtimeChatMessage`, `StoredGatewayTicket`, `StoredGatewayTicketConsumeResult`, `StoredReadCursor` | app-owned persistence adapter가 반환하거나 저장하는 public port data shape |
@@ -82,7 +83,6 @@ import {
 type RealtimeChatApiMountOptions = {
   basePath: string;
   exposeOpenApi?: boolean;
-  gatewayUrl?: string;
   gatewayTicketTtlSeconds?: number;
   maxMessageTextLength?: number;
   syncDefaultLimit?: number;
@@ -101,7 +101,6 @@ function mountRealtimeChatApi(
 | option                    | 기본값  | 의미                                                                     |
 | ------------------------- | ------- | ------------------------------------------------------------------------ |
 | `basePath`                | 없음    | 등록할 HTTP route prefix                                                 |
-| `gatewayUrl`              | 없음    | gateway ticket response에 포함할 advertised gateway URL                  |
 | `gatewayTicketTtlSeconds` | `60`    | gateway ticket 만료 시간                                                 |
 | `maxMessageTextLength`    | `4000`  | text message 최대 길이                                                   |
 | `syncDefaultLimit`        | `50`    | stream sync 요청에 `limit`이 없을 때 사용하는 개수                       |
@@ -148,6 +147,12 @@ HTTP adapter는 path params를 `request.params`에, query string을 `request.que
 type RealtimeChatApiRuntimeDeps = {
   db: RealtimeChatDbPort;
   permissionPort: PermissionPort;
+  gatewayAssignmentPort: {
+    assignGatewayForTicket(input: { actorId: UserId }): Promise<{
+      gatewayId: GatewayId;
+      gatewayUrl: string;
+    }>;
+  };
   outboundEventBus: { publish(event: OutboundMessageDeliveryRequested): Promise<void> };
   clock: { now(): Date };
   idGenerator: { generateId(scope: string): string };
@@ -165,10 +170,7 @@ API side `PermissionPort`:
 
 ```ts
 type PermissionPort = {
-  canIssueGatewayTicket?: (input: {
-    actorId: UserId;
-    workspaceId?: WorkspaceId;
-  }) => Promise<PermissionDecision>;
+  canIssueGatewayTicket(input: { actorId: UserId }): Promise<PermissionDecision>;
   canWriteMessage: (input: {
     actorId: UserId;
     target: RealtimeChatMessageTarget;
@@ -189,6 +191,7 @@ type RealtimeChatDbPort = {
   issueGatewayTicket(ticket: StoredGatewayTicket): Promise<void>;
   consumeGatewayTicket(input: {
     ticketValueHash: string;
+    gatewayId: GatewayId;
     consumedAt: ISODateTime;
   }): Promise<StoredGatewayTicketConsumeResult>;
   findMessageByIdempotencyKey(
@@ -227,16 +230,16 @@ type RealtimeChatDbPort = {
 
 ## API route semantics
 
-| method | `basePath` 아래 suffix                      | input 위치                                                               | 성공 응답                          | 실패 응답                                        |
-| ------ | ------------------------------------------- | ------------------------------------------------------------------------ | ---------------------------------- | ------------------------------------------------ |
-| `POST` | `/gateway-tickets`                          | body `IssueGatewayTicketRequest`, 또는 header `x-actor-id` fallback      | `201 IssueGatewayTicketResponse`   | `400 INVALID_PAYLOAD`, `403 <permission reason>` |
-| `POST` | `/internal/gateway-tickets/consume`         | body `ConsumeGatewayTicketRequest`                                       | `200 ConsumeGatewayTicketResponse` | `400 INVALID_PAYLOAD`                            |
-| `POST` | `/internal/messages/channel`                | body `SendChannelMessageRequest`                                         | `200 MessageCommandResponse`       | `400 INVALID_PAYLOAD`                            |
-| `POST` | `/internal/messages/dm`                     | body `SendDMMessageRequest`                                              | `200 MessageCommandResponse`       | `400 INVALID_PAYLOAD`                            |
-| `POST` | `/internal/messages/thread-replies`         | body `ReplyThreadMessageRequest`                                         | `200 MessageCommandResponse`       | `400 INVALID_PAYLOAD`                            |
-| `POST` | `/internal/read-cursors`                    | body `MarkReadCursorRequest`                                             | `200 MarkReadCursorResponse`       | `400 INVALID_PAYLOAD`, `403 <permission reason>` |
-| `GET`  | `/streams/:streamId/messages`               | params `streamId`, query `requestId`, `actorId`, optional sequence/limit | `200 SyncStreamMessagesResponse`   | `400 INVALID_PAYLOAD`, `403 <permission reason>` |
-| `POST` | `/internal/system-messages/session-started` | body `PostSessionStartedSystemMessageRequest`                            | `200 MessageCommandResponse`       | `400 INVALID_PAYLOAD`                            |
+| method | `basePath` 아래 suffix                      | input 위치                                                               | 성공 응답                          | 실패 응답                                                               |
+| ------ | ------------------------------------------- | ------------------------------------------------------------------------ | ---------------------------------- | ----------------------------------------------------------------------- |
+| `POST` | `/gateway-tickets`                          | authenticated actor context, optional body `IssueGatewayTicketRequest`   | `201 IssueGatewayTicketResponse`   | `400 INVALID_PAYLOAD`, `401 UNAUTHENTICATED`, `403 <permission reason>` |
+| `POST` | `/internal/gateway-tickets/consume`         | body `ConsumeGatewayTicketRequest`                                       | `200 ConsumeGatewayTicketResponse` | `400 INVALID_PAYLOAD`                                                   |
+| `POST` | `/internal/messages/channel`                | body `SendChannelMessageRequest`                                         | `200 MessageCommandResponse`       | `400 INVALID_PAYLOAD`                                                   |
+| `POST` | `/internal/messages/dm`                     | body `SendDMMessageRequest`                                              | `200 MessageCommandResponse`       | `400 INVALID_PAYLOAD`                                                   |
+| `POST` | `/internal/messages/thread-replies`         | body `ReplyThreadMessageRequest`                                         | `200 MessageCommandResponse`       | `400 INVALID_PAYLOAD`                                                   |
+| `POST` | `/internal/read-cursors`                    | body `MarkReadCursorRequest`                                             | `200 MarkReadCursorResponse`       | `400 INVALID_PAYLOAD`, `403 <permission reason>`                        |
+| `GET`  | `/streams/:streamId/messages`               | params `streamId`, query `requestId`, `actorId`, optional sequence/limit | `200 SyncStreamMessagesResponse`   | `400 INVALID_PAYLOAD`, `403 <permission reason>`                        |
+| `POST` | `/internal/system-messages/session-started` | body `PostSessionStartedSystemMessageRequest`                            | `200 MessageCommandResponse`       | `400 INVALID_PAYLOAD`                                                   |
 
 Error response shape:
 
@@ -251,13 +254,15 @@ Validation은 필요한 필드만 읽고 알 수 없는 extra field는 현재 �
 
 Gateway ticket semantics:
 
-- `IssueGatewayTicketRequest`는 `actorId`와 optional `workspaceId`만 받습니다.
-- `actorId`는 body에 없으면 `x-actor-id` header에서 fallback으로 읽습니다.
+- `IssueGatewayTicketRequest`는 `actorId`와 `workspaceId`를 받지 않습니다.
+- `actorId`는 authenticated actor context에서 읽습니다. 현재 HTTP adapter contract에서는 lowercase `x-actor-id` header가 이 context를 전달합니다.
 - `gatewayTicketTtlSeconds`는 request DTO가 아니라 `RealtimeChatApiMountOptions`로 주입합니다.
-- response의 `gatewayUrl`은 `RealtimeChatApiMountOptions.gatewayUrl`이 설정된 경우에만 포함합니다.
+- response의 `gatewayUrl`은 `GatewayAssignmentPort.assignGatewayForTicket` 결과이며 항상 포함합니다.
 - ticket 저장 시 `db.issueGatewayTicket`에는 raw ticket이 아니라 `ticketValueHash`가 전달됩니다.
-- ticket consume 시 API adapter가 raw ticket을 hash하고 `db.consumeGatewayTicket`에 `ticketValueHash`와 `consumedAt`을 전달합니다.
+- ticket 저장 시 assigned gateway id를 함께 저장합니다.
+- ticket consume 시 API adapter가 raw ticket을 hash하고 `db.consumeGatewayTicket`에 `ticketValueHash`, 현재 `gatewayId`, `consumedAt`을 전달합니다.
 - gateway app은 ticket table을 직접 보지 않고 `GatewayTicketConsumePort` 구현에서 API consume endpoint를 호출합니다.
+- ticket은 gateway WebSocket 접속권이며 메시지/채널 권한을 의미하지 않습니다. 메시지 읽기/쓰기 권한은 각 API command 처리 시 별도로 확인합니다.
 
 Message semantics:
 
@@ -350,10 +355,7 @@ Gateway `RealtimeChatApiClientPort`:
 
 ```ts
 type RealtimeChatApiClientPort = {
-  issueGatewayTicket?: (input: {
-    actorId: UserId;
-    workspaceId?: WorkspaceId;
-  }) => Promise<IssueGatewayTicketResponse>;
+  issueGatewayTicket?: () => Promise<IssueGatewayTicketResponse>;
   sendChannelMessage(request: SendChannelMessageRequest): Promise<MessageCommandResponse>;
   sendDMMessage(request: SendDMMessageRequest): Promise<MessageCommandResponse>;
   replyThreadMessage(request: ReplyThreadMessageRequest): Promise<MessageCommandResponse>;
@@ -368,12 +370,15 @@ Gateway ticket port:
 type GatewayTicketConsumeResult =
   | {
       status: "consumed";
-      ticket: { actorId: UserId; workspaceId?: WorkspaceId; consumedAt?: string };
+      ticket: { actorId: UserId; consumedAt?: string };
     }
   | { status: "rejected"; reason: RealtimeChatErrorCode; message?: string };
 
 type GatewayTicketConsumePort = {
-  consume(ticketValue: string): Promise<GatewayTicketConsumeResult>;
+  consume(input: {
+    ticketValue: GatewayTicket;
+    gatewayId: GatewayId;
+  }): Promise<GatewayTicketConsumeResult>;
 };
 ```
 
@@ -382,6 +387,7 @@ type GatewayTicketConsumePort = {
 - ticket은 query `ticket`에서 먼저 읽고, 없으면 header `x-gateway-ticket`에서 읽습니다.
 - ticket이 없으면 `gateway.connection.rejected`를 보낸 뒤 `close(4401, 'GATEWAY_TICKET_MISSING')`를 호출합니다.
 - ticket consume이 rejected이면 rejected reason으로 `gateway.connection.rejected`를 보낸 뒤 `close(4401, reason)`을 호출합니다.
+- ticket consume port 호출이 실패하면 `gateway.connection.rejected` reason `API_UNAVAILABLE`을 보낸 뒤 `close(4401, 'API_UNAVAILABLE')`를 호출합니다.
 - connection 성공 시 `gateway.connected`를 보냅니다.
 - `sessionId`는 `idGenerator.generateId('gateway-session')`로 생성합니다.
 - client payload는 string, `Uint8Array`, `ArrayBuffer`를 받을 수 있고 JSON object로 parse되어야 합니다.
@@ -389,5 +395,5 @@ type GatewayTicketConsumePort = {
 - malformed JSON 또는 필수 필드 누락은 `gateway.error` reason `INVALID_PAYLOAD`입니다.
 - 지원하지 않는 event `type`은 `gateway.error` reason `UNSUPPORTED_EVENT_TYPE`입니다.
 - accepted/rejected API response는 socket event로 relay합니다.
-- API client 호출 실패는 `gateway.error` reason `API_UNAVAILABLE`, `retryable: true`로 relay합니다.
+- 연결 이후 API client 호출 실패는 `gateway.error` reason `API_UNAVAILABLE`, `retryable: true`로 relay합니다.
 - outbound delivery event는 `recipientUserIds`에 해당하는 local session에만 `chat.message.created` payload를 push합니다.

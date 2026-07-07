@@ -11,7 +11,11 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { WebSocket } from "ws";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import type { LoggerPort, PermissionPort } from "@wake-surfer/realtime-chat/api";
+import type {
+  GatewayAssignmentPort,
+  LoggerPort,
+  PermissionPort,
+} from "@wake-surfer/realtime-chat/api";
 import { createApp as createApiApp } from "../../realtime-chat-api/src/app";
 import { loadEnv as loadApiEnv } from "../../realtime-chat-api/src/config/env";
 import { createInMemoryRealtimeChatDb } from "../../realtime-chat-api/src/runtime/in-memory-realtime-chat-db";
@@ -34,11 +38,12 @@ type RunningApiServer = {
 
 type IssueGatewayTicketResponse = {
   ticket: string;
-  gatewayUrl?: string;
+  gatewayUrl: string;
   expiresAt: string;
 };
 
 type ChannelMembers = Map<string, string[]>;
+type GatewayAssignments = Map<string, { gatewayId: string; gatewayUrl: string }>;
 
 const testDir = dirname(fileURLToPath(import.meta.url));
 const gatewayDir = resolve(testDir, "..");
@@ -74,12 +79,43 @@ describe("realtime chat services E2E", () => {
         ["sender-different-gateway", "receiver-different-gateway"],
       ],
     ]);
+    const gatewayAssignments: GatewayAssignments = new Map([
+      [
+        "sender-same-gateway",
+        {
+          gatewayId: "e2e-sender-gateway",
+          gatewayUrl: senderGatewayUrl,
+        },
+      ],
+      [
+        "receiver-same-gateway",
+        {
+          gatewayId: "e2e-sender-gateway",
+          gatewayUrl: senderGatewayUrl,
+        },
+      ],
+      [
+        "sender-different-gateway",
+        {
+          gatewayId: "e2e-sender-gateway",
+          gatewayUrl: senderGatewayUrl,
+        },
+      ],
+      [
+        "receiver-different-gateway",
+        {
+          gatewayId: "e2e-receiver-gateway",
+          gatewayUrl: receiverGatewayUrl,
+        },
+      ],
+    ]);
 
     apiServer = await startTestApiServer({
       port: apiPort,
       gatewayUrl: senderGatewayUrl,
       redisChannel,
       channelMembers,
+      gatewayAssignments,
     });
     await waitForHttpReady(`http://127.0.0.1:${apiPort}/readyz`);
 
@@ -137,16 +173,8 @@ describe("realtime chat services E2E", () => {
       service: "@wake-surfer/realtime-chat-gateway",
     });
 
-    const sender = await connectGatewaySession(
-      senderGatewayUrl,
-      "sender-same-gateway",
-      "e2e-sender-gateway",
-    );
-    const receiver = await connectGatewaySession(
-      senderGatewayUrl,
-      "receiver-same-gateway",
-      "e2e-sender-gateway",
-    );
+    const sender = await connectGatewaySession("sender-same-gateway", "e2e-sender-gateway");
+    const receiver = await connectGatewaySession("receiver-same-gateway", "e2e-sender-gateway");
 
     try {
       const receiverDelivery = nextJsonMessage(receiver);
@@ -198,13 +226,8 @@ describe("realtime chat services E2E", () => {
       service: "@wake-surfer/realtime-chat-gateway",
     });
 
-    const sender = await connectGatewaySession(
-      senderGatewayUrl,
-      "sender-different-gateway",
-      "e2e-sender-gateway",
-    );
+    const sender = await connectGatewaySession("sender-different-gateway", "e2e-sender-gateway");
     const receiver = await connectGatewaySession(
-      receiverGatewayUrl,
       "receiver-different-gateway",
       "e2e-receiver-gateway",
     );
@@ -246,36 +269,32 @@ describe("realtime chat services E2E", () => {
     }
   });
 
-  async function issueGatewayTicket(actorId: string): Promise<string> {
+  async function issueGatewayTicket(actorId: string): Promise<IssueGatewayTicketResponse> {
     const response = await fetch(`${apiBaseUrl}/gateway-tickets`, {
       method: "POST",
       headers: {
         "content-type": "application/json",
+        "x-actor-id": actorId,
       },
-      body: JSON.stringify({
-        actorId,
-        workspaceId: "workspace-e2e",
-      }),
+      body: JSON.stringify({}),
     });
     const body = (await response.json()) as IssueGatewayTicketResponse;
 
     expect(response.status).toBe(201);
     expect(body).toEqual({
       ticket: expect.any(String),
-      gatewayUrl: senderGatewayUrl,
+      gatewayUrl: expect.any(String),
       expiresAt: expect.any(String),
     });
 
-    return body.ticket;
+    return body;
   }
 
-  async function connectGatewaySession(
-    gatewayUrl: string,
-    actorId: string,
-    gatewayId: string,
-  ): Promise<WebSocket> {
-    const ticket = await issueGatewayTicket(actorId);
-    const socket = new WebSocket(`${gatewayUrl}?ticket=${encodeURIComponent(ticket)}`);
+  async function connectGatewaySession(actorId: string, gatewayId: string): Promise<WebSocket> {
+    const issuedTicket = await issueGatewayTicket(actorId);
+    const socket = new WebSocket(
+      `${issuedTicket.gatewayUrl}?ticket=${encodeURIComponent(issuedTicket.ticket)}`,
+    );
 
     await expect(nextJsonMessage(socket)).resolves.toEqual({
       type: "gateway.connected",
@@ -293,6 +312,7 @@ async function startTestApiServer(input: {
   gatewayUrl: string;
   redisChannel: string;
   channelMembers: ChannelMembers;
+  gatewayAssignments: GatewayAssignments;
 }): Promise<RunningApiServer> {
   const env = loadApiEnv({
     NODE_ENV: "test",
@@ -300,6 +320,7 @@ async function startTestApiServer(input: {
     PORT: String(input.port),
     LOG_LEVEL: "silent",
     REALTIME_CHAT_BASE_PATH: "/api/realtime-chat",
+    REALTIME_CHAT_GATEWAY_ID: "e2e-sender-gateway",
     REALTIME_CHAT_GATEWAY_URL: input.gatewayUrl,
     GATEWAY_TICKET_TTL_SECONDS: "60",
     MAX_MESSAGE_TEXT_LENGTH: "4000",
@@ -310,7 +331,12 @@ async function startTestApiServer(input: {
     DATABASE_URL: "",
   });
   const api = await createApiApp(env, async (_env, logger) =>
-    createTestApiRuntime(logger, input.channelMembers, input.redisChannel),
+    createTestApiRuntime(
+      logger,
+      input.channelMembers,
+      input.gatewayAssignments,
+      input.redisChannel,
+    ),
   );
   const server = createHttpServer((request, response) => {
     handleHonoRequest(api.app.fetch, request, response).catch((error: unknown) => {
@@ -334,6 +360,7 @@ async function startTestApiServer(input: {
 async function createTestApiRuntime(
   logger: LoggerPort,
   channelMembers: ChannelMembers,
+  gatewayAssignments: GatewayAssignments,
   redisChannel: string,
 ): Promise<RealtimeChatApiRuntimeHandle> {
   const outboundEventBus = await createRedisOutboundEventBus({
@@ -346,6 +373,7 @@ async function createTestApiRuntime(
     deps: {
       db: createInMemoryRealtimeChatDb(),
       permissionPort: createTestPermissionPort(channelMembers),
+      gatewayAssignmentPort: createTestGatewayAssignmentPort(gatewayAssignments),
       outboundEventBus,
       clock: {
         now: () => new Date(),
@@ -357,6 +385,22 @@ async function createTestApiRuntime(
     },
     close: async () => {
       await outboundEventBus.destroy();
+    },
+  };
+}
+
+function createTestGatewayAssignmentPort(
+  gatewayAssignments: GatewayAssignments,
+): GatewayAssignmentPort {
+  return {
+    async assignGatewayForTicket(input) {
+      const assignment = gatewayAssignments.get(input.actorId);
+
+      if (!assignment) {
+        throw new Error(`missing test gateway assignment for actor: ${input.actorId}`);
+      }
+
+      return assignment;
     },
   };
 }

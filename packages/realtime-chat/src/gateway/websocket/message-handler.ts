@@ -1,5 +1,5 @@
 import type { RealtimeChatGatewayRuntimeDeps } from "../runtime-deps";
-import { routeClientEvent } from "../application/route-client-event.usecase";
+import { routeClientEvent } from "../usecases/route-client-event.usecase";
 import type { GatewaySession } from "../session/gateway-session";
 import type { InMemoryGatewaySessionRegistry } from "../session/in-memory-gateway-session-registry";
 import type { RealtimeChatGatewayMountOptions } from "./mount";

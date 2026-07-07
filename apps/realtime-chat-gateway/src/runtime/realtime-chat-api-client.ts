@@ -1,6 +1,5 @@
 import type {
   ConsumeGatewayTicketResponse,
-  IssueGatewayTicketResponse,
   MarkReadCursorResponse,
   MessageCommandResponse,
   SyncStreamMessagesRequest,
@@ -15,9 +14,6 @@ export function createHttpRealtimeChatApiClient(apiBaseUrl: string): RealtimeCha
   const baseUrl = normalizeBaseUrl(apiBaseUrl);
 
   return {
-    issueGatewayTicket(input) {
-      return postJson<IssueGatewayTicketResponse>(baseUrl, "/gateway-tickets", input);
-    },
     sendChannelMessage(request) {
       return postJson<MessageCommandResponse>(baseUrl, "/internal/messages/channel", request);
     },
@@ -44,9 +40,10 @@ export function createHttpGatewayTicketConsumePort(apiBaseUrl: string): GatewayT
   const baseUrl = normalizeBaseUrl(apiBaseUrl);
 
   return {
-    consume(ticketValue) {
+    consume(input) {
       return postJson<ConsumeGatewayTicketResponse>(baseUrl, "/internal/gateway-tickets/consume", {
-        ticket: ticketValue,
+        ticket: input.ticketValue,
+        gatewayId: input.gatewayId,
       });
     },
   };

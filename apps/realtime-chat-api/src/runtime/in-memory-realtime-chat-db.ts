@@ -51,6 +51,13 @@ class InMemoryRealtimeChatDb implements RealtimeChatDbPort {
       };
     }
 
+    if (ticket.assignedGatewayId !== input.gatewayId) {
+      return {
+        status: "rejected",
+        reason: "GATEWAY_TICKET_INVALID_OR_EXPIRED",
+      };
+    }
+
     const consumedTicket: InMemoryGatewayTicket = {
       ...ticket,
       consumedAt: input.consumedAt,
@@ -61,7 +68,6 @@ class InMemoryRealtimeChatDb implements RealtimeChatDbPort {
       status: "consumed",
       ticket: {
         actorId: consumedTicket.actorId,
-        ...(consumedTicket.workspaceId ? { workspaceId: consumedTicket.workspaceId } : {}),
         consumedAt: input.consumedAt,
       },
     };

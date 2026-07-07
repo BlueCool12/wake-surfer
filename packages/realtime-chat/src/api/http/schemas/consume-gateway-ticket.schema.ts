@@ -11,12 +11,14 @@ export function parseConsumeGatewayTicketRequest(
   }
 
   const ticket = stringField(record, "ticket");
+  const gatewayId = stringField(record, "gatewayId");
 
-  if (!ticket) {
-    return invalid("ticket is required");
+  if (!ticket || !gatewayId) {
+    return invalid("ticket and gatewayId are required");
   }
 
   return valid({
     ticket,
+    gatewayId,
   });
 }

@@ -1,6 +1,7 @@
 import type {
   ChannelId,
   DMConversationId,
+  GatewayId,
   ISODateTime,
   MessageContentDto,
   MessageId,
@@ -40,10 +41,7 @@ export type PermissionDecision =
     };
 
 export type PermissionPort = {
-  canIssueGatewayTicket?: (input: {
-    actorId: UserId;
-    workspaceId?: WorkspaceId;
-  }) => Promise<PermissionDecision>;
+  canIssueGatewayTicket: (input: { actorId: UserId }) => Promise<PermissionDecision>;
   canWriteMessage: (input: {
     actorId: UserId;
     target: RealtimeChatMessageTarget;
@@ -71,7 +69,7 @@ export type StoredRealtimeChatMessage = {
 export type StoredGatewayTicket = {
   ticketValueHash: string;
   actorId: UserId;
-  workspaceId?: WorkspaceId;
+  assignedGatewayId: GatewayId;
   issuedAt: ISODateTime;
   expiresAt: ISODateTime;
 };
@@ -81,7 +79,6 @@ export type StoredGatewayTicketConsumeResult =
       status: "consumed";
       ticket: {
         actorId: UserId;
-        workspaceId?: WorkspaceId;
         consumedAt: ISODateTime;
       };
     }
@@ -103,6 +100,7 @@ export type RealtimeChatDbPort = {
   issueGatewayTicket: (ticket: StoredGatewayTicket) => Promise<void>;
   consumeGatewayTicket: (input: {
     ticketValueHash: string;
+    gatewayId: GatewayId;
     consumedAt: ISODateTime;
   }) => Promise<StoredGatewayTicketConsumeResult>;
   findMessageByIdempotencyKey: (
@@ -162,9 +160,19 @@ export type TicketHasherPort = {
   hash: (ticketValue: string) => string | Promise<string>;
 };
 
+export type AssignedGateway = {
+  gatewayId: GatewayId;
+  gatewayUrl: string;
+};
+
+export type GatewayAssignmentPort = {
+  assignGatewayForTicket: (input: { actorId: UserId }) => Promise<AssignedGateway>;
+};
+
 export type RealtimeChatApiRuntimeDeps = {
   db: RealtimeChatDbPort;
   permissionPort: PermissionPort;
+  gatewayAssignmentPort: GatewayAssignmentPort;
   outboundEventBus: OutboundEventBusPort;
   clock: ClockPort;
   idGenerator: IdGeneratorPort;

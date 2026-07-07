@@ -27,7 +27,6 @@ declare const gatewayDeps: RealtimeChatGatewayRuntimeDeps;
 const apiOptions: RealtimeChatApiMountOptions = {
   basePath: "/api/realtime-chat",
   gatewayTicketTtlSeconds: 60,
-  gatewayUrl: "wss://example.test/ws/realtime-chat",
 };
 
 const apiOptionsWithoutAdvertisedGatewayUrl: RealtimeChatApiMountOptions = {
@@ -55,14 +54,20 @@ void removedApiOption;
 declare const issueGatewayTicketRequest: IssueGatewayTicketRequest;
 declare const consumeGatewayTicketRequest: ConsumeGatewayTicketRequest;
 
-const actorId: string | undefined = issueGatewayTicketRequest.actorId;
-const workspaceId: string | undefined = issueGatewayTicketRequest.workspaceId;
+// @ts-expect-error request DTO는 인증 actor를 노출하지 않는다.
+const actorId = issueGatewayTicketRequest.actorId;
 
 void actorId;
+
+// @ts-expect-error request DTO는 workspace 기반 배정 입력을 노출하지 않는다.
+const workspaceId = issueGatewayTicketRequest.workspaceId;
+
 void workspaceId;
 const rawTicket: string = consumeGatewayTicketRequest.ticket;
+const consumeGatewayId: string = consumeGatewayTicketRequest.gatewayId;
 
 void rawTicket;
+void consumeGatewayId;
 
 // @ts-expect-error request DTO는 gateway ticket TTL override를 노출하지 않는다.
 const ttlSecondsOverride = issueGatewayTicketRequest.ttlSeconds;
