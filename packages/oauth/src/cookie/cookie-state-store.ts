@@ -5,14 +5,14 @@ import type { StateStorePort } from "../runtime-deps";
 export type SameSite = "Strict" | "Lax" | "None";
 
 /** 쿠키에 실릴 보안 속성. */
-export interface CookieAttributes {
+export type CookieAttributes = {
   readonly httpOnly: boolean;
   readonly secure: boolean;
   readonly sameSite: SameSite;
   readonly path: string;
   /** 쿠키 수명(초). 0이면 즉시 만료(삭제)를 뜻한다. */
   readonly maxAge: number;
-}
+};
 
 /**
  * 프레임워크 비종속 최소 쿠키 인터페이스.
@@ -21,12 +21,12 @@ export interface CookieAttributes {
  * 이 패키지를 쓰는 `apps/` 서버가 자신의 프레임워크(Express·Hono 등) req/res에 맞춰
  * 구현해 주입한다. (요청마다 바인딩)
  */
-export interface CookieJar {
-  get(name: string): string | undefined;
-  set(name: string, value: string, attributes: CookieAttributes): void;
-}
+export type CookieJar = {
+  get: (name: string) => string | undefined;
+  set: (name: string, value: string, attributes: CookieAttributes) => void;
+};
 
-export interface CookieStateStoreConfig {
+export type CookieStateStoreConfig = {
   /** 쿠키 읽기/쓰기 어댑터. */
   readonly cookies: CookieJar;
   /** HMAC 서명 키. apps가 환경변수 등에서 주입한다. (비어 있으면 예외) */
@@ -41,7 +41,7 @@ export interface CookieStateStoreConfig {
   readonly sameSite?: SameSite;
   /** Path. 기본 "/". */
   readonly path?: string;
-}
+};
 
 const DEFAULT_COOKIE_NAME = "oauth_state";
 const DEFAULT_MAX_AGE_SECONDS = 600;

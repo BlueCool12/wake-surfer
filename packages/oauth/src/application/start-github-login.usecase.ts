@@ -3,19 +3,19 @@ import { issueState as defaultIssueState } from "../domain/state";
 import { createAuthorizeUrl } from "../github/authorize-url";
 import type { StateStorePort } from "../runtime-deps";
 
-export interface StartGithubLoginInput {
+export type StartGithubLoginInput = {
   readonly config: OAuthConfig;
   readonly stateStore: StateStorePort;
   /** state 생성기 주입 지점. 기본은 도메인의 `issueState`. 테스트에서 결정론적 값을 넣을 때 쓴다. */
   readonly issueState?: () => string;
-}
+};
 
-export interface StartGithubLoginResult {
+export type StartGithubLoginResult = {
   /** 사용자를 302 리다이렉트할 GitHub authorize URL. */
   readonly authorizeUrl: string;
   /** 이번에 발급·저장된 state. (콜백에서 대조할 값) */
   readonly state: string;
-}
+};
 
 /**
  * ★ 이슈 #5의 로그인 진입점 유스케이스.

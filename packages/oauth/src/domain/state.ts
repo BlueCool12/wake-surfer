@@ -8,7 +8,7 @@ import { randomBytes as nodeRandomBytes } from "node:crypto";
  */
 export const MIN_STATE_BYTES = 32;
 
-export interface IssueStateOptions {
+export type IssueStateOptions = {
   /** 엔트로피 바이트 수. 기본이자 최소는 32바이트. */
   readonly byteLength?: number;
   /**
@@ -16,7 +16,7 @@ export interface IssueStateOptions {
    * 기본은 node:crypto의 CSPRNG. 테스트에서 결정론적 값을 넣기 위해 교체할 수 있다.
    */
   readonly randomBytes?: (size: number) => Buffer;
-}
+};
 
 /**
  * 충분한 엔트로피를 가진 CSRF state 문자열을 발급한다. (순수 함수)

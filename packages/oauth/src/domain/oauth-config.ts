@@ -4,7 +4,7 @@
  * 이 라이브러리는 순수 로직 계층이므로 `process.env`를 직접 읽지 않는다.
  * 값 주입은 이 패키지를 사용하는 `apps/` 서버의 책임이다.
  */
-export interface OAuthConfig {
+export type OAuthConfig = {
   /** GitHub OAuth App의 client_id. */
   readonly clientId: string;
   /** 이번 인증에 사용할 콜백 URL. `allowedRedirectUris` 중 하나여야 한다. */
@@ -18,7 +18,7 @@ export interface OAuthConfig {
    * 테스트나 GitHub Enterprise 대응용. 미지정 시 github.com을 사용한다.
    */
   readonly authorizeBaseUrl?: string;
-}
+};
 
 /** 설정값이 유효하지 않을 때 던지는 도메인 에러. */
 export class OAuthConfigError extends Error {

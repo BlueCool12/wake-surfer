@@ -5,10 +5,10 @@ import {
   type StartGithubLoginResult,
 } from "./start-github-login.usecase";
 
-export interface OAuthUsecases {
+export type OAuthUsecases = {
   /** 요청마다 바인딩된 StateStore를 받아 로그인 진입점을 실행한다. */
-  startGithubLogin(stateStore: StateStorePort): Promise<StartGithubLoginResult>;
-}
+  startGithubLogin: (stateStore: StateStorePort) => Promise<StartGithubLoginResult>;
+};
 
 /**
  * 앱-정적 `OAuthConfig`를 묶어 유스케이스 묶음을 만드는 팩토리.
