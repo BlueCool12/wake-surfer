@@ -27,7 +27,9 @@ export type IssueStateOptions = {
 export function issueState(options: IssueStateOptions = {}): string {
   const byteLength = options.byteLength ?? MIN_STATE_BYTES;
   if (byteLength < MIN_STATE_BYTES) {
-    throw new Error(`state byteLength must be at least ${MIN_STATE_BYTES} bytes for sufficient entropy`);
+    throw new Error(
+      `state byteLength must be at least ${MIN_STATE_BYTES} bytes for sufficient entropy`,
+    );
   }
   const randomBytes = options.randomBytes ?? nodeRandomBytes;
   return randomBytes(byteLength).toString("base64url");

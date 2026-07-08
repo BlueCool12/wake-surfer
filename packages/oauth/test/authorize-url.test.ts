@@ -25,7 +25,9 @@ describe("createAuthorizeUrl", () => {
   });
 
   it("scope가 여러 개면 공백으로 이어 붙인다", () => {
-    const url = new URL(createAuthorizeUrl({ ...baseConfig, scopes: ["user:email", "read:user"] }, "s"));
+    const url = new URL(
+      createAuthorizeUrl({ ...baseConfig, scopes: ["user:email", "read:user"] }, "s"),
+    );
     expect(url.searchParams.get("scope")).toBe("user:email read:user");
   });
 

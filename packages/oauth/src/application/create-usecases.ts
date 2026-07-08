@@ -1,9 +1,6 @@
 import type { OAuthConfig } from "../domain/oauth-config";
 import type { StateStorePort } from "../runtime-deps";
-import {
-  startGithubLogin,
-  type StartGithubLoginResult,
-} from "./start-github-login.usecase";
+import { startGithubLogin, type StartGithubLoginResult } from "./start-github-login.usecase";
 
 export type OAuthUsecases = {
   /** 요청마다 바인딩된 StateStore를 받아 로그인 진입점을 실행한다. */

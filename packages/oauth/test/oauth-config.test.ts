@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { assertValidOAuthConfig, OAuthConfigError, type OAuthConfig } from "../src/domain/oauth-config";
+import {
+  assertValidOAuthConfig,
+  OAuthConfigError,
+  type OAuthConfig,
+} from "../src/domain/oauth-config";
 
 const validConfig: OAuthConfig = {
   clientId: "client-123",
@@ -15,11 +19,15 @@ describe("assertValidOAuthConfig", () => {
   });
 
   it("clientId가 비어 있으면 OAuthConfigError를 던진다", () => {
-    expect(() => assertValidOAuthConfig({ ...validConfig, clientId: "  " })).toThrow(OAuthConfigError);
+    expect(() => assertValidOAuthConfig({ ...validConfig, clientId: "  " })).toThrow(
+      OAuthConfigError,
+    );
   });
 
   it("scopes가 비어 있으면 예외를 던진다", () => {
-    expect(() => assertValidOAuthConfig({ ...validConfig, scopes: [] })).toThrow(/at least one scope/);
+    expect(() => assertValidOAuthConfig({ ...validConfig, scopes: [] })).toThrow(
+      /at least one scope/,
+    );
   });
 
   it("scopes에 빈 값이 섞이면 예외를 던진다", () => {

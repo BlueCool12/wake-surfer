@@ -1,4 +1,9 @@
-export { assertValidOAuthConfig, createCookieStateStore, createOAuthUsecases, OAuthConfigError } from "./public";
+export {
+  assertValidOAuthConfig,
+  createCookieStateStore,
+  createOAuthUsecases,
+  OAuthConfigError,
+} from "./public";
 export type {
   CookieAttributes,
   CookieJar,
