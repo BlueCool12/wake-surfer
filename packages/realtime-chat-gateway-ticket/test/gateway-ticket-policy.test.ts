@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
+  assertActorId,
+  assertGatewayAssignment,
+  assertGatewayId,
+  assertGatewayUrl,
   assertGatewayTicketPolicy,
   createGatewayTicketPolicy,
   createGatewayTicketTimestamps,
@@ -68,5 +72,46 @@ describe("gateway ticket policy", () => {
       issuedAt: "2026-07-09T00:00:00.000Z",
       expiresAt: "2026-07-09T00:01:30.000Z",
     });
+  });
+});
+
+describe("gateway ticket internal invariants", () => {
+  it("accepts non-empty actor and gateway identifiers without enforcing a format", () => {
+    expect(() => assertActorId("auth-subject-1")).not.toThrow();
+    expect(() => assertGatewayId("gateway-a")).not.toThrow();
+  });
+
+  it("rejects blank actor and gateway identifiers", () => {
+    expect(() => assertActorId(" ")).toThrow("actorId");
+    expect(() => assertGatewayId(" ")).toThrow("gatewayId");
+  });
+
+  it("accepts ws and wss gateway URLs", () => {
+    expect(() => assertGatewayUrl("ws://gateway.example.com/realtime-chat")).not.toThrow();
+    expect(() => assertGatewayUrl("wss://gateway.example.com/realtime-chat")).not.toThrow();
+  });
+
+  it("rejects non-WebSocket gateway URLs", () => {
+    expect(() => assertGatewayUrl("https://gateway.example.com/realtime-chat")).toThrow("프로토콜");
+  });
+
+  it("rejects malformed gateway URLs", () => {
+    expect(() => assertGatewayUrl("not-a-url")).toThrow("유효한 URL");
+  });
+
+  it("validates gateway assignment identifiers and URLs together", () => {
+    expect(() =>
+      assertGatewayAssignment({
+        gatewayId: "gateway-a",
+        gatewayUrl: "wss://gateway.example.com/realtime-chat",
+      }),
+    ).not.toThrow();
+
+    expect(() =>
+      assertGatewayAssignment({
+        gatewayId: " ",
+        gatewayUrl: "wss://gateway.example.com/realtime-chat",
+      }),
+    ).toThrow("gatewayId");
   });
 });

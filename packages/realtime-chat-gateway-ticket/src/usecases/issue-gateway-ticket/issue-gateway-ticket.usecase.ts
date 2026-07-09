@@ -4,6 +4,8 @@ import type {
 } from "@wake-surfer/realtime-chat-gateway-ticket-contracts";
 import type { Kysely } from "kysely";
 import {
+  assertActorId,
+  assertGatewayAssignment,
   createGatewayTicketTimestamps,
   defaultRawGatewayTicketGenerator,
   defaultTicketHasher,
@@ -40,6 +42,8 @@ export type StaticGatewayAssignmentInput = {
 };
 
 export function createStaticGatewayAssigner(input: StaticGatewayAssignmentInput): GatewayAssigner {
+  assertGatewayAssignment(input);
+
   return () => ({
     gatewayId: input.gatewayId,
     gatewayUrl: input.gatewayUrl,
@@ -50,12 +54,16 @@ export async function issueGatewayTicket(
   command: IssueGatewayTicketCommand,
   deps: IssueGatewayTicketDeps,
 ): Promise<IssueGatewayTicketResponse> {
+  assertActorId(command.actorId);
+
   const policy = deps.ticketPolicy;
   const now = deps.now();
   const timestamps = createGatewayTicketTimestamps(now, policy);
   const assignment = await deps.assignGateway({
     actorId: command.actorId,
   });
+  assertGatewayAssignment(assignment);
+
   const rawTicketGenerator = deps.rawTicketGenerator ?? defaultRawGatewayTicketGenerator;
   const ticketHasher = deps.ticketHasher ?? defaultTicketHasher;
   const ticket = rawTicketGenerator.generate(policy.rawTicketBytes);

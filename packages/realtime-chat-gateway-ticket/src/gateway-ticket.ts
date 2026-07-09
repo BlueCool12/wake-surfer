@@ -92,6 +92,41 @@ export function assertGatewayTicketPolicy(policy: GatewayTicketPolicy): void {
   }
 }
 
+export function assertActorId(actorId: ActorId): void {
+  assertNonBlankString(actorId, "actorId");
+}
+
+export function assertGatewayId(gatewayId: GatewayId): void {
+  assertNonBlankString(gatewayId, "gatewayId");
+}
+
+export function assertGatewayAssignment(assignment: GatewayAssignment): void {
+  assertGatewayId(assignment.gatewayId);
+  assertGatewayUrl(assignment.gatewayUrl);
+}
+
+export function assertGatewayUrl(gatewayUrl: GatewayUrl): void {
+  assertNonBlankString(gatewayUrl, "gatewayUrl");
+
+  let parsed: URL;
+
+  try {
+    parsed = new URL(gatewayUrl);
+  } catch {
+    throw new Error("게이트웨이 URL은 유효한 URL이어야 합니다.");
+  }
+
+  if (parsed.protocol !== "ws:" && parsed.protocol !== "wss:") {
+    throw new Error("게이트웨이 URL은 ws 또는 wss 프로토콜이어야 합니다.");
+  }
+}
+
+function assertNonBlankString(value: unknown, fieldName: string): asserts value is string {
+  if (typeof value !== "string" || value.trim().length === 0) {
+    throw new Error(`${fieldName}는 비어 있지 않은 문자열이어야 합니다.`);
+  }
+}
+
 export const defaultRawGatewayTicketGenerator: RawGatewayTicketGenerator = {
   generate(byteLength) {
     if (!globalThis.crypto?.getRandomValues) {
