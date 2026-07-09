@@ -2,19 +2,20 @@ import type {
   ActorId,
   IssueGatewayTicketResponse,
 } from "@wake-surfer/realtime-chat-gateway-ticket-contracts";
+import type { Kysely } from "kysely";
 import {
   createGatewayTicketTimestamps,
-  defaultGatewayTicketPolicy,
   defaultRawGatewayTicketGenerator,
   defaultTicketHasher,
 } from "../../gateway-ticket";
 import type {
   GatewayAssignment,
   GatewayTicketPolicy,
-  IssuedGatewayTicket,
   RawGatewayTicketGenerator,
   TicketHasher,
 } from "../../gateway-ticket";
+import type { GatewayTicketDatabase } from "../../gateway-ticket-table";
+import { saveIssuedGatewayTicket } from "./issue-gateway-ticket.kysely";
 
 export type IssueGatewayTicketCommand = {
   actorId: ActorId;
@@ -25,15 +26,12 @@ export type GatewayAssigner = (input: {
 }) => GatewayAssignment | Promise<GatewayAssignment>;
 
 export type IssueGatewayTicketDeps = {
+  db: Kysely<GatewayTicketDatabase>;
   now: () => Date;
   assignGateway: GatewayAssigner;
-  saveIssuedGatewayTicket: (ticket: IssuedGatewayTicket) => Promise<void>;
+  ticketPolicy: GatewayTicketPolicy;
   rawTicketGenerator?: RawGatewayTicketGenerator;
   ticketHasher?: TicketHasher;
-};
-
-export type IssueGatewayTicketOptions = {
-  ticketPolicy?: GatewayTicketPolicy;
 };
 
 export type StaticGatewayAssignmentInput = {
@@ -51,9 +49,8 @@ export function createStaticGatewayAssigner(input: StaticGatewayAssignmentInput)
 export async function issueGatewayTicket(
   command: IssueGatewayTicketCommand,
   deps: IssueGatewayTicketDeps,
-  options: IssueGatewayTicketOptions = {},
 ): Promise<IssueGatewayTicketResponse> {
-  const policy = options.ticketPolicy ?? defaultGatewayTicketPolicy;
+  const policy = deps.ticketPolicy;
   const now = deps.now();
   const timestamps = createGatewayTicketTimestamps(now, policy);
   const assignment = await deps.assignGateway({
@@ -64,7 +61,7 @@ export async function issueGatewayTicket(
   const ticket = rawTicketGenerator.generate(policy.rawTicketBytes);
   const ticketHash = await ticketHasher.hash(ticket);
 
-  await deps.saveIssuedGatewayTicket({
+  await saveIssuedGatewayTicket(deps.db, {
     ticketHash,
     actorId: command.actorId,
     assignedGatewayId: assignment.gatewayId,

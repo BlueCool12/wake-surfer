@@ -1,8 +1,9 @@
-export * from "./gateway-ticket";
-export * from "./gateway-ticket-table";
-export * from "./slices/consume-gateway-ticket/consume-gateway-ticket.kysely";
-export * from "./slices/consume-gateway-ticket/consume-gateway-ticket.schema";
-export * from "./slices/consume-gateway-ticket/consume-gateway-ticket.usecase";
-export * from "./slices/issue-gateway-ticket/issue-gateway-ticket.kysely";
-export * from "./slices/issue-gateway-ticket/issue-gateway-ticket.schema";
-export * from "./slices/issue-gateway-ticket/issue-gateway-ticket.usecase";
+export { createGatewayTicketModule } from "./gateway-ticket-module";
+export type { CreateGatewayTicketModuleConfig, GatewayTicketModule } from "./gateway-ticket-module";
+export type { GatewayAssignment, GatewayId } from "./gateway-ticket";
+export type { ConsumeGatewayTicketContext } from "./usecases/consume-gateway-ticket/consume-gateway-ticket.usecase";
+export {
+  createStaticGatewayAssigner,
+  type GatewayAssigner,
+  type IssueGatewayTicketCommand,
+} from "./usecases/issue-gateway-ticket/issue-gateway-ticket.usecase";

@@ -13,7 +13,6 @@ export type ConsumeGatewayTicketRequestBodyParseResult =
 
 const ConsumeGatewayTicketRequestBodySchema = z.strictObject({
   ticket: z.string().trim().min(1),
-  gatewayId: z.string().trim().min(1),
 });
 
 export function parseConsumeGatewayTicketRequestBody(
@@ -22,11 +21,9 @@ export function parseConsumeGatewayTicketRequestBody(
   const parsed = ConsumeGatewayTicketRequestBodySchema.safeParse(body);
 
   if (!parsed.success) {
-    const firstIssue = parsed.error.issues[0];
-
     return {
       ok: false,
-      message: firstIssue?.message ?? "consume gateway ticket request body is invalid",
+      message: "게이트웨이 티켓 소비 요청 본문이 올바르지 않습니다.",
     };
   }
 

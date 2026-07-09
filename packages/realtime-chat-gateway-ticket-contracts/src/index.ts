@@ -1,5 +1,4 @@
 export type ActorId = string;
-export type GatewayId = string;
 export type GatewayTicket = string;
 export type GatewayUrl = string;
 export type ISODateTime = string;
@@ -21,7 +20,6 @@ export type IssueGatewayTicketResponse = {
 
 export type ConsumeGatewayTicketRequest = {
   ticket: GatewayTicket;
-  gatewayId: GatewayId;
 };
 
 export type ConsumeGatewayTicketResponse =

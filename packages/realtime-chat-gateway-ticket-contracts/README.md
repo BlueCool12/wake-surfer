@@ -27,7 +27,6 @@
 
 ```ts
 export type ActorId = string;
-export type GatewayId = string;
 export type GatewayTicket = string;
 export type GatewayUrl = string;
 export type ISODateTime = string;
@@ -58,12 +57,17 @@ export type IssueGatewayTicketResponse = {
 ```ts
 export type ConsumeGatewayTicketRequest = {
   ticket: GatewayTicket;
-  gatewayId: GatewayId;
 };
 ```
 
-게이트웨이는 클라이언트가 제시한 `ticket`과 자신의 `gatewayId`를 함께 보내 티켓 소비를 요청한다.
-소비는 할당된 게이트웨이에서만 성공해야 한다.
+게이트웨이는 클라이언트가 제시한 `ticket`으로 티켓 소비를 요청한다.
+
+`gatewayId`는 요청 body에 싣지 않는다. API 서버는 서버 간 인증, 게이트웨이 설정, 내부 라우팅
+컨텍스트처럼 신뢰 가능한 서버 컨텍스트에서 요청한 게이트웨이의 정체성을 확정해야 한다. 소비는 그
+확정된 게이트웨이가 티켓에 할당된 게이트웨이와 같을 때만 성공해야 한다.
+
+따라서 `GatewayId`는 프론트엔드와 공유되는 요청/응답 계약 타입이 아니라 구현 패키지의 서버 조립
+API 타입이다.
 
 ## 소비 응답
 

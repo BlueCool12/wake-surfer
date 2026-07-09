@@ -10,6 +10,10 @@
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
+    },
+    "./table-contract": {
+      "types": "./dist/table-contract.d.ts",
+      "default": "./dist/table-contract.js"
     }
   },
   "files": [
@@ -17,11 +21,15 @@
   ],
   "scripts": {
     "build": "pnpm --filter @wake-surfer/realtime-chat-gateway-ticket-contracts build && tsc -p tsconfig.json",
-    "clean": "tsc -b tsconfig.json --clean"
+    "clean": "tsc -b tsconfig.json --clean",
+    "test": "vitest run"
   },
   "dependencies": {
     "@wake-surfer/realtime-chat-gateway-ticket-contracts": "workspace:*",
     "kysely": "0.28.8",
     "zod": "4.2.1"
+  },
+  "devDependencies": {
+    "vitest": "4.1.6"
   }
 }

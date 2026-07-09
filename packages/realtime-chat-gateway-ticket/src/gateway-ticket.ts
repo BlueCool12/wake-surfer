@@ -1,11 +1,11 @@
 import type {
   ActorId,
-  GatewayId,
   GatewayTicket,
   GatewayUrl,
   ISODateTime,
 } from "@wake-surfer/realtime-chat-gateway-ticket-contracts";
 
+export type GatewayId = string;
 export type GatewayTicketHash = string;
 
 export type GatewayAssignment = {
@@ -54,14 +54,25 @@ export type TicketHasher = {
   hash: (ticket: GatewayTicket) => GatewayTicketHash | Promise<GatewayTicketHash>;
 };
 
-export const defaultGatewayTicketPolicy: GatewayTicketPolicy = {
-  ttlMilliseconds: 60_000,
-  rawTicketBytes: 32,
+export type GatewayTicketPolicyConfig = {
+  ttlMilliseconds: number;
+  rawTicketBytes: number;
 };
+
+export function createGatewayTicketPolicy(config: GatewayTicketPolicyConfig): GatewayTicketPolicy {
+  const policy = {
+    ttlMilliseconds: config.ttlMilliseconds,
+    rawTicketBytes: config.rawTicketBytes,
+  };
+
+  assertGatewayTicketPolicy(policy);
+
+  return policy;
+}
 
 export function createGatewayTicketTimestamps(
   issuedAt: Date,
-  policy: GatewayTicketPolicy = defaultGatewayTicketPolicy,
+  policy: GatewayTicketPolicy,
 ): { issuedAt: ISODateTime; expiresAt: ISODateTime } {
   assertGatewayTicketPolicy(policy);
 
@@ -73,18 +84,18 @@ export function createGatewayTicketTimestamps(
 
 export function assertGatewayTicketPolicy(policy: GatewayTicketPolicy): void {
   if (!Number.isInteger(policy.ttlMilliseconds) || policy.ttlMilliseconds <= 0) {
-    throw new Error("gateway ticket ttlMilliseconds must be a positive integer");
+    throw new Error("게이트웨이 티켓 ttlMilliseconds는 양의 정수여야 합니다.");
   }
 
   if (!Number.isInteger(policy.rawTicketBytes) || policy.rawTicketBytes < 16) {
-    throw new Error("gateway ticket rawTicketBytes must be at least 16");
+    throw new Error("게이트웨이 티켓 rawTicketBytes는 16 이상이어야 합니다.");
   }
 }
 
 export const defaultRawGatewayTicketGenerator: RawGatewayTicketGenerator = {
   generate(byteLength) {
     if (!globalThis.crypto?.getRandomValues) {
-      throw new Error("crypto.getRandomValues is required to generate gateway tickets");
+      throw new Error("게이트웨이 티켓을 생성하려면 crypto.getRandomValues가 필요합니다.");
     }
 
     const bytes = new Uint8Array(byteLength);
@@ -103,7 +114,7 @@ export const defaultRawGatewayTicketGenerator: RawGatewayTicketGenerator = {
 export const defaultTicketHasher: TicketHasher = {
   async hash(ticket) {
     if (!globalThis.crypto?.subtle) {
-      throw new Error("crypto.subtle is required to hash gateway tickets");
+      throw new Error("게이트웨이 티켓을 해시하려면 crypto.subtle이 필요합니다.");
     }
 
     const digest = await globalThis.crypto.subtle.digest(

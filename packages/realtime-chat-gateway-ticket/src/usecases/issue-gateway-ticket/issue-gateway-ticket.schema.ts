@@ -26,7 +26,7 @@ export function parseIssueGatewayTicketRequestBody(
     return {
       ok: false,
       message:
-        "issue gateway ticket request body must not include client-owned actor or workspace fields",
+        "게이트웨이 티켓 발급 요청 본문에는 클라이언트가 소유한 actor 또는 workspace 필드를 포함할 수 없습니다.",
     };
   }
 
