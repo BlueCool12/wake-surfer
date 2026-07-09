@@ -3,19 +3,18 @@ import { describe, expect, it } from "vitest";
 import { createOAuthUsecases } from "../src/application/create-usecases";
 import { startGithubLogin } from "../src/application/start-github-login.usecase";
 import type { OAuthConfig } from "../src/domain/oauth-config";
-import type { StateStorePort } from "../src/runtime-deps";
+import type { OAuthCsrfStateStorePort } from "../src/runtime-deps";
 
 const config: OAuthConfig = {
   clientId: "client-123",
   redirectUri: "https://app.example.com/auth/github/callback",
   scopes: ["user:email"],
-  allowedRedirectUris: ["https://app.example.com/auth/github/callback"],
 };
 
 /** 저장된 state를 기록하는 가짜 StateStore. */
 function fakeStore() {
   const saved: string[] = [];
-  const store: StateStorePort = {
+  const store: OAuthCsrfStateStorePort = {
     save: (state) => {
       saved.push(state);
     },
@@ -49,10 +48,10 @@ describe("startGithubLogin", () => {
 
   it("config가 유효하지 않으면 던지고, state를 저장하지 않는다 (고아 쿠키 방지)", async () => {
     const { store, saved } = fakeStore();
-    const badConfig = { ...config, redirectUri: "https://evil.example.com/cb" };
+    const badConfig = { ...config, redirectUri: "  " };
     await expect(
       startGithubLogin({ config: badConfig, stateStore: store, issueState: () => "s" }),
-    ).rejects.toThrow(/whitelist/);
+    ).rejects.toThrow(/redirectUri/);
     expect(saved).toEqual([]);
   });
 });

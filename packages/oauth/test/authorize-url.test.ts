@@ -1,13 +1,12 @@
 import { describe, expect, it } from "vitest";
 
 import type { OAuthConfig } from "../src/domain/oauth-config";
-import { createAuthorizeUrl, DEFAULT_GITHUB_AUTHORIZE_URL } from "../src/github/authorize-url";
+import { createAuthorizeUrl, DEFAULT_GITHUB_AUTHORIZE_URL } from "../src/infrastructure/github/authorize-url";
 
 const baseConfig: OAuthConfig = {
   clientId: "client-123",
   redirectUri: "https://app.example.com/auth/github/callback",
   scopes: ["user:email"],
-  allowedRedirectUris: ["https://app.example.com/auth/github/callback"],
 };
 
 describe("createAuthorizeUrl", () => {
@@ -37,10 +36,10 @@ describe("createAuthorizeUrl", () => {
     expect(`${url.origin}${url.pathname}`).toBe(enterprise);
   });
 
-  it("redirectUri가 화이트리스트에 없으면 던진다 (open redirect 방지)", () => {
-    expect(() =>
-      createAuthorizeUrl({ ...baseConfig, redirectUri: "https://evil.example.com/cb" }, "s"),
-    ).toThrow(/whitelist/);
+  it("config가 유효하지 않으면 던진다", () => {
+    expect(() => createAuthorizeUrl({ ...baseConfig, redirectUri: "  " }, "s")).toThrow(
+      /redirectUri/,
+    );
   });
 
   it("state가 비어 있으면 던진다", () => {

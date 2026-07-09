@@ -9,9 +9,9 @@ export type {
   CookieJar,
   CookieStateStoreConfig,
   OAuthConfig,
+  OAuthCsrfStateStorePort,
   OAuthRuntimeDeps,
   OAuthUsecases,
   SameSite,
   StartGithubLoginResult,
-  StateStorePort,
 } from "./public";

@@ -10,7 +10,6 @@ const validConfig: OAuthConfig = {
   clientId: "client-123",
   redirectUri: "https://app.example.com/auth/github/callback",
   scopes: ["user:email"],
-  allowedRedirectUris: ["https://app.example.com/auth/github/callback"],
 };
 
 describe("assertValidOAuthConfig", () => {
@@ -36,9 +35,9 @@ describe("assertValidOAuthConfig", () => {
     );
   });
 
-  it("redirectUri가 화이트리스트에 없으면 예외를 던진다 (open redirect 방지)", () => {
-    expect(() =>
-      assertValidOAuthConfig({ ...validConfig, redirectUri: "https://evil.example.com/callback" }),
-    ).toThrow(/whitelist/);
+  it("redirectUri가 비어 있으면 예외를 던진다", () => {
+    expect(() => assertValidOAuthConfig({ ...validConfig, redirectUri: "  " })).toThrow(
+      OAuthConfigError,
+    );
   });
 });

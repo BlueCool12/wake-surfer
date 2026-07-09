@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import type { CookieAttributes, CookieJar } from "../src/cookie/cookie-state-store";
-import { createCookieStateStore } from "../src/cookie/cookie-state-store";
+import type { CookieAttributes, CookieJar } from "../src/infrastructure/cookie/cookie-state-store";
+import { createCookieStateStore } from "../src/infrastructure/cookie/cookie-state-store";
 
 const SECRET = "test-secret-key";
 const COOKIE = "oauth_state";

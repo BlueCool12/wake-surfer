@@ -1,10 +1,9 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 
-import type { StateStorePort } from "../runtime-deps";
+import type { OAuthCsrfStateStorePort } from "../../runtime-deps";
 
 export type SameSite = "Strict" | "Lax" | "None";
 
-/** 쿠키에 실릴 보안 속성. */
 export type CookieAttributes = {
   readonly httpOnly: boolean;
   readonly secure: boolean;
@@ -27,7 +26,6 @@ export type CookieJar = {
 };
 
 export type CookieStateStoreConfig = {
-  /** 쿠키 읽기/쓰기 어댑터. */
   readonly cookies: CookieJar;
   /** HMAC 서명 키. apps가 환경변수 등에서 주입한다. (비어 있으면 예외) */
   readonly secret: string;
@@ -39,7 +37,6 @@ export type CookieStateStoreConfig = {
   readonly secure?: boolean;
   /** SameSite. 기본 "Lax" (GitHub 콜백의 top-level 이동에도 쿠키가 전달되도록). */
   readonly sameSite?: SameSite;
-  /** Path. 기본 "/". */
   readonly path?: string;
 };
 
@@ -72,15 +69,11 @@ function timingSafeEqualStr(a: string, b: string): boolean {
 }
 
 /**
- * signed httpOnly 쿠키에 state를 저장하는 StateStorePort 기본 구현.
- *
- * - `save`: state를 HMAC 서명해 쿠키에 굽는다. (httpOnly·secure·SameSite=Lax)
- * - `verify`: 쿠키를 읽어 서명 검증 + 돌아온 state와 대조하고, **성공/실패와 무관하게
- *   즉시 쿠키를 소비(만료)** 한다. 같은 state를 두 번 통과시키지 않는다(재사용 차단).
- *
- * Redis 등 다른 저장소로 바꾸려면 StateStorePort를 따로 구현하면 된다.
+ * signed httpOnly 쿠키 기반 OAuthCsrfStateStorePort 구현.
+ * verify는 성공/실패와 무관하게 쿠키를 즉시 소비해 state 재사용을 차단한다.
+ * (다른 저장소가 필요하면 OAuthCsrfStateStorePort를 따로 구현)
  */
-export function createCookieStateStore(config: CookieStateStoreConfig): StateStorePort {
+export function createCookieStateStore(config: CookieStateStoreConfig): OAuthCsrfStateStorePort {
   if (config.secret.trim() === "") {
     throw new Error("cookie state store secret must not be empty");
   }
