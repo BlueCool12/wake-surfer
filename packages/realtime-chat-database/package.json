@@ -1,0 +1,30 @@
+{
+  "name": "@wake-surfer/realtime-chat-database",
+  "version": "0.0.0",
+  "private": true,
+  "type": "commonjs",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "pnpm --filter @wake-surfer/realtime-chat-gateway-ticket build && tsc -p tsconfig.json",
+    "clean": "tsc -b tsconfig.json --clean"
+  },
+  "dependencies": {
+    "@wake-surfer/realtime-chat-gateway-ticket": "workspace:*",
+    "kysely": "0.28.8",
+    "pg": "^8.22.0"
+  },
+  "devDependencies": {
+    "@types/pg": "^8.20.0"
+  }
+}
