@@ -5,6 +5,15 @@
 이 패키지는 요청/응답 타입과 그 타입에 대응하는 validation schema를 함께 제공한다. 저장소 로직,
 HTTP 라우팅, 도메인 유스케이스 구현은 이 패키지의 책임이 아니다.
 
+## feature별 contracts로 나누는 이유
+
+`realtime-chat` 전체에 하나의 contracts 패키지만 둘 수도 있다. 하지만 이 저장소에서는 유스케이스와
+변경 이유를 기준으로 패키지를 나누기 위해 gateway-ticket 계약을 별도 패키지로 둔다.
+
+메시지 전송, 읽음 처리, 세션 연결 같은 다른 기능은 각 기능의 contracts 패키지에서 다룬다. 이렇게 하면
+consumer가 필요한 기능의 계약만 읽고 의존할 수 있고, gateway-ticket 변경이 realtime-chat 전체 계약
+변경처럼 보이지 않는다. 앱은 필요한 feature contracts를 여러 개 조립해서 사용할 수 있다.
+
 ## 책임
 
 - 게이트웨이 티켓 발급 응답 타입을 정의한다.
