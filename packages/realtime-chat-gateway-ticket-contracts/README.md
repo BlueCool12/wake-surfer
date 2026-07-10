@@ -1,21 +1,30 @@
 # @wake-surfer/realtime-chat-gateway-ticket-contracts
 
-게이트웨이 티켓 기능에서 프론트엔드와 백엔드가 함께 참조하는 타입 계약 패키지다.
+게이트웨이 티켓 기능에서 프론트엔드와 백엔드가 함께 참조하는 외부 계약 패키지다.
 
-이 패키지는 구현을 담지 않는다. 런타임 의존성, 검증 로직, 저장소 로직, HTTP 라우팅은 모두 이 패키지의
-책임이 아니다.
+이 패키지는 요청/응답 타입과 그 타입에 대응하는 validation schema를 함께 제공한다. 저장소 로직,
+HTTP 라우팅, 도메인 유스케이스 구현은 이 패키지의 책임이 아니다.
+
+## feature별 contracts로 나누는 이유
+
+`realtime-chat` 전체에 하나의 contracts 패키지만 둘 수도 있다. 하지만 이 저장소에서는 유스케이스와
+변경 이유를 기준으로 패키지를 나누기 위해 gateway-ticket 계약을 별도 패키지로 둔다.
+
+메시지 전송, 읽음 처리, 세션 연결 같은 다른 기능은 각 기능의 contracts 패키지에서 다룬다. 이렇게 하면
+consumer가 필요한 기능의 계약만 읽고 의존할 수 있고, gateway-ticket 변경이 realtime-chat 전체 계약
+변경처럼 보이지 않는다. 앱은 필요한 feature contracts를 여러 개 조립해서 사용할 수 있다.
 
 ## 책임
 
 - 게이트웨이 티켓 발급 응답 타입을 정의한다.
 - 게이트웨이 티켓 소비 요청/응답 타입을 정의한다.
+- 게이트웨이 티켓 요청 본문 validation schema를 정의한다.
 - 외부 경계에서 노출되는 식별자와 시간 문자열 타입을 정의한다.
 - 외부 응답에서 사용할 게이트웨이 티켓 거절 사유를 정의한다.
 
 ## 책임이 아닌 것
 
 - 티켓 생성, 해시, 저장, 만료 계산
-- Zod 스키마와 요청 본문 검증
 - Kysely 테이블 정의와 쿼리
 - Hono 라우팅과 HTTP 응답 매핑
 - WebSocket 게이트웨이 연결 처리
@@ -32,8 +41,19 @@ export type GatewayUrl = string;
 export type ISODateTime = string;
 ```
 
-현재는 primitive alias로만 둔다. 외부 계약에서 이름을 고정해 두기 위한 타입이며, 값 검증은 구현
-패키지나 앱 경계에서 수행한다.
+현재 식별자는 primitive alias로 둔다. 외부 계약에서 이름을 고정해 두기 위한 타입이다. HTTP request
+body처럼 wire format에 가까운 검증은 이 패키지의 schema가 맡고, 인증 컨텍스트나 도메인 invariant는
+각 책임 패키지에서 별도로 검증한다.
+
+## 발급 요청
+
+```ts
+export const IssueGatewayTicketRequestBodySchema = z.strictObject({});
+export type IssueGatewayTicketRequest = z.infer<typeof IssueGatewayTicketRequestBodySchema>;
+```
+
+게이트웨이 티켓 발급 요청 body는 비어 있어야 한다. `actorId`, `userId`, `workspaceId` 같은 주체/권한
+결정 값은 request body에서 받지 않고 API 서버의 인증 컨텍스트에서 확정한다.
 
 ## 발급 응답
 
@@ -55,6 +75,10 @@ export type IssueGatewayTicketResponse = {
 ## 소비 요청
 
 ```ts
+export const ConsumeGatewayTicketRequestBodySchema = z.strictObject({
+  ticket: z.string().trim().min(1),
+});
+
 export type ConsumeGatewayTicketRequest = {
   ticket: GatewayTicket;
 };
@@ -105,11 +129,24 @@ export type RealtimeChatErrorCode =
 HTTP 앱이나 외부 API 레이어가 오류 응답을 구성할 때 사용할 수 있는 코드다. 이 패키지는 오류 응답
 형태를 강제하지 않고 코드 집합만 제공한다.
 
+## 요청 본문 파서
+
+contracts 소비자는 schema를 직접 사용하거나 다음 파서 함수를 사용할 수 있다.
+
+```ts
+parseIssueGatewayTicketRequestBody(body);
+parseConsumeGatewayTicketRequestBody(body);
+```
+
+파서는 성공 시 contracts 타입에 맞는 값을 반환하고, 실패 시 외부 요청 본문이 계약에 맞지 않는다는
+결과를 반환한다. HTTP status code나 Hono middleware 구성은 API 앱 책임이다.
+
 ## 변경 기준
 
 이 패키지는 외부 계약이 바뀔 때만 변경한다.
 
 - 요청/응답 필드 추가 또는 제거
+- 요청 본문 validation schema 변경
 - 외부에 노출되는 상태값 변경
 - 프론트엔드와 백엔드가 함께 참조해야 하는 식별자 타입 추가
 
