@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { parseConsumeGatewayTicketRequestBody } from "../src/usecases/consume-gateway-ticket/consume-gateway-ticket.schema";
-import { parseIssueGatewayTicketRequestBody } from "../src/usecases/issue-gateway-ticket/issue-gateway-ticket.schema";
+
+import {
+  parseConsumeGatewayTicketRequestBody,
+  parseIssueGatewayTicketRequestBody,
+} from "../src/index";
 
 describe("issue gateway ticket request body parser", () => {
   it("accepts an omitted request body", () => {
