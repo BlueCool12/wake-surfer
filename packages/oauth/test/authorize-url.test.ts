@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 
 import type { OAuthConfig } from "../src/domain/oauth-config";
-import { createAuthorizeUrl, DEFAULT_GITHUB_AUTHORIZE_URL } from "../src/infrastructure/github/authorize-url";
+import {
+  createAuthorizeUrl,
+  DEFAULT_GITHUB_AUTHORIZE_URL,
+} from "../src/infrastructure/github/authorize-url";
 
 const baseConfig: OAuthConfig = {
   clientId: "client-123",

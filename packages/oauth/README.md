@@ -59,13 +59,13 @@ src/
 
 **공개 API**
 
-| export | 용도 |
-| --- | --- |
-| `createOAuthUsecases(config)` | 부팅 시 config를 주입해 유스케이스 묶음 생성 |
+| export                           | 용도                                                          |
+| -------------------------------- | ------------------------------------------------------------- |
+| `createOAuthUsecases(config)`    | 부팅 시 config를 주입해 유스케이스 묶음 생성                  |
 | `createCookieStateStore(config)` | signed httpOnly 쿠키 기반 `OAuthCsrfStateStorePort` 기본 구현 |
-| `assertValidOAuthConfig(config)` | 부팅 시점 config 사전 검증 |
-| `OAuthConfig` | GitHub OAuth App 설정값 타입 |
-| `OAuthCsrfStateStorePort` | app(또는 어댑터)이 구현해 주입하는 state 저장 계약 |
+| `assertValidOAuthConfig(config)` | 부팅 시점 config 사전 검증                                    |
+| `OAuthConfig`                    | GitHub OAuth App 설정값 타입                                  |
+| `OAuthCsrfStateStorePort`        | app(또는 어댑터)이 구현해 주입하는 state 저장 계약            |
 
 **사용 흐름 (apps에서의 배선)**
 
