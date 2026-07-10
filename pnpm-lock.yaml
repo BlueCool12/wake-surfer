@@ -89,6 +89,8 @@ importers:
         specifier: ^8.1.1
         version: 8.1.3(@types/node@24.13.2)(yaml@2.9.0)
 
+  packages/api-contracts: {}
+
   packages/oauth:
     devDependencies:
       '@types/node':
