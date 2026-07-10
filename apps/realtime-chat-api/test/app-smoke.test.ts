@@ -18,12 +18,7 @@ describe("realtime chat api app", () => {
     );
 
     const response = await app.request("/realtime-chat/gateway-tickets", {
-      body: JSON.stringify({
-        actorId: "body-actor",
-        workspaceId: "body-workspace",
-      }),
       headers: {
-        "content-type": "application/json",
         "x-actor-id": "authenticated-actor",
       },
       method: "POST",
@@ -38,6 +33,34 @@ describe("realtime chat api app", () => {
     expect(issue).toHaveBeenCalledWith({
       actorId: "authenticated-actor",
     });
+  });
+
+  it("rejects issue bodies with client-owned actor fields", async () => {
+    const issue = vi.fn();
+    const app = createRealtimeChatApiApp(
+      createDeps({
+        issue,
+      }),
+    );
+
+    const response = await app.request("/realtime-chat/gateway-tickets", {
+      body: JSON.stringify({
+        actorId: "body-actor",
+        workspaceId: "body-workspace",
+      }),
+      headers: {
+        "content-type": "application/json",
+        "x-actor-id": "authenticated-actor",
+      },
+      method: "POST",
+    });
+
+    await expect(response.json()).resolves.toMatchObject({
+      code: "bad_request",
+      status: "error",
+    });
+    expect(response.status).toBe(400);
+    expect(issue).not.toHaveBeenCalled();
   });
 
   it("consumes a gateway ticket with gateway context outside the body", async () => {

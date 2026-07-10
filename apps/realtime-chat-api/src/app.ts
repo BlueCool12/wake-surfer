@@ -1,5 +1,10 @@
 import { Hono } from "hono";
 
+import type { ApiErrorResponse } from "@wake-surfer/api-contracts";
+import {
+  parseConsumeGatewayTicketRequestBody,
+  parseIssueGatewayTicketRequestBody,
+} from "@wake-surfer/realtime-chat-gateway-ticket-contracts";
 import type {
   ConsumeGatewayTicketRequest,
   ConsumeGatewayTicketResponse,
@@ -36,11 +41,7 @@ export type RealtimeChatApiAppDeps = {
   logger: AppLogger;
 };
 
-type ErrorResponse = {
-  code: RealtimeChatErrorCode;
-  message: string;
-  status: "error";
-};
+type GatewayTicketErrorResponse = ApiErrorResponse<RealtimeChatErrorCode>;
 
 export class AppHttpError extends Error {
   readonly code: RealtimeChatErrorCode;
@@ -61,6 +62,8 @@ export function createRealtimeChatApiApp(deps: RealtimeChatApiAppDeps): Hono {
 
   app.post("/realtime-chat/gateway-tickets", async (context) => {
     const actor = await authenticateActor(context.req.raw);
+    await readIssueGatewayTicketRequest(context.req.raw);
+
     const issued = await gatewayTicket.issue({
       actorId: actor.actorId,
     });
@@ -92,7 +95,7 @@ export function createRealtimeChatApiApp(deps: RealtimeChatApiAppDeps): Hono {
         code: "bad_request",
         message: "route not found",
         status: "error",
-      } satisfies ErrorResponse,
+      } satisfies GatewayTicketErrorResponse,
       404,
     ),
   );
@@ -104,7 +107,7 @@ export function createRealtimeChatApiApp(deps: RealtimeChatApiAppDeps): Hono {
           code: error.code,
           message: error.message,
           status: "error",
-        } satisfies ErrorResponse,
+        } satisfies GatewayTicketErrorResponse,
         error.statusCode,
       );
     }
@@ -124,7 +127,7 @@ export function createRealtimeChatApiApp(deps: RealtimeChatApiAppDeps): Hono {
         code: "gateway_ticket_unavailable",
         message: "gateway ticket service unavailable",
         status: "error",
-      } satisfies ErrorResponse,
+      } satisfies GatewayTicketErrorResponse,
       500,
     );
   });
@@ -132,43 +135,42 @@ export function createRealtimeChatApiApp(deps: RealtimeChatApiAppDeps): Hono {
   return app;
 }
 
+async function readIssueGatewayTicketRequest(request: Request): Promise<void> {
+  const body = await readOptionalJsonBody(request);
+  const parsed = parseIssueGatewayTicketRequestBody(body);
+
+  if (!parsed.ok) {
+    throw new AppHttpError(400, "bad_request", parsed.message);
+  }
+}
+
 async function readConsumeGatewayTicketRequest(
   request: Request,
 ): Promise<ConsumeGatewayTicketRequest> {
-  const body = await readJsonObject(request);
-  const keys = Object.keys(body);
+  const body = await readRequiredJsonBody(request);
+  const parsed = parseConsumeGatewayTicketRequestBody(body);
 
-  if (keys.length !== 1 || !Object.hasOwn(body, "ticket")) {
-    throw new AppHttpError(400, "bad_request", "consume request body must contain only ticket");
+  if (!parsed.ok) {
+    throw new AppHttpError(400, "bad_request", parsed.message);
   }
 
-  if (typeof body.ticket !== "string") {
-    throw new AppHttpError(400, "bad_request", "ticket must be a string");
-  }
-
-  return {
-    ticket: body.ticket,
-  };
+  return parsed.value;
 }
 
-async function readJsonObject(request: Request): Promise<Record<string, unknown>> {
-  let body: unknown;
+async function readOptionalJsonBody(request: Request): Promise<unknown> {
+  if (request.body === null) {
+    return undefined;
+  }
 
+  return readRequiredJsonBody(request);
+}
+
+async function readRequiredJsonBody(request: Request): Promise<unknown> {
   try {
-    body = await request.json();
+    return await request.json();
   } catch {
     throw new AppHttpError(400, "bad_request", "request body must be valid JSON");
   }
-
-  if (!isRecord(body)) {
-    throw new AppHttpError(400, "bad_request", "request body must be a JSON object");
-  }
-
-  return body;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function serializeError(error: unknown): Record<string, unknown> {

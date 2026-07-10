@@ -4,13 +4,15 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "pnpm run build:deps && tsc -p tsconfig.json",
+    "build:deps": "pnpm --filter @wake-surfer/api-contracts build && pnpm --filter @wake-surfer/realtime-chat-database build",
     "start": "node dist/main.js",
-    "test": "vitest run",
-    "typecheck": "tsc -p tsconfig.test.json"
+    "test": "pnpm run build:deps && vitest run",
+    "typecheck": "pnpm run build:deps && tsc -p tsconfig.test.json"
   },
   "dependencies": {
     "@hono/node-server": "^2.0.8",
+    "@wake-surfer/api-contracts": "workspace:*",
     "@wake-surfer/realtime-chat-database": "workspace:*",
     "@wake-surfer/realtime-chat-gateway-ticket": "workspace:*",
     "@wake-surfer/realtime-chat-gateway-ticket-contracts": "workspace:*",
