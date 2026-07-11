@@ -1,8 +1,7 @@
 import { randomBytes as nodeRandomBytes } from "node:crypto";
 
 /**
- * OAuth CSRF state의 최소/기본 엔트로피 바이트 수.
- * 32바이트(256비트) = 이슈 #5 수용 기준("crypto-random 32바이트 이상").
+ * OAuth CSRF state의 최소/기본 엔트로피 바이트 수. (crypto-random 32바이트 = 256비트)
  */
 export const MIN_OAUTH_CSRF_STATE_BYTES = 32;
 

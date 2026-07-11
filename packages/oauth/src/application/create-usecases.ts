@@ -1,10 +1,19 @@
 import type { OAuthConfig } from "../domain/oauth-config";
 import type { OAuthCsrfStateStorePort } from "../runtime-deps";
+import {
+  handleGithubCallback,
+  type HandleGithubCallbackResult,
+} from "./handle-github-callback.usecase";
 import { startGithubLogin, type StartGithubLoginResult } from "./start-github-login.usecase";
 
 export type OAuthUsecases = {
   /** 요청마다 바인딩된 StateStore를 받아 로그인 진입점을 실행한다. */
   startGithubLogin: (stateStore: OAuthCsrfStateStorePort) => Promise<StartGithubLoginResult>;
+  /** GitHub 콜백 쿼리를 받아 state 검증·에러 분기를 수행한다. */
+  handleGithubCallback: (
+    stateStore: OAuthCsrfStateStorePort,
+    query: Readonly<Record<string, unknown>>,
+  ) => Promise<HandleGithubCallbackResult>;
 };
 
 /**
@@ -14,5 +23,6 @@ export type OAuthUsecases = {
 export function createOAuthUsecases(config: OAuthConfig): OAuthUsecases {
   return {
     startGithubLogin: (stateStore) => startGithubLogin({ config, stateStore }),
+    handleGithubCallback: (stateStore, query) => handleGithubCallback({ query, stateStore }),
   };
 }

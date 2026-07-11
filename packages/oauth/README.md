@@ -11,10 +11,10 @@ import { createOAuthUsecases, createCookieStateStore } from "@wake-surfer/oauth"
 
 ## 구현 단계
 
-GitHub OAuth 전체 플로우를 아래 단계로 나눠 **PR 단위로** 완성합니다. 각 단계의 구현 상세는 해당 PR이 올라올 때 아래 [단계별 상세](#단계별-상세)에 덧붙입니다.
+GitHub OAuth 전체 플로우를 아래 단계로 나눠 완성합니다. 단계는 기능 단위이며, 이슈/PR은 인접 단계를 묶을 수 있습니다. (예: 3·4단계 → 하나의 PR) 각 단계의 구현 상세는 해당 PR이 올라올 때 아래 [단계별 상세](#단계별-상세)에 덧붙입니다.
 
 - [x] **1. 로그인 진입점** — CSRF state 발급/저장 + GitHub authorize URL 생성 (이슈 #5)
-- [ ] **2. 콜백 & code 수신** — 콜백 처리 + state 검증 배선 + 인증 거부/에러 분기
+- [x] **2. 콜백 & code 수신** — 콜백 처리 + state 검증 배선 + 인증 거부/에러 분기 (이슈 #27)
 - [ ] **3. access token 교환** — authorization code → GitHub access token
 - [ ] **4. GitHub 사용자 정보 조회** — access token으로 사용자(id·email 등) 조회
 - [ ] **5. 사용자 계정 생성/조회** — GitHub 사용자 → 우리 DB 사용자 매핑 (이메일 충돌 정책 포함)
@@ -87,7 +87,47 @@ const { authorizeUrl } = await oauth.startGithubLogin(stateStore);
 // 3) 반환된 authorizeUrl로 302 리다이렉트
 ```
 
-> 이후 단계(2~7)의 상세는 각 PR과 함께 이 아래에 추가합니다.
+### 2. 콜백 & code 수신 (이슈 #27)
+
+GitHub 인증 후 콜백으로 돌아온 요청을 검증하고, 다음 단계(토큰 교환)의 입력인 code를 확보합니다.
+
+```
+[GitHub 콜백] → ①쿼리 파싱 → ②error 분기 → ③state 검증(소비) → ④code 확인 → { ok, code }
+```
+
+담은 것:
+
+- 콜백 쿼리(`code`/`state`/`error`/`error_description`) 파싱 — 중복(배열)·비문자열 값은 없는 것으로 취급 (parameter pollution 방어)
+- state 검증 배선 — 1단계의 `OAuthCsrfStateStorePort.verify` 호출, 미일치 시 거부 (재사용 차단 포함)
+- 인증 거부/에러 분기 — 실패는 예외가 아닌 **결과 유니언**으로 반환
+
+```ts
+type HandleGithubCallbackResult =
+  | { status: "ok"; code: string }
+  | {
+      status: "rejected";
+      reason: "ACCESS_DENIED" | "PROVIDER_ERROR" | "MISSING_STATE" | "STATE_MISMATCH" | "MISSING_CODE";
+      providerError?: { error: string; errorDescription?: string }; // GitHub 원본 보존
+    };
+```
+
+> HTTP 상태코드·사용자 문구 매핑은 이 패키지가 아닌 apps의 책임입니다.
+> error 분기에서도 state 쿠키를 소비해, 실패한 시도의 state가 브라우저에 남지 않습니다.
+
+**사용 흐름 (apps에서의 배선)**
+
+```ts
+// 콜백 라우트에서: 요청 쿠키에 바인딩된 stateStore + 쿼리를 그대로 전달
+const result = await oauth.handleGithubCallback(stateStore, req.query);
+
+if (result.status === "ok") {
+  // result.code로 토큰 교환 (다음 단계)
+} else {
+  // result.reason별 에러 응답 매핑 (예: ACCESS_DENIED → 로그인 취소 안내)
+}
+```
+
+> 이후 단계(3~7)의 상세는 각 PR과 함께 이 아래에 추가합니다.
 
 ---
 
