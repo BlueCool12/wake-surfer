@@ -27,3 +27,15 @@ POST /internal/realtime-chat/gateway-tickets/consume
 `POST /internal/realtime-chat/gateway-tickets/consume` accepts only `{ "ticket": "..." }` in the JSON body.
 The gateway identity is resolved from trusted gateway context, currently `REALTIME_CHAT_GATEWAY_ID_HEADER`
 matched against `REALTIME_CHAT_GATEWAY_ID`.
+
+## Actor resolution note
+
+The current app uses trusted headers as a temporary authentication boundary. The final actor resolution model is not
+decided yet.
+
+The API must not assume that a JWT or session token directly contains `actorId`. If the auth token does not expose an
+actor id, the API may resolve the actor from its own database or ask the auth server for a principal that can be mapped
+to an actor. That decision belongs to the future authentication design.
+
+The stable rule for this app is narrower: gateway ticket issuance needs a server-confirmed actor id, and that value must
+not come from the client request body.
