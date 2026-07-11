@@ -1,3 +1,5 @@
+import { z } from "zod";
+
 export type ActorId = string;
 export type GatewayTicket = string;
 export type GatewayUrl = string;
@@ -18,9 +20,15 @@ export type IssueGatewayTicketResponse = {
   expiresAt: ISODateTime;
 };
 
-export type ConsumeGatewayTicketRequest = {
-  ticket: GatewayTicket;
-};
+export const IssueGatewayTicketRequestBodySchema = z.strictObject({});
+
+export type IssueGatewayTicketRequest = z.infer<typeof IssueGatewayTicketRequestBodySchema>;
+
+export const ConsumeGatewayTicketRequestBodySchema = z.strictObject({
+  ticket: z.string().trim().min(1),
+});
+
+export type ConsumeGatewayTicketRequest = z.infer<typeof ConsumeGatewayTicketRequestBodySchema>;
 
 export type ConsumeGatewayTicketResponse =
   | {

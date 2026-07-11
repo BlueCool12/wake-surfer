@@ -26,8 +26,7 @@
   },
   "dependencies": {
     "@wake-surfer/realtime-chat-gateway-ticket-contracts": "workspace:*",
-    "kysely": "0.28.8",
-    "zod": "4.2.1"
+    "kysely": "0.28.8"
   },
   "devDependencies": {
     "vitest": "4.1.6"

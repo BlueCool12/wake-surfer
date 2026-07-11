@@ -20,9 +20,9 @@
 - PostgreSQL 연결 풀 생성과 종료
 - 인증/인가 정책 자체
 - 게이트웨이 선택 전략의 소유
-- 프론트엔드와 직접 공유되는 요청/응답 타입의 소유
+- 프론트엔드와 직접 공유되는 요청/응답 타입과 validation schema의 소유
 
-프론트엔드와 백엔드가 함께 사용하는 요청/응답 타입은 별도 패키지인
+프론트엔드와 백엔드가 함께 사용하는 요청/응답 타입과 validation schema는 별도 패키지인
 `@wake-surfer/realtime-chat-gateway-ticket-contracts`가 소유한다.
 
 ## 구조
@@ -35,11 +35,9 @@ src/
   usecases/
     issue-gateway-ticket/
       issue-gateway-ticket.usecase.ts
-      issue-gateway-ticket.schema.ts
       issue-gateway-ticket.kysely.ts
     consume-gateway-ticket/
       consume-gateway-ticket.usecase.ts
-      consume-gateway-ticket.schema.ts
       consume-gateway-ticket.kysely.ts
 ```
 
@@ -196,14 +194,18 @@ CREATE TABLE IF NOT EXISTS gateway_tickets (
 
 ## 계약 패키지와의 관계
 
-`@wake-surfer/realtime-chat-gateway-ticket-contracts`는 다음처럼 외부 경계에서 공유되는 타입만 가진다.
+`@wake-surfer/realtime-chat-gateway-ticket-contracts`는 다음처럼 외부 경계에서 공유되는 타입과 request
+body validation schema를 가진다.
 
 - `IssueGatewayTicketResponse`
+- `IssueGatewayTicketRequestBodySchema`
 - `ConsumeGatewayTicketRequest`
 - `ConsumeGatewayTicketResponse`
+- `ConsumeGatewayTicketRequestBodySchema`
 - `GatewayTicket`
 - `ActorId`
 - `ISODateTime`
 
-이 구현 패키지는 계약 타입을 사용하지만, HTTP 응답 포맷이나 클라이언트 공유 타입을 새로 정의하지
-않는다.
+이 구현 패키지는 계약 타입을 사용하지만, HTTP 요청 본문 schema, HTTP 응답 포맷, 클라이언트 공유 타입을
+새로 정의하지 않는다. API 앱은 contracts schema를 사용해 요청을 검증하고 자기 라우트 흐름에 맞게
+validation 실패를 응답으로 매핑한다.
