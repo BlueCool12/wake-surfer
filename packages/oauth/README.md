@@ -21,6 +21,40 @@ GitHub OAuth 전체 플로우를 아래 단계로 나눠 완성합니다. 단계
 - [ ] **6. 세션/토큰 발급** — 우리 서비스 자체 세션/JWT 발급
 - [ ] **7. 로그아웃** — 세션/토큰 만료·폐기
 
+## 패키지 구조
+
+```
+src/
+├── domain/                 # 순수 도메인 (기술 비의존)
+│   ├── oauth-config.ts       # OAuthConfig 값 객체 + 검증
+│   └── oauth-csrf-state.ts   # CSRF state 발급 (CSPRNG)
+├── application/            # 유스케이스 오케스트레이션
+│   ├── create-usecases.ts
+│   ├── start-github-login.usecase.ts      # 1단계: 로그인 진입점
+│   └── handle-github-callback.usecase.ts  # 2단계: 콜백 처리
+├── infrastructure/        # 어댑터 (port 구현·외부 프로바이더)
+│   ├── cookie/               # signed 쿠키 기반 state 저장 어댑터
+│   └── github/               # GitHub 규격 (authorize URL 조립, 콜백 쿼리 파싱)
+├── runtime-deps.ts        # app이 주입하는 port 계약 (OAuthCsrfStateStorePort 등)
+├── public.ts              # 공개 표면 선별
+└── index.ts               # package root export
+```
+
+## 공개 API (주요)
+
+| export                           | 용도                                                           |
+| -------------------------------- | -------------------------------------------------------------- |
+| `createOAuthUsecases(config)`    | 부팅 시 config를 주입해 유스케이스 묶음 생성                   |
+| `createCookieStateStore(config)` | signed httpOnly 쿠키 기반 `OAuthCsrfStateStorePort` 기본 구현  |
+| `assertValidOAuthConfig(config)` | 부팅 시점 config 사전 검증                                     |
+| `OAuthConfig`                    | GitHub OAuth App 설정값 타입                                   |
+| `OAuthCsrfStateStorePort`        | app(또는 어댑터)이 구현해 주입하는 state 저장 계약             |
+| `HandleGithubCallbackResult`     | 콜백 처리 결과 유니언 (`ok`+code 또는 `rejected`+reason)       |
+| `OAuthCallbackErrorCode`         | 콜백 거부 사유 코드                                            |
+| `OAuthProviderError`             | GitHub이 보낸 원본 에러 (로깅용 — 화면 렌더링 금지)            |
+
+전체 목록은 [`src/public.ts`](src/public.ts)가 기준입니다.
+
 ## 단계별 상세
 
 ### 1. 로그인 진입점 (이슈 #5)
@@ -38,34 +72,6 @@ GitHub OAuth 전체 플로우를 아래 단계로 나눠 완성합니다. 단계
 - GitHub authorize URL 조립 (client_id / redirect_uri / scope / state)
 
 > state를 **검증**하는 `verify()` 로직 자체는 여기서 제공하지만, 그것을 실제 콜백 요청에서 호출·거부 처리하는 배선은 2단계에서 담당합니다.
-
-**구조**
-
-```
-src/
-├── domain/                 # 순수 도메인 (기술 비의존)
-│   ├── oauth-config.ts       # OAuthConfig 값 객체 + 검증
-│   └── oauth-csrf-state.ts   # CSRF state 발급 (CSPRNG)
-├── application/            # 유스케이스 오케스트레이션
-│   ├── create-usecases.ts
-│   └── start-github-login.usecase.ts
-├── infrastructure/        # 어댑터 (port 구현·외부 프로바이더)
-│   ├── cookie/               # signed 쿠키 기반 state 저장 어댑터
-│   └── github/               # GitHub authorize URL 조립
-├── runtime-deps.ts        # app이 주입하는 port 계약 (OAuthCsrfStateStorePort 등)
-├── public.ts              # 공개 표면 선별
-└── index.ts               # package root export
-```
-
-**공개 API**
-
-| export                           | 용도                                                          |
-| -------------------------------- | ------------------------------------------------------------- |
-| `createOAuthUsecases(config)`    | 부팅 시 config를 주입해 유스케이스 묶음 생성                  |
-| `createCookieStateStore(config)` | signed httpOnly 쿠키 기반 `OAuthCsrfStateStorePort` 기본 구현 |
-| `assertValidOAuthConfig(config)` | 부팅 시점 config 사전 검증                                    |
-| `OAuthConfig`                    | GitHub OAuth App 설정값 타입                                  |
-| `OAuthCsrfStateStorePort`        | app(또는 어댑터)이 구현해 주입하는 state 저장 계약            |
 
 **사용 흐름 (apps에서의 배선)**
 
@@ -113,6 +119,7 @@ type HandleGithubCallbackResult =
 
 > HTTP 상태코드·사용자 문구 매핑은 이 패키지가 아닌 apps의 책임입니다.
 > error 분기에서도 state 쿠키를 소비해, 실패한 시도의 state가 브라우저에 남지 않습니다.
+> ⚠️ `providerError`는 콜백 쿼리에서 온 값(공격자 조작 가능)이므로 **사용자 화면에 이스케이프 없이 렌더링하지 마세요.** 로깅·디버깅 용도로만 사용합니다.
 
 **사용 흐름 (apps에서의 배선)**
 
