@@ -1,0 +1,194 @@
+import type { PublicMessage } from "@wake-surfer/realtime-chat-message-send-contracts";
+import type { Kysely } from "kysely";
+import { describe, expect, it } from "vitest";
+import type { MessageSendDatabase } from "../src/message-send-table";
+import {
+  sendMessage,
+  type SendMessageDeps,
+} from "../src/usecases/send-message/send-message.usecase";
+
+const db = {} as Kysely<MessageSendDatabase>;
+
+const savedMessage: PublicMessage = {
+  messageId: "message-1",
+  streamId: "channel:channel-1",
+  sequence: 1,
+  senderActorId: "actor-1",
+  target: {
+    type: "channel",
+    channelId: "channel-1",
+  },
+  content: {
+    type: "text",
+    text: "hello",
+  },
+  createdAt: "2026-07-11T00:00:00.000Z",
+};
+
+const baseDeps: SendMessageDeps = {
+  db,
+  now: () => new Date("2026-07-11T00:00:00.000Z"),
+  resolveTarget: () => ({
+    status: "resolved",
+    streamId: "channel:channel-1",
+    recipientActorIds: ["actor-2"],
+  }),
+  authorizeWrite: () => ({
+    status: "allowed",
+  }),
+  messageIdGenerator: {
+    generate: () => "message-1",
+  },
+  outboundEventIdGenerator: {
+    generate: () => "event-1",
+  },
+  findAcceptedMessageByClientMessageId: async () => undefined,
+  appendMessage: async () => savedMessage,
+};
+
+describe("send message usecase invariants", () => {
+  it("rejects a blank actorId before touching persistence", async () => {
+    await expect(
+      sendMessage(
+        {
+          clientMessageId: "client-message-1",
+          target: {
+            type: "channel",
+            channelId: "channel-1",
+          },
+          content: {
+            type: "text",
+            text: "hello",
+          },
+        },
+        {
+          actorId: " ",
+        },
+        baseDeps,
+      ),
+    ).rejects.toThrow("actorId");
+  });
+
+  it("returns rejected for invalid text content", async () => {
+    await expect(
+      sendMessage(
+        {
+          clientMessageId: "client-message-1",
+          target: {
+            type: "channel",
+            channelId: "channel-1",
+          },
+          content: {
+            type: "text",
+            text: " ",
+          },
+        },
+        {
+          actorId: "actor-1",
+        },
+        baseDeps,
+      ),
+    ).resolves.toEqual({
+      status: "rejected",
+      clientMessageId: "client-message-1",
+      reason: "invalid_content",
+    });
+  });
+
+  it("returns rejected when the target resolver cannot resolve a stream", async () => {
+    await expect(
+      sendMessage(
+        {
+          clientMessageId: "client-message-1",
+          target: {
+            type: "channel",
+            channelId: "channel-1",
+          },
+          content: {
+            type: "text",
+            text: "hello",
+          },
+        },
+        {
+          actorId: "actor-1",
+        },
+        {
+          ...baseDeps,
+          resolveTarget: () => ({
+            status: "rejected",
+            reason: "target_not_found",
+          }),
+        },
+      ),
+    ).resolves.toEqual({
+      status: "rejected",
+      clientMessageId: "client-message-1",
+      reason: "target_not_found",
+    });
+  });
+
+  it("returns an existing accepted result for the same clientMessageId", async () => {
+    await expect(
+      sendMessage(
+        {
+          clientMessageId: "client-message-1",
+          target: {
+            type: "channel",
+            channelId: "channel-1",
+          },
+          content: {
+            type: "text",
+            text: "hello",
+          },
+        },
+        {
+          actorId: "actor-1",
+        },
+        {
+          ...baseDeps,
+          authorizeWrite: () => {
+            throw new Error("기존 메시지 재시도는 권한을 다시 확인하지 않습니다.");
+          },
+          findAcceptedMessageByClientMessageId: async () => savedMessage,
+        },
+      ),
+    ).resolves.toEqual({
+      status: "accepted",
+      clientMessageId: "client-message-1",
+      message: savedMessage,
+    });
+  });
+
+  it("keeps the accepted result when delivery publish fails", async () => {
+    await expect(
+      sendMessage(
+        {
+          commandId: "command-1",
+          clientMessageId: "client-message-1",
+          target: {
+            type: "channel",
+            channelId: "channel-1",
+          },
+          content: {
+            type: "text",
+            text: "hello",
+          },
+        },
+        {
+          actorId: "actor-1",
+        },
+        {
+          ...baseDeps,
+          publishDeliveryRequested: () => {
+            throw new Error("broker unavailable");
+          },
+        },
+      ),
+    ).resolves.toEqual({
+      status: "accepted",
+      commandId: "command-1",
+      clientMessageId: "client-message-1",
+      message: savedMessage,
+    });
+  });
+});

@@ -50,6 +50,11 @@ export default defineConfig([
               message:
                 "gateway-ticket database 서브패스는 제거되었습니다. table contract는 realtime-chat-database 패키지만 import할 수 있습니다.",
             },
+            {
+              name: "@wake-surfer/realtime-chat-message-send/table-contract",
+              message:
+                "message-send table contract는 realtime-chat-database 패키지만 import할 수 있습니다.",
+            },
           ],
         },
       ],
