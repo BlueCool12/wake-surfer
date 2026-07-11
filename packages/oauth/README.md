@@ -104,6 +104,7 @@ GitHub 인증 후 콜백으로 돌아온 요청을 검증하고, 다음 단계(�
 담은 것:
 
 - 콜백 쿼리(`code`/`state`/`error`/`error_description`) 파싱 — 중복(배열)·비문자열 값은 없는 것으로 취급 (parameter pollution 방어)
+- error 계열 값 검역 — `error`는 OAuth 규격 토큰 형식(`snake_case`, 64자 이내)만, `error_description`은 인쇄 가능 ASCII 256자 이내 + HTML 위험 문자(`<>&"'` 등) 배제. 규격 밖 값은 조작된 입력으로 보고 없는 것으로 취급 (XSS 심층 방어)
 - state 검증 배선 — 1단계의 `OAuthCsrfStateStorePort.verify` 호출, 미일치 시 거부 (재사용 차단 포함)
 - 인증 거부/에러 분기 — 실패는 예외가 아닌 **결과 유니언**으로 반환
 
@@ -119,7 +120,7 @@ type HandleGithubCallbackResult =
 
 > HTTP 상태코드·사용자 문구 매핑은 이 패키지가 아닌 apps의 책임입니다.
 > error 분기에서도 state 쿠키를 소비해, 실패한 시도의 state가 브라우저에 남지 않습니다.
-> ⚠️ `providerError`는 콜백 쿼리에서 온 값(공격자 조작 가능)이므로 **사용자 화면에 이스케이프 없이 렌더링하지 마세요.** 로깅·디버깅 용도로만 사용합니다.
+> ⚠️ `providerError`는 콜백 쿼리에서 온 값입니다. 파싱 시 규격 기반으로 검역되지만(위 "error 계열 값 검역"), 심층 방어 차원에서 **사용자 화면에 이스케이프 없이 렌더링하지 말고** 로깅·디버깅 용도로만 사용하세요.
 
 **사용 흐름 (apps에서의 배선)**
 
