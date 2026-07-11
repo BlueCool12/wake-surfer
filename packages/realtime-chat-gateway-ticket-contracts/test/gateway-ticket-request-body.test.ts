@@ -1,59 +1,45 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  parseConsumeGatewayTicketRequestBody,
-  parseIssueGatewayTicketRequestBody,
+  ConsumeGatewayTicketRequestBodySchema,
+  IssueGatewayTicketRequestBodySchema,
 } from "../src/index";
 
-describe("issue gateway ticket request body parser", () => {
-  it("accepts an omitted request body", () => {
-    expect(parseIssueGatewayTicketRequestBody(undefined)).toEqual({
-      ok: true,
-    });
-  });
-
+describe("issue gateway ticket request body schema", () => {
   it("accepts an empty object request body", () => {
-    expect(parseIssueGatewayTicketRequestBody({})).toEqual({
-      ok: true,
-    });
+    expect(IssueGatewayTicketRequestBodySchema.safeParse({}).success).toBe(true);
   });
 
   it("rejects actorId from the client request body", () => {
-    expect(parseIssueGatewayTicketRequestBody({ actorId: "actor-1" })).toEqual({
-      ok: false,
-      message:
-        "게이트웨이 티켓 발급 요청 본문에는 클라이언트가 소유한 actor 또는 workspace 필드를 포함할 수 없습니다.",
-    });
+    expect(IssueGatewayTicketRequestBodySchema.safeParse({ actorId: "actor-1" }).success).toBe(
+      false,
+    );
   });
 
   it("rejects userId and workspaceId from the client request body", () => {
     expect(
-      parseIssueGatewayTicketRequestBody({
+      IssueGatewayTicketRequestBodySchema.safeParse({
         userId: "user-1",
         workspaceId: "workspace-1",
-      }),
-    ).toEqual({
-      ok: false,
-      message:
-        "게이트웨이 티켓 발급 요청 본문에는 클라이언트가 소유한 actor 또는 workspace 필드를 포함할 수 없습니다.",
-    });
+      }).success,
+    ).toBe(false);
   });
 });
 
-describe("consume gateway ticket request body parser", () => {
+describe("consume gateway ticket request body schema", () => {
   it("accepts a ticket-only request body", () => {
-    expect(parseConsumeGatewayTicketRequestBody({ ticket: "gt_ticket" })).toEqual({
-      ok: true,
-      value: {
+    expect(ConsumeGatewayTicketRequestBodySchema.safeParse({ ticket: "gt_ticket" })).toEqual({
+      success: true,
+      data: {
         ticket: "gt_ticket",
       },
     });
   });
 
   it("trims the ticket value", () => {
-    expect(parseConsumeGatewayTicketRequestBody({ ticket: "  gt_ticket  " })).toEqual({
-      ok: true,
-      value: {
+    expect(ConsumeGatewayTicketRequestBodySchema.safeParse({ ticket: "  gt_ticket  " })).toEqual({
+      success: true,
+      data: {
         ticket: "gt_ticket",
       },
     });
@@ -61,20 +47,14 @@ describe("consume gateway ticket request body parser", () => {
 
   it("rejects gatewayId from the client request body", () => {
     expect(
-      parseConsumeGatewayTicketRequestBody({
+      ConsumeGatewayTicketRequestBodySchema.safeParse({
         ticket: "gt_ticket",
         gatewayId: "gateway-1",
-      }),
-    ).toEqual({
-      ok: false,
-      message: "게이트웨이 티켓 소비 요청 본문이 올바르지 않습니다.",
-    });
+      }).success,
+    ).toBe(false);
   });
 
   it("rejects a blank ticket", () => {
-    expect(parseConsumeGatewayTicketRequestBody({ ticket: " " })).toEqual({
-      ok: false,
-      message: "게이트웨이 티켓 소비 요청 본문이 올바르지 않습니다.",
-    });
+    expect(ConsumeGatewayTicketRequestBodySchema.safeParse({ ticket: " " }).success).toBe(false);
   });
 });

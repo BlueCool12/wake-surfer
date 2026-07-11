@@ -199,14 +199,13 @@ body validation schema를 가진다.
 
 - `IssueGatewayTicketResponse`
 - `IssueGatewayTicketRequestBodySchema`
-- `parseIssueGatewayTicketRequestBody`
 - `ConsumeGatewayTicketRequest`
 - `ConsumeGatewayTicketResponse`
 - `ConsumeGatewayTicketRequestBodySchema`
-- `parseConsumeGatewayTicketRequestBody`
 - `GatewayTicket`
 - `ActorId`
 - `ISODateTime`
 
-이 구현 패키지는 계약 타입을 사용하지만, HTTP 요청 본문 검증, HTTP 응답 포맷, 클라이언트 공유 타입을
-새로 정의하지 않는다.
+이 구현 패키지는 계약 타입을 사용하지만, HTTP 요청 본문 schema, HTTP 응답 포맷, 클라이언트 공유 타입을
+새로 정의하지 않는다. API 앱은 contracts schema를 사용해 요청을 검증하고 자기 라우트 흐름에 맞게
+validation 실패를 응답으로 매핑한다.
