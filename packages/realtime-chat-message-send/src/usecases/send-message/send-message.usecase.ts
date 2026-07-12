@@ -22,7 +22,7 @@ import type {
   SendMessageContext,
 } from "../../message-send-module";
 import type { MessageSendDatabase } from "../../message-send-table";
-import type { MessageAppendInput } from "./send-message.kysely";
+import type { MessageAppendInput, MessageAppendResult } from "./send-message.kysely";
 
 export type SendMessageDeps = {
   db: Kysely<MessageSendDatabase>;
@@ -43,7 +43,7 @@ export type SendMessageDeps = {
   appendMessage: (
     db: Kysely<MessageSendDatabase>,
     input: MessageAppendInput,
-  ) => Promise<PublicMessage>;
+  ) => Promise<MessageAppendResult>;
 };
 
 export async function sendMessage(
@@ -116,7 +116,16 @@ export async function sendMessage(
     appendInput.sentAtClient = command.sentAtClient;
   }
 
-  const savedMessage = await deps.appendMessage(deps.db, appendInput);
+  const appendResult = await deps.appendMessage(deps.db, appendInput);
+
+  if (appendResult.status === "existing") {
+    return createAcceptedResponse({
+      command,
+      message: appendResult.message,
+    });
+  }
+
+  const savedMessage = appendResult.message;
 
   await publishDeliveryBestEffort(deps, {
     eventId: deps.outboundEventIdGenerator.generate(),

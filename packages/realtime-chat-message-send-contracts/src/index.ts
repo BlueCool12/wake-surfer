@@ -41,6 +41,10 @@ export type SendMessageRequest = {
 };
 
 const NonBlankStringSchema = z.string().trim().min(1);
+const ISODateTimeSchema = z
+  .string()
+  .trim()
+  .pipe(z.iso.datetime({ offset: true }));
 
 export const SendMessageTargetSchema = z.discriminatedUnion("type", [
   z.strictObject({
@@ -67,7 +71,7 @@ export const SendMessageRequestBodySchema = z.strictObject({
   clientMessageId: NonBlankStringSchema,
   target: SendMessageTargetSchema,
   content: SendMessageContentSchema,
-  sentAtClient: NonBlankStringSchema.optional(),
+  sentAtClient: ISODateTimeSchema.optional(),
 });
 
 export type SendMessageRequestBodyParseResult =

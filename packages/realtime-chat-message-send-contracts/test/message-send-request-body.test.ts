@@ -135,4 +135,41 @@ describe("send message request body parser", () => {
       message: "메시지 전송 요청 본문이 올바르지 않습니다.",
     });
   });
+
+  it("accepts an ISO datetime with an explicit timezone offset", () => {
+    expect(
+      parseSendMessageRequestBody({
+        clientMessageId: "client-message-1",
+        target: {
+          type: "channel",
+          channelId: "channel-1",
+        },
+        content: {
+          type: "text",
+          text: "hello",
+        },
+        sentAtClient: "2026-07-11T09:00:00+09:00",
+      }).ok,
+    ).toBe(true);
+  });
+
+  it("rejects sentAtClient when it is not an ISO datetime", () => {
+    expect(
+      parseSendMessageRequestBody({
+        clientMessageId: "client-message-1",
+        target: {
+          type: "channel",
+          channelId: "channel-1",
+        },
+        content: {
+          type: "text",
+          text: "hello",
+        },
+        sentAtClient: "yesterday",
+      }),
+    ).toEqual({
+      ok: false,
+      message: "메시지 전송 요청 본문이 올바르지 않습니다.",
+    });
+  });
 });

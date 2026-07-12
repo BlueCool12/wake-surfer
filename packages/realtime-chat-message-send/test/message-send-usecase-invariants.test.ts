@@ -43,7 +43,10 @@ const baseDeps: SendMessageDeps = {
     generate: () => "event-1",
   },
   findAcceptedMessageByClientMessageId: async () => undefined,
-  appendMessage: async () => savedMessage,
+  appendMessage: async () => ({
+    status: "created",
+    message: savedMessage,
+  }),
 };
 
 describe("send message usecase invariants", () => {
@@ -157,6 +160,45 @@ describe("send message usecase invariants", () => {
       clientMessageId: "client-message-1",
       message: savedMessage,
     });
+  });
+
+  it("returns a concurrently appended message without publishing delivery again", async () => {
+    let publishCount = 0;
+
+    await expect(
+      sendMessage(
+        {
+          clientMessageId: "client-message-1",
+          target: {
+            type: "channel",
+            channelId: "channel-1",
+          },
+          content: {
+            type: "text",
+            text: "hello",
+          },
+        },
+        {
+          actorId: "actor-1",
+        },
+        {
+          ...baseDeps,
+          appendMessage: async () => ({
+            status: "existing",
+            message: savedMessage,
+          }),
+          publishDeliveryRequested: () => {
+            publishCount += 1;
+          },
+        },
+      ),
+    ).resolves.toEqual({
+      status: "accepted",
+      clientMessageId: "client-message-1",
+      message: savedMessage,
+    });
+
+    expect(publishCount).toBe(0);
   });
 
   it("keeps the accepted result when delivery publish fails", async () => {

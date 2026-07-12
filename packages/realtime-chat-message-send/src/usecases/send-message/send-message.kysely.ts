@@ -23,6 +23,16 @@ export type MessageAppendInput = {
   createdAt: string;
 };
 
+export type MessageAppendResult =
+  | {
+      status: "created";
+      message: PublicMessage;
+    }
+  | {
+      status: "existing";
+      message: PublicMessage;
+    };
+
 type MessageRow = {
   messageId?: unknown;
   streamId?: unknown;
@@ -74,7 +84,7 @@ export async function findAcceptedMessageByClientMessageId(
 export async function appendMessage(
   db: Kysely<MessageSendDatabase>,
   input: MessageAppendInput,
-): Promise<PublicMessage> {
+): Promise<MessageAppendResult> {
   return db.transaction().execute(async (trx) => {
     const targetType = getTargetType(input.target);
     const targetId = getTargetId(input.target);
@@ -90,6 +100,26 @@ export async function appendMessage(
       })
       .onConflict((oc) => oc.column("stream_id").doNothing())
       .executeTakeFirstOrThrow();
+
+    await trx
+      .selectFrom("message_streams")
+      .select("stream_id")
+      .where("stream_id", "=", input.streamId)
+      .forUpdate()
+      .executeTakeFirstOrThrow();
+
+    const existing = await findAcceptedMessageByClientMessageId(trx, {
+      senderActorId: input.senderActorId,
+      streamId: input.streamId,
+      clientMessageId: input.clientMessageId,
+    });
+
+    if (existing) {
+      return {
+        status: "existing",
+        message: existing,
+      };
+    }
 
     const sequenceRow = await trx
       .updateTable("message_streams")
@@ -133,7 +163,10 @@ export async function appendMessage(
       .$castTo<MessageRow>()
       .executeTakeFirstOrThrow();
 
-    return parseMessageRow(row);
+    return {
+      status: "created",
+      message: parseMessageRow(row),
+    };
   });
 }
 
