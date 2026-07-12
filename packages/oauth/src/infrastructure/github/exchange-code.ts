@@ -5,11 +5,10 @@ import {
   type OAuthProviderError,
 } from "../../domain/oauth-provider-error";
 
+import { DEFAULT_GITHUB_TIMEOUT_MS } from "./http-defaults";
+
 /** GitHub.com 기본 토큰 엔드포인트. */
 export const DEFAULT_GITHUB_TOKEN_URL = "https://github.com/login/oauth/access_token";
-
-/** 외부 호출 기본 타임아웃(ms). 초과 시 예외로 전파된다. */
-export const DEFAULT_GITHUB_TIMEOUT_MS = 10_000;
 
 export type ExchangeCodeInput = {
   readonly config: OAuthConfig;
