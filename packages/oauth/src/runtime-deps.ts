@@ -9,8 +9,3 @@ export type OAuthCsrfStateStorePort = {
   save: (state: string) => void | Promise<void>;
   verify: (state: string) => boolean | Promise<boolean>;
 };
-
-/** 유스케이스가 주입받는 런타임 의존성 묶음. */
-export type OAuthRuntimeDeps = {
-  stateStore: OAuthCsrfStateStorePort;
-};
