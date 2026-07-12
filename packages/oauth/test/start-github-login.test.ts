@@ -7,6 +7,7 @@ import type { OAuthCsrfStateStorePort } from "../src/runtime-deps";
 
 const config: OAuthConfig = {
   clientId: "client-123",
+  clientSecret: "secret-456",
   redirectUri: "https://app.example.com/auth/github/callback",
   scopes: ["user:email"],
 };

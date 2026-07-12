@@ -8,6 +8,7 @@ import {
 
 const baseConfig: OAuthConfig = {
   clientId: "client-123",
+  clientSecret: "secret-456",
   redirectUri: "https://app.example.com/auth/github/callback",
   scopes: ["user:email"],
 };
@@ -47,5 +48,9 @@ describe("createAuthorizeUrl", () => {
 
   it("state가 비어 있으면 던진다", () => {
     expect(() => createAuthorizeUrl(baseConfig, "  ")).toThrow(/state/);
+  });
+
+  it("clientSecret은 authorize URL에 실리지 않는다", () => {
+    expect(createAuthorizeUrl(baseConfig, "state-abc")).not.toContain("secret-456");
   });
 });

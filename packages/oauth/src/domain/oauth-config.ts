@@ -1,5 +1,7 @@
 export type OAuthConfig = {
   readonly clientId: string;
+  /** 토큰 교환에만 쓰이는 비밀값. authorize URL에는 실리지 않는다. 로그에 노출 금지. */
+  readonly clientSecret: string;
   readonly redirectUri: string;
   readonly scopes: readonly string[];
   /**
@@ -21,6 +23,9 @@ export class OAuthConfigError extends Error {
 export function assertValidOAuthConfig(config: OAuthConfig): void {
   if (config.clientId.trim() === "") {
     throw new OAuthConfigError("clientId must not be empty");
+  }
+  if (config.clientSecret.trim() === "") {
+    throw new OAuthConfigError("clientSecret must not be empty");
   }
   if (config.redirectUri.trim() === "") {
     throw new OAuthConfigError("redirectUri must not be empty");
