@@ -43,6 +43,9 @@ export async function createRuntimeDeps(
   return {
     appDeps: {
       ...createHeaderAuthContext(config),
+      checkReadiness: async () => {
+        await database.db.selectFrom("gateway_tickets").select("ticket_hash").limit(1).execute();
+      },
       gatewayTicket,
       logger,
     },

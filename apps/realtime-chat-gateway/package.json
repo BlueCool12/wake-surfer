@@ -1,0 +1,24 @@
+{
+  "name": "@wake-surfer/realtime-chat-gateway",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "build": "pnpm run build:deps && tsc -p tsconfig.json",
+    "build:deps": "pnpm --filter @wake-surfer/realtime-chat-gateway-ticket-contracts build",
+    "start": "node dist/main.js",
+    "test": "pnpm run build:deps && vitest run",
+    "typecheck": "pnpm run build:deps && tsc -p tsconfig.test.json"
+  },
+  "dependencies": {
+    "@wake-surfer/realtime-chat-gateway-ticket-contracts": "workspace:*",
+    "pino": "^10.3.1",
+    "ws": "^8.18.3"
+  },
+  "devDependencies": {
+    "@types/node": "^24.13.2",
+    "@types/ws": "^8.18.1",
+    "typescript": "~6.0.2",
+    "vitest": "^4.1.6"
+  }
+}

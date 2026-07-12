@@ -1,11 +1,16 @@
 export type RealtimeChatApiConfig = {
   actorIdHeader: string;
+  corsOrigins: string[];
   databaseUrl: string;
   gatewayId: string;
   gatewayIdHeader: string;
   gatewayTicketRawBytes: number;
   gatewayTicketTtlMilliseconds: number;
   gatewayUrl: string;
+  handlerTimeoutMilliseconds: number;
+  httpHeadersTimeoutMilliseconds: number;
+  httpKeepAliveTimeoutMilliseconds: number;
+  httpRequestTimeoutMilliseconds: number;
   logLevel: string;
   port: number;
   postgresPool: {
@@ -14,11 +19,14 @@ export type RealtimeChatApiConfig = {
     max: number;
     maxLifetimeSeconds: number;
   };
+  requestBodyLimitBytes: number;
+  shutdownGraceMilliseconds: number;
 };
 
 export function loadEnv(env: NodeJS.ProcessEnv = process.env): RealtimeChatApiConfig {
-  return {
+  const config: RealtimeChatApiConfig = {
     actorIdHeader: readOptionalString(env, "REALTIME_CHAT_ACTOR_ID_HEADER", "x-actor-id"),
+    corsOrigins: readCsv(env, "REALTIME_CHAT_CORS_ORIGINS"),
     databaseUrl: readRequiredString(env, "REALTIME_CHAT_DATABASE_URL"),
     gatewayId: readRequiredString(env, "REALTIME_CHAT_GATEWAY_ID"),
     gatewayIdHeader: readOptionalString(env, "REALTIME_CHAT_GATEWAY_ID_HEADER", "x-gateway-id"),
@@ -29,6 +37,27 @@ export function loadEnv(env: NodeJS.ProcessEnv = process.env): RealtimeChatApiCo
       min: 1_000,
     }),
     gatewayUrl: readRequiredString(env, "REALTIME_CHAT_GATEWAY_URL"),
+    handlerTimeoutMilliseconds: readInteger(env, "REALTIME_CHAT_HANDLER_TIMEOUT_MS", 5_000, {
+      min: 1,
+    }),
+    httpHeadersTimeoutMilliseconds: readInteger(
+      env,
+      "REALTIME_CHAT_HTTP_HEADERS_TIMEOUT_MS",
+      5_000,
+      { min: 1 },
+    ),
+    httpKeepAliveTimeoutMilliseconds: readInteger(
+      env,
+      "REALTIME_CHAT_HTTP_KEEP_ALIVE_TIMEOUT_MS",
+      5_000,
+      { min: 1 },
+    ),
+    httpRequestTimeoutMilliseconds: readInteger(
+      env,
+      "REALTIME_CHAT_HTTP_REQUEST_TIMEOUT_MS",
+      10_000,
+      { min: 1 },
+    ),
     logLevel: readOptionalString(env, "LOG_LEVEL", "info"),
     port: readInteger(env, "PORT", 3000, {
       max: 65_535,
@@ -53,7 +82,44 @@ export function loadEnv(env: NodeJS.ProcessEnv = process.env): RealtimeChatApiCo
         min: 1,
       }),
     },
+    requestBodyLimitBytes: readInteger(env, "REALTIME_CHAT_REQUEST_BODY_LIMIT_BYTES", 16_384, {
+      min: 1,
+    }),
+    shutdownGraceMilliseconds: readInteger(env, "REALTIME_CHAT_SHUTDOWN_GRACE_MS", 10_000, {
+      min: 1,
+    }),
   };
+
+  if (config.handlerTimeoutMilliseconds >= config.httpRequestTimeoutMilliseconds) {
+    throw new Error(
+      "REALTIME_CHAT_HANDLER_TIMEOUT_MS must be less than REALTIME_CHAT_HTTP_REQUEST_TIMEOUT_MS",
+    );
+  }
+
+  if (config.httpHeadersTimeoutMilliseconds > config.httpRequestTimeoutMilliseconds) {
+    throw new Error(
+      "REALTIME_CHAT_HTTP_HEADERS_TIMEOUT_MS must be less than or equal to REALTIME_CHAT_HTTP_REQUEST_TIMEOUT_MS",
+    );
+  }
+
+  return config;
+}
+
+function readCsv(env: NodeJS.ProcessEnv, name: string): string[] {
+  const rawValue = env[name]?.trim();
+
+  if (!rawValue) {
+    return [];
+  }
+
+  return [
+    ...new Set(
+      rawValue
+        .split(",")
+        .map((value) => value.trim())
+        .filter(Boolean),
+    ),
+  ];
 }
 
 function readRequiredString(env: NodeJS.ProcessEnv, name: string): string {

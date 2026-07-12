@@ -1,5 +1,8 @@
 # realtime-chat-api app
 
+외부에서 의존할 수 있는 엔드포인트, 헤더, 상태 코드와 운영 설정은
+`apps/realtime-chat-api/public-docs/runtime-contract.md`에 정의한다.
+
 `realtime-chat-api` is the deployable runtime shell for realtime chat API responsibilities.
 
 The app owns runtime wiring only:
@@ -17,6 +20,8 @@ Gateway ticket rules and SQL remain owned by packages.
 
 ```txt
 GET  /health
+GET  /health/live
+GET  /health/ready
 POST /realtime-chat/gateway-tickets
 POST /internal/realtime-chat/gateway-tickets/consume
 ```

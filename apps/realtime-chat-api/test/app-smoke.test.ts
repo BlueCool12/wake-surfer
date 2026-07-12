@@ -5,6 +5,104 @@ import { createRealtimeChatApiApp } from "../src/app.js";
 import type { RealtimeChatApiAppDeps } from "../src/app.js";
 
 describe("realtime chat api app", () => {
+  it("adds request ID, security headers, and structured access logging", async () => {
+    const logger = createLogger();
+    const app = createRealtimeChatApiApp(createDeps({ logger }));
+
+    const response = await app.request("/health");
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("x-content-type-options")).toBe("nosniff");
+    expect(response.headers.get("x-request-id")).toBeTruthy();
+    expect(logger.info).toHaveBeenCalledWith(
+      expect.objectContaining({
+        method: "GET",
+        path: "/health",
+        requestId: response.headers.get("x-request-id"),
+        status: 200,
+      }),
+      "realtime chat api request completed",
+    );
+  });
+
+  it("reports readiness failures without changing liveness", async () => {
+    const app = createRealtimeChatApiApp(
+      createDeps({
+        checkReadiness: vi.fn(async () => {
+          throw new Error("database unavailable");
+        }),
+      }),
+    );
+
+    const [liveness, readiness] = await Promise.all([
+      app.request("/health/live"),
+      app.request("/health/ready"),
+    ]);
+
+    expect(liveness.status).toBe(200);
+    expect(readiness.status).toBe(503);
+    await expect(readiness.json()).resolves.toEqual({ status: "not_ready" });
+  });
+
+  it("rejects oversized request bodies", async () => {
+    const issue = vi.fn();
+    const app = createRealtimeChatApiApp(createDeps({ issue }), {
+      requestBodyLimitBytes: 16,
+    });
+
+    const response = await app.request("/realtime-chat/gateway-tickets", {
+      body: JSON.stringify({ actorId: "a".repeat(32) }),
+      headers: {
+        "content-type": "application/json",
+        "x-actor-id": "authenticated-actor",
+      },
+      method: "POST",
+    });
+
+    expect(response.status).toBe(413);
+    expect(issue).not.toHaveBeenCalled();
+  });
+
+  it("times out slow handlers", async () => {
+    const app = createRealtimeChatApiApp(
+      createDeps({
+        issue: vi.fn(() => new Promise<never>(() => {})),
+      }),
+      {
+        handlerTimeoutMilliseconds: 5,
+      },
+    );
+
+    const response = await app.request("/realtime-chat/gateway-tickets", {
+      headers: {
+        "x-actor-id": "authenticated-actor",
+      },
+      method: "POST",
+    });
+
+    expect(response.status).toBe(504);
+    await expect(response.json()).resolves.toMatchObject({
+      code: "gateway_ticket_unavailable",
+      status: "error",
+    });
+  });
+
+  it("allows only configured browser origins", async () => {
+    const app = createRealtimeChatApiApp(createDeps(), {
+      corsOrigins: ["https://web.example.com"],
+    });
+
+    const response = await app.request("/realtime-chat/gateway-tickets", {
+      headers: {
+        origin: "https://web.example.com",
+        "x-actor-id": "authenticated-actor",
+      },
+      method: "POST",
+    });
+
+    expect(response.headers.get("access-control-allow-origin")).toBe("https://web.example.com");
+  });
+
   it("issues a gateway ticket from authenticated actor context", async () => {
     const issue = vi.fn(async () => ({
       expiresAt: "2026-07-09T00:01:00.000Z",
@@ -206,6 +304,7 @@ function createDeps(
       ((request) => ({
         gatewayId: request.headers.get("x-gateway-id") ?? "",
       })),
+    checkReadiness: overrides.checkReadiness ?? vi.fn(),
     gatewayTicket: overrides.gatewayTicket ?? {
       consume:
         overrides.consume ??
