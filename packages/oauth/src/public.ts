@@ -5,12 +5,12 @@ export type { StartGithubLoginResult } from "./application/start-github-login.us
 export type {
   HandleGithubCallbackResult,
   OAuthCallbackErrorCode,
-  OAuthProviderError,
 } from "./application/handle-github-callback.usecase";
 
 // 설정
 export { assertValidOAuthConfig, OAuthConfigError } from "./domain/oauth-config";
 export type { OAuthConfig } from "./domain/oauth-config";
+export type { OAuthProviderError } from "./domain/oauth-provider-error";
 
 // 포트
 export type { OAuthCsrfStateStorePort, OAuthRuntimeDeps } from "./runtime-deps";
