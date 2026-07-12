@@ -15,8 +15,8 @@ GitHub OAuth 전체 플로우를 아래 단계로 나눠 완성합니다. 단계
 
 - [x] **1. 로그인 진입점** — CSRF state 발급/저장 + GitHub authorize URL 생성 (이슈 #5)
 - [x] **2. 콜백 & code 수신** — 콜백 처리 + state 검증 배선 + 인증 거부/에러 분기 (이슈 #27)
-- [ ] **3. access token 교환** — authorization code → GitHub access token
-- [ ] **4. GitHub 사용자 정보 조회** — access token으로 사용자(id·email 등) 조회
+- [x] **3. access token 교환** — authorization code → GitHub access token
+- [x] **4. GitHub 사용자 정보 조회** — access token으로 사용자(id·email 등) 조회
 - [ ] **5. 사용자 계정 생성/조회** — GitHub 사용자 → 우리 DB 사용자 매핑 (이메일 충돌 정책 포함)
 - [ ] **6. 세션/토큰 발급** — 우리 서비스 자체 세션/JWT 발급
 - [ ] **7. 로그아웃** — 세션/토큰 만료·폐기
@@ -26,15 +26,17 @@ GitHub OAuth 전체 플로우를 아래 단계로 나눠 완성합니다. 단계
 ```
 src/
 ├── domain/                 # 순수 도메인 (기술 비의존)
-│   ├── oauth-config.ts       # OAuthConfig 값 객체 + 검증
-│   └── oauth-csrf-state.ts   # CSRF state 발급 (CSPRNG)
+│   ├── oauth-config.ts          # OAuthConfig 값 객체 + 검증
+│   ├── oauth-csrf-state.ts      # CSRF state 발급 (CSPRNG)
+│   └── oauth-provider-error.ts  # 프로바이더 원본 에러 형태 + 검역 규칙 (RFC 6749)
 ├── application/            # 유스케이스 오케스트레이션
 │   ├── create-usecases.ts
-│   ├── start-github-login.usecase.ts      # 1단계: 로그인 진입점
-│   └── handle-github-callback.usecase.ts  # 2단계: 콜백 처리
+│   ├── start-github-login.usecase.ts         # 1단계: 로그인 진입점
+│   ├── handle-github-callback.usecase.ts     # 2단계: 콜백 처리
+│   └── fetch-github-user-by-code.usecase.ts  # 3·4단계: 토큰 교환 + 사용자 조회
 ├── infrastructure/        # 어댑터 (port 구현·외부 프로바이더)
 │   ├── cookie/               # signed 쿠키 기반 state 저장 어댑터
-│   └── github/               # GitHub 규격 (authorize URL 조립, 콜백 쿼리 파싱)
+│   └── github/               # GitHub 규격 (authorize URL, 콜백 파싱, 토큰 교환, 사용자 조회)
 ├── runtime-deps.ts        # app이 주입하는 port 계약 (OAuthCsrfStateStorePort 등)
 ├── public.ts              # 공개 표면 선별
 └── index.ts               # package root export
@@ -52,6 +54,8 @@ src/
 | `HandleGithubCallbackResult`     | 콜백 처리 결과 유니언 (`ok`+code 또는 `rejected`+reason)       |
 | `OAuthCallbackErrorCode`         | 콜백 거부 사유 코드                                            |
 | `OAuthProviderError`             | GitHub이 보낸 원본 에러 (로깅용 — 화면 렌더링 금지)            |
+| `FetchGithubUserByCodeResult`    | GitHub 통신 결과 유니언 (`ok`+user 또는 `rejected`+reason)     |
+| `GithubUser`                     | GitHub 사용자 정보 (id·login·email — email은 항상 존재)        |
 
 전체 목록은 [`src/public.ts`](src/public.ts)가 기준입니다.
 
@@ -79,6 +83,7 @@ src/
 // 1) 부팅 시 1회: 앱-정적 config 주입
 const oauth = createOAuthUsecases({
   clientId: process.env.GITHUB_CLIENT_ID!,
+  clientSecret: process.env.GITHUB_CLIENT_SECRET!, // 토큰 교환용 (authorize URL에는 안 실림)
   redirectUri: process.env.GITHUB_REDIRECT_URI!,
   scopes: ["user:email"],
 });
@@ -129,13 +134,58 @@ type HandleGithubCallbackResult =
 const result = await oauth.handleGithubCallback(stateStore, req.query);
 
 if (result.status === "ok") {
-  // result.code로 토큰 교환 (다음 단계)
+  // result.code로 GitHub 사용자 조회 (3·4단계 참고)
+  const github = await oauth.fetchGithubUserByCode(result.code);
 } else {
   // result.reason별 에러 응답 매핑 (예: ACCESS_DENIED → 로그인 취소 안내)
 }
 ```
 
-> 이후 단계(3~7)의 상세는 각 PR과 함께 이 아래에 추가합니다.
+### 3·4. access token 교환 & 사용자 정보 조회
+
+콜백에서 확보한 code를 GitHub access token으로 교환하고, 그 토큰으로 사용자 정보를 조회합니다.
+두 단계는 하나의 유스케이스(`fetchGithubUserByCode`)로 제공됩니다.
+
+```
+[code] → ①토큰 교환(POST /login/oauth/access_token) → ②사용자 조회(GET /user)
+                                                        └ email 비공개면 GET /user/emails
+       → { ok, user: { id, login, email } }
+```
+
+담은 것:
+
+- code → access token 교환 — GitHub이 잘못된 code에도 HTTP 200 + body error로 응답하는 함정 대응
+- 사용자 정보(id·login·email) 조회 — 응답 타입 검증, User-Agent 헤더 필수 대응
+- 이메일 확보 — 프로필 email 우선, 비공개면 `/user/emails`의 primary·verified 선택,
+  끝내 없으면 `EMAIL_UNAVAILABLE` (앱에서 "GitHub 이메일 인증 후 재시도" 안내 가능)
+- access token은 결과로 노출하지 않고 내부에서 사용 후 폐기
+- fetch 주입 가능(기본 내장 fetch), 타임아웃 기본 10초 — 네트워크·타임아웃 예외는 전파
+
+```ts
+type FetchGithubUserByCodeResult =
+  | { status: "ok"; user: { id: number; login: string; email: string } }
+  | {
+      status: "rejected";
+      reason: "TOKEN_EXCHANGE_FAILED" | "USER_FETCH_FAILED" | "EMAIL_UNAVAILABLE";
+      providerError?: { error: string; errorDescription?: string }; // 토큰 교환 실패 시 원본 보존
+    };
+```
+
+**사용 흐름 (apps에서의 배선)**
+
+```ts
+// 콜백에서 code를 확보한 뒤:
+const github = await oauth.fetchGithubUserByCode(code);
+
+if (github.status === "ok") {
+  // github.user(id·login·email)로 계정 매핑 → JWT 발급 (다음 단계)
+} else {
+  // TOKEN_EXCHANGE_FAILED: 로그인 재시도 안내
+  // EMAIL_UNAVAILABLE: GitHub 이메일 인증 안내
+}
+```
+
+> 이후 단계(5~7)의 상세는 각 PR과 함께 이 아래에 추가합니다.
 
 ---
 
