@@ -1,0 +1,27 @@
+export {
+  createDefaultMessageTargetResolver,
+  createMessageSendModule,
+  type CreateMessageSendModuleConfig,
+  type MessageSendModule,
+  type MessageTargetResolution,
+  type MessageTargetResolver,
+  type MessageWriteAuthorization,
+  type MessageWriteAuthorizer,
+  type SendMessageCommand,
+  type SendMessageContext,
+} from "./message-send-module";
+export {
+  assertActorId,
+  assertClientMessageId,
+  assertMessageContent,
+  assertMessageId,
+  assertMessageTarget,
+  assertStreamId,
+  createAcceptedResponse,
+  createDefaultMessageIdGenerator,
+  createDefaultOutboundEventIdGenerator,
+  getTargetId,
+  getTargetType,
+  type MessageIdGenerator,
+  type OutboundEventIdGenerator,
+} from "./message-send";
