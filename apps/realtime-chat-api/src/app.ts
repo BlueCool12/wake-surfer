@@ -2,8 +2,8 @@ import { Hono } from "hono";
 
 import type { ApiErrorResponse } from "@wake-surfer/api-contracts";
 import {
-  parseConsumeGatewayTicketRequestBody,
-  parseIssueGatewayTicketRequestBody,
+  ConsumeGatewayTicketRequestBodySchema,
+  IssueGatewayTicketRequestBodySchema,
 } from "@wake-surfer/realtime-chat-gateway-ticket-contracts";
 import type {
   ConsumeGatewayTicketRequest,
@@ -137,10 +137,19 @@ export function createRealtimeChatApiApp(deps: RealtimeChatApiAppDeps): Hono {
 
 async function readIssueGatewayTicketRequest(request: Request): Promise<void> {
   const body = await readOptionalJsonBody(request);
-  const parsed = parseIssueGatewayTicketRequestBody(body);
 
-  if (!parsed.ok) {
-    throw new AppHttpError(400, "bad_request", parsed.message);
+  if (body === undefined || body === null) {
+    return;
+  }
+
+  const parsed = IssueGatewayTicketRequestBodySchema.safeParse(body);
+
+  if (!parsed.success) {
+    throw new AppHttpError(
+      400,
+      "bad_request",
+      "게이트웨이 티켓 발급 요청 본문에는 클라이언트가 소유한 actor 또는 workspace 필드를 포함할 수 없습니다.",
+    );
   }
 }
 
@@ -148,13 +157,17 @@ async function readConsumeGatewayTicketRequest(
   request: Request,
 ): Promise<ConsumeGatewayTicketRequest> {
   const body = await readRequiredJsonBody(request);
-  const parsed = parseConsumeGatewayTicketRequestBody(body);
+  const parsed = ConsumeGatewayTicketRequestBodySchema.safeParse(body);
 
-  if (!parsed.ok) {
-    throw new AppHttpError(400, "bad_request", parsed.message);
+  if (!parsed.success) {
+    throw new AppHttpError(
+      400,
+      "bad_request",
+      "게이트웨이 티켓 소비 요청 본문이 올바르지 않습니다.",
+    );
   }
 
-  return parsed.value;
+  return parsed.data;
 }
 
 async function readOptionalJsonBody(request: Request): Promise<unknown> {

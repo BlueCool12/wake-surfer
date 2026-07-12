@@ -2,6 +2,11 @@
 export { createOAuthUsecases } from "./application/create-usecases";
 export type { OAuthUsecases } from "./application/create-usecases";
 export type { StartGithubLoginResult } from "./application/start-github-login.usecase";
+export type {
+  HandleGithubCallbackResult,
+  OAuthCallbackErrorCode,
+  OAuthProviderError,
+} from "./application/handle-github-callback.usecase";
 
 // 설정
 export { assertValidOAuthConfig, OAuthConfigError } from "./domain/oauth-config";

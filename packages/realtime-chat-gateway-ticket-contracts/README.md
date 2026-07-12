@@ -129,17 +129,16 @@ export type RealtimeChatErrorCode =
 HTTP 앱이나 외부 API 레이어가 오류 응답을 구성할 때 사용할 수 있는 코드다. 이 패키지는 오류 응답
 형태를 강제하지 않고 코드 집합만 제공한다.
 
-## 요청 본문 파서
+## 요청 본문 검증
 
-contracts 소비자는 schema를 직접 사용하거나 다음 파서 함수를 사용할 수 있다.
+contracts 소비자는 schema를 사용해 요청 본문을 검증한다.
 
 ```ts
-parseIssueGatewayTicketRequestBody(body);
-parseConsumeGatewayTicketRequestBody(body);
+const parsed = ConsumeGatewayTicketRequestBodySchema.safeParse(body);
 ```
 
-파서는 성공 시 contracts 타입에 맞는 값을 반환하고, 실패 시 외부 요청 본문이 계약에 맞지 않는다는
-결과를 반환한다. HTTP status code나 Hono middleware 구성은 API 앱 책임이다.
+이 패키지는 요청 본문의 유효한 모양만 정의한다. 본문 부재 처리, validation 실패 메시지, HTTP status
+code 매핑은 각 API 앱이 자기 라우트 흐름에 맞게 결정한다.
 
 ## 변경 기준
 

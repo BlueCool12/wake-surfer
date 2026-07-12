@@ -1,0 +1,81 @@
+import { describe, expect, it } from "vitest";
+
+import { parseGithubCallbackParams } from "../src/infrastructure/github/callback-params";
+
+describe("parseGithubCallbackParams", () => {
+  it("문자열 파라미터를 추출한다 (error_description은 camelCase로)", () => {
+    expect(
+      parseGithubCallbackParams({
+        code: "code-1",
+        state: "state-1",
+        error: "access_denied",
+        error_description: "The user has denied your application access.",
+      }),
+    ).toEqual({
+      code: "code-1",
+      state: "state-1",
+      error: "access_denied",
+      errorDescription: "The user has denied your application access.",
+    });
+  });
+
+  it("없는 키는 결과에 포함하지 않는다", () => {
+    expect(parseGithubCallbackParams({ code: "code-1" })).toEqual({ code: "code-1" });
+    expect(parseGithubCallbackParams({})).toEqual({});
+  });
+
+  it("중복 파라미터(배열)는 없는 것으로 취급한다 (parameter pollution 방어)", () => {
+    expect(parseGithubCallbackParams({ state: ["a", "b"], code: "code-1" })).toEqual({
+      code: "code-1",
+    });
+  });
+
+  it("비문자열/빈 문자열 값은 없는 것으로 취급한다", () => {
+    expect(
+      parseGithubCallbackParams({ code: 123, state: "", error: null, error_description: {} }),
+    ).toEqual({});
+  });
+
+  it("관심 없는 쿼리 키는 무시한다", () => {
+    expect(parseGithubCallbackParams({ state: "s", utm_source: "x" })).toEqual({ state: "s" });
+  });
+
+  it("OAuth 토큰 형식이 아닌 error는 없는 것으로 취급한다 (조작된 입력 방어)", () => {
+    expect(parseGithubCallbackParams({ error: "<script>alert(1)</script>" })).toEqual({});
+    expect(parseGithubCallbackParams({ error: "Access Denied!" })).toEqual({});
+    expect(parseGithubCallbackParams({ error: "a".repeat(65) })).toEqual({});
+  });
+
+  it("HTML 위험 문자가 포함된 error_description은 제거하고 error는 유지한다", () => {
+    expect(
+      parseGithubCallbackParams({
+        error: "access_denied",
+        error_description: "<img src=x onerror=alert(1)>",
+      }),
+    ).toEqual({ error: "access_denied" });
+  });
+
+  it("256자를 넘거나 비ASCII인 error_description은 없는 것으로 취급한다", () => {
+    expect(
+      parseGithubCallbackParams({ error: "server_error", error_description: "x".repeat(257) }),
+    ).toEqual({ error: "server_error" });
+    expect(
+      parseGithubCallbackParams({
+        error: "server_error",
+        error_description: "한글 설명은 비ASCII",
+      }),
+    ).toEqual({ error: "server_error" });
+  });
+
+  it("정상적인 GitHub error/description은 통과한다", () => {
+    expect(
+      parseGithubCallbackParams({
+        error: "redirect_uri_mismatch",
+        error_description: "The redirect_uri MUST match the registered callback URL.",
+      }),
+    ).toEqual({
+      error: "redirect_uri_mismatch",
+      errorDescription: "The redirect_uri MUST match the registered callback URL.",
+    });
+  });
+});
