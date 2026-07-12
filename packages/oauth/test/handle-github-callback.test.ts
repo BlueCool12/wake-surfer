@@ -79,11 +79,11 @@ describe("handleGithubCallback", () => {
     expect(verifiedWith).toEqual([""]); // 소비 목적 호출
   });
 
-  it("state가 없으면 MISSING_STATE로 거부한다", async () => {
+  it("state가 없으면 MISSING_STATE로 거부하고, 쿠키는 소비한다 (전 경로 일관)", async () => {
     const { store, verifiedWith } = fakeStore(true);
     const result = await handleGithubCallback({ query: { code: "code-1" }, stateStore: store });
     expect(result).toEqual({ status: "rejected", reason: "MISSING_STATE" });
-    expect(verifiedWith).toEqual([]); // 검증 시도 자체가 없음
+    expect(verifiedWith).toEqual([""]); // 소비 목적 호출
   });
 
   it("중복 state 파라미터(배열)는 MISSING_STATE로 거부한다", async () => {

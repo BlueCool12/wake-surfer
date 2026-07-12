@@ -40,7 +40,7 @@ export type HandleGithubCallbackInput = {
 /**
  * OAuth 콜백 처리 유스케이스.
  *
- * 흐름: error 분기 → state 존재 확인 → verify(소비 포함) → code 존재 확인 → ok.
+ * 흐름: state 소비 → error 분기 → state 존재 확인 → 검증 결과 확인 → code 존재 확인 → ok.
  * 예상 가능한 실패는 전부 결과 유니언으로 반환하며 예외를 던지지 않는다.
  * HTTP 상태코드·사용자 문구 매핑은 이 함수를 호출하는 apps의 책임이다.
  */
@@ -49,10 +49,10 @@ export async function handleGithubCallback(
 ): Promise<HandleGithubCallbackResult> {
   const params = parseGithubCallbackParams(input.query);
 
+  // 콜백에 도달한 시도의 state는 결과와 무관하게 항상 소진한다.
+  const verified = await input.stateStore.verify(params.state ?? "");
+
   if (params.error !== undefined) {
-    // 실패한 시도의 state 쿠키가 브라우저에 남지 않도록 소비만 한다. (verify의
-    // "호출 시 무조건 소비" 계약을 재사용 — 검증 결과 자체는 의미 없으므로 무시)
-    await input.stateStore.verify(params.state ?? "");
     return {
       status: "rejected",
       reason: params.error === "access_denied" ? "ACCESS_DENIED" : "PROVIDER_ERROR",
@@ -69,7 +69,6 @@ export async function handleGithubCallback(
     return { status: "rejected", reason: "MISSING_STATE" };
   }
 
-  const verified = await input.stateStore.verify(params.state);
   if (!verified) {
     return { status: "rejected", reason: "STATE_MISMATCH" };
   }
