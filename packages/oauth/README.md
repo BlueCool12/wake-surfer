@@ -13,8 +13,8 @@ import { createOAuthUsecases, createCookieStateStore } from "@wake-surfer/oauth"
 
 GitHub OAuth 전체 플로우를 아래 단계로 나눠 완성합니다. 단계는 기능 단위이며, 이슈/PR은 인접 단계를 묶을 수 있습니다. (예: 3·4단계 → 하나의 PR) 각 단계의 구현 상세는 해당 PR이 올라올 때 아래 [단계별 상세](#단계별-상세)에 덧붙입니다.
 
-- [x] **1. 로그인 진입점** — CSRF state 발급/저장 + GitHub authorize URL 생성 (이슈 #5)
-- [x] **2. 콜백 & code 수신** — 콜백 처리 + state 검증 배선 + 인증 거부/에러 분기 (이슈 #27)
+- [x] **1. 로그인 진입점** — CSRF state 발급/저장 + GitHub authorize URL 생성
+- [x] **2. 콜백 & code 수신** — 콜백 처리 + state 검증 배선 + 인증 거부/에러 분기
 - [x] **3. access token 교환** — authorization code → GitHub access token
 - [x] **4. GitHub 사용자 정보 조회** — access token으로 사용자(id·email 등) 조회
 - [ ] **5. 사용자 계정 생성/조회** — GitHub 사용자 → 우리 DB 사용자 매핑 (이메일 충돌 정책 포함)
@@ -61,7 +61,7 @@ src/
 
 ## 단계별 상세
 
-### 1. 로그인 진입점 (이슈 #5)
+### 1. 로그인 진입점
 
 "GitHub로 로그인" 버튼을 눌렀을 때 사용자를 GitHub 인증 페이지로 보내기까지를 담당합니다.
 
@@ -98,7 +98,7 @@ const { authorizeUrl } = await oauth.startGithubLogin(stateStore);
 // 3) 반환된 authorizeUrl로 302 리다이렉트
 ```
 
-### 2. 콜백 & code 수신 (이슈 #27)
+### 2. 콜백 & code 수신
 
 GitHub 인증 후 콜백으로 돌아온 요청을 검증하고, 다음 단계(토큰 교환)의 입력인 code를 확보합니다.
 

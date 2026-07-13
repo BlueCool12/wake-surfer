@@ -35,7 +35,6 @@ function githubHeaders(accessToken: string): Record<string, string> {
  *
  * 프로필 이메일이 비공개(null)면 /user/emails에서 primary·verified 이메일을 찾고,
  * 끝내 없으면 EMAIL_UNAVAILABLE로 거부한다.
- * 네트워크·타임아웃 예외(응답 자체가 안 옴)는 그대로 전파한다.
  */
 export async function fetchGithubUser(input: FetchGithubUserInput): Promise<FetchGithubUserResult> {
   const doFetch = input.fetch ?? globalThis.fetch;

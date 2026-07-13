@@ -28,7 +28,6 @@ export type ExchangeCodeResult =
  *
  * GitHub은 잘못된 code에도 HTTP 200 + body의 error로 응답하므로,
  * 상태코드가 아니라 body의 access_token/error 유무로 판정한다.
- * 네트워크·타임아웃 예외(응답 자체가 안 옴)는 그대로 전파한다.
  */
 export async function exchangeCode(input: ExchangeCodeInput): Promise<ExchangeCodeResult> {
   assertValidOAuthConfig(input.config);
