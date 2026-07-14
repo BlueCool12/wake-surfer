@@ -18,12 +18,22 @@ export type RealtimeChatApiConfig = {
     idleTimeoutMillis: number;
     max: number;
     maxLifetimeSeconds: number;
+    statementTimeoutMillis: number;
   };
   requestBodyLimitBytes: number;
   shutdownGraceMilliseconds: number;
 };
 
 export function loadEnv(env: NodeJS.ProcessEnv = process.env): RealtimeChatApiConfig {
+  const handlerTimeoutMilliseconds = readInteger(env, "REALTIME_CHAT_HANDLER_TIMEOUT_MS", 5_000, {
+    min: 1,
+  });
+  const statementTimeoutMillis = readInteger(
+    env,
+    "REALTIME_CHAT_POSTGRES_STATEMENT_TIMEOUT_MS",
+    2_000,
+    { min: 1 },
+  );
   const config: RealtimeChatApiConfig = {
     actorIdHeader: readOptionalString(env, "REALTIME_CHAT_ACTOR_ID_HEADER", "x-actor-id"),
     corsOrigins: readCsv(env, "REALTIME_CHAT_CORS_ORIGINS"),
@@ -37,9 +47,7 @@ export function loadEnv(env: NodeJS.ProcessEnv = process.env): RealtimeChatApiCo
       min: 1_000,
     }),
     gatewayUrl: readRequiredString(env, "REALTIME_CHAT_GATEWAY_URL"),
-    handlerTimeoutMilliseconds: readInteger(env, "REALTIME_CHAT_HANDLER_TIMEOUT_MS", 5_000, {
-      min: 1,
-    }),
+    handlerTimeoutMilliseconds,
     httpHeadersTimeoutMilliseconds: readInteger(
       env,
       "REALTIME_CHAT_HTTP_HEADERS_TIMEOUT_MS",
@@ -81,6 +89,7 @@ export function loadEnv(env: NodeJS.ProcessEnv = process.env): RealtimeChatApiCo
       maxLifetimeSeconds: readInteger(env, "REALTIME_CHAT_POSTGRES_MAX_LIFETIME_SECONDS", 300, {
         min: 1,
       }),
+      statementTimeoutMillis,
     },
     requestBodyLimitBytes: readInteger(env, "REALTIME_CHAT_REQUEST_BODY_LIMIT_BYTES", 16_384, {
       min: 1,
@@ -93,6 +102,15 @@ export function loadEnv(env: NodeJS.ProcessEnv = process.env): RealtimeChatApiCo
   if (config.handlerTimeoutMilliseconds >= config.httpRequestTimeoutMilliseconds) {
     throw new Error(
       "REALTIME_CHAT_HANDLER_TIMEOUT_MS must be less than REALTIME_CHAT_HTTP_REQUEST_TIMEOUT_MS",
+    );
+  }
+
+  if (
+    config.postgresPool.connectionTimeoutMillis + config.postgresPool.statementTimeoutMillis >=
+    config.handlerTimeoutMilliseconds
+  ) {
+    throw new Error(
+      "REALTIME_CHAT_POSTGRES_CONNECTION_TIMEOUT_MS and REALTIME_CHAT_POSTGRES_STATEMENT_TIMEOUT_MS must leave time before REALTIME_CHAT_HANDLER_TIMEOUT_MS",
     );
   }
 

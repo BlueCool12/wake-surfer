@@ -24,6 +24,8 @@
   인터넷 클라이언트가 직접 지정할 수 있도록 노출하면 안 된다.
 - JSON 요청 크기는 `REALTIME_CHAT_REQUEST_BODY_LIMIT_BYTES`로 제한하며 초과 시 `413`을 반환한다.
 - handler 시간 제한을 넘으면 `504`와 `gateway_ticket_unavailable` 오류 코드를 반환한다.
+- 상태 변경 SQL은 handler 제한 시간보다 짧은 PostgreSQL 연결 획득·statement timeout을 사용한다. API는
+  handler 제한 시간에서 두 DB 제한 시간을 뺀 시점부터 새로운 ticket 저장·소비 SQL을 시작하지 않는다.
 
 ## 공통 헤더
 
@@ -48,7 +50,9 @@ drain하고, `REALTIME_CHAT_SHUTDOWN_GRACE_MS`를 넘으면 남은 연결을 강
 | `REALTIME_CHAT_HTTP_HEADERS_TIMEOUT_MS` | `5000` | HTTP 헤더 수신 제한 시간 |
 | `REALTIME_CHAT_HTTP_KEEP_ALIVE_TIMEOUT_MS` | `5000` | 유휴 keep-alive 제한 시간 |
 | `REALTIME_CHAT_HTTP_REQUEST_TIMEOUT_MS` | `10000` | Node HTTP 요청 제한 시간 |
+| `REALTIME_CHAT_POSTGRES_CONNECTION_TIMEOUT_MS` | `2000` | DB 연결 획득 제한 시간 |
+| `REALTIME_CHAT_POSTGRES_STATEMENT_TIMEOUT_MS` | `2000` | 상태 변경 SQL 제한 시간 |
 | `REALTIME_CHAT_SHUTDOWN_GRACE_MS` | `10000` | 종료 drain 유예 시간 |
 
 handler 제한 시간은 HTTP 요청 제한 시간보다 짧아야 하고, 헤더 제한 시간은 HTTP 요청 제한 시간을
-넘을 수 없다.
+넘을 수 없다. PostgreSQL 연결 획득과 statement 제한 시간의 합은 handler 제한 시간보다 짧아야 한다.

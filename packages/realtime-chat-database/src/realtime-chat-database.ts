@@ -13,6 +13,7 @@ export type RealtimeChatDatabasePoolConfig = {
   maxLifetimeSeconds?: number;
   maxUses?: number;
   allowExitOnIdle?: boolean;
+  statementTimeoutMillis?: number;
 };
 
 export type CreateRealtimeChatDatabaseConfig = {
@@ -30,12 +31,14 @@ export function createRealtimeChatDatabase(
   config: CreateRealtimeChatDatabaseConfig,
 ): RealtimeChatDatabaseHandle {
   assertDatabaseUrl(config.databaseUrl);
+  const { statementTimeoutMillis, ...poolConfig } = config.pool ?? {};
 
   const db = new Kysely<RealtimeChatDatabase>({
     dialect: new PostgresDialect({
       pool: new Pool({
         connectionString: config.databaseUrl,
-        ...config.pool,
+        ...poolConfig,
+        statement_timeout: statementTimeoutMillis,
       }),
     }),
   });

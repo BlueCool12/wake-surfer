@@ -9,6 +9,10 @@ const app = createRealtimeChatApiApp(runtime.appDeps, {
   corsOrigins: runtime.config.corsOrigins,
   handlerTimeoutMilliseconds: runtime.config.handlerTimeoutMilliseconds,
   isDraining: () => isShuttingDown,
+  operationAbortMilliseconds:
+    runtime.config.handlerTimeoutMilliseconds -
+    runtime.config.postgresPool.connectionTimeoutMillis -
+    runtime.config.postgresPool.statementTimeoutMillis,
   requestBodyLimitBytes: runtime.config.requestBodyLimitBytes,
 });
 

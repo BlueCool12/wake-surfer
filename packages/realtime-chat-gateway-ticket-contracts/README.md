@@ -115,6 +115,10 @@ export type ConsumeGatewayTicketResponse =
 실패하면 세부 원인을 외부에 노출하지 않고 `invalid_or_expired` 하나로 접는다. 티켓 부재, 만료, 재사용,
 게이트웨이 불일치는 모두 같은 외부 응답이다.
 
+`ConsumeGatewayTicketResponseSchema`는 서버 간 HTTP 경계에서 이 응답을 검증한다. 성공 응답의
+`actorId`는 비어 있을 수 없고 `consumedAt`은 ISO datetime이어야 하며, 거절 응답은
+`invalid_or_expired`만 허용한다.
+
 ## 에러 코드
 
 ```ts

@@ -28,7 +28,7 @@ export function loadEnv(env: NodeJS.ProcessEnv = process.env): RealtimeChatGatew
       "REALTIME_CHAT_API_GATEWAY_ID_HEADER",
       "x-gateway-id",
     ).toLowerCase(),
-    apiRequestTimeoutMilliseconds: readInteger(env, "REALTIME_CHAT_API_REQUEST_TIMEOUT_MS", 3_000, {
+    apiRequestTimeoutMilliseconds: readInteger(env, "REALTIME_CHAT_API_REQUEST_TIMEOUT_MS", 6_000, {
       min: 1,
     }),
     gatewayId: readRequiredString(env, "REALTIME_CHAT_GATEWAY_ID"),

@@ -17,6 +17,7 @@ import type {
   TicketHasher,
 } from "../../gateway-ticket";
 import type { GatewayTicketDatabase } from "../../gateway-ticket-table";
+import { throwIfGatewayTicketOperationAborted } from "../../operation-context";
 import { saveIssuedGatewayTicket } from "./issue-gateway-ticket.kysely";
 
 export type IssueGatewayTicketCommand = {
@@ -33,6 +34,7 @@ export type IssueGatewayTicketDeps = {
   assignGateway: GatewayAssigner;
   ticketPolicy: GatewayTicketPolicy;
   rawTicketGenerator?: RawGatewayTicketGenerator;
+  signal?: AbortSignal;
   ticketHasher?: TicketHasher;
 };
 
@@ -55,6 +57,7 @@ export async function issueGatewayTicket(
   deps: IssueGatewayTicketDeps,
 ): Promise<IssueGatewayTicketResponse> {
   assertActorId(command.actorId);
+  throwIfGatewayTicketOperationAborted(deps.signal);
 
   const policy = deps.ticketPolicy;
   const now = deps.now();
@@ -62,12 +65,14 @@ export async function issueGatewayTicket(
   const assignment = await deps.assignGateway({
     actorId: command.actorId,
   });
+  throwIfGatewayTicketOperationAborted(deps.signal);
   assertGatewayAssignment(assignment);
 
   const rawTicketGenerator = deps.rawTicketGenerator ?? defaultRawGatewayTicketGenerator;
   const ticketHasher = deps.ticketHasher ?? defaultTicketHasher;
   const ticket = rawTicketGenerator.generate(policy.rawTicketBytes);
   const ticketHash = await ticketHasher.hash(ticket);
+  throwIfGatewayTicketOperationAborted(deps.signal);
 
   await saveIssuedGatewayTicket(deps.db, {
     ticketHash,

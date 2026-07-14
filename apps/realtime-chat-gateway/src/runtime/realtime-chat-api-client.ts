@@ -1,13 +1,7 @@
-import type { ConsumeGatewayTicketResponse } from "@wake-surfer/realtime-chat-gateway-ticket-contracts";
+import { ConsumeGatewayTicketResponseSchema } from "@wake-surfer/realtime-chat-gateway-ticket-contracts";
+import type { GatewayTicketConsumer } from "../ports/gateway-ticket-consumer.js";
 
-export type GatewayTicketApiClient = {
-  consumeGatewayTicket: (request: {
-    gatewayId: string;
-    requestId: string;
-    signal: AbortSignal;
-    ticket: string;
-  }) => Promise<ConsumeGatewayTicketResponse>;
-};
+export type GatewayTicketApiClient = GatewayTicketConsumer;
 
 export type CreateGatewayTicketApiClientConfig = {
   apiBaseUrl: string;
@@ -40,31 +34,13 @@ export function createGatewayTicketApiClient(
         );
       }
 
-      if (!isConsumeGatewayTicketResponse(body)) {
+      const parsed = ConsumeGatewayTicketResponseSchema.safeParse(body);
+
+      if (!parsed.success) {
         throw new Error("게이트웨이 티켓 소비 응답 형식이 올바르지 않습니다");
       }
 
-      return body;
+      return parsed.data;
     },
   };
-}
-
-function isConsumeGatewayTicketResponse(value: unknown): value is ConsumeGatewayTicketResponse {
-  if (!isRecord(value) || typeof value.status !== "string") {
-    return false;
-  }
-
-  if (value.status === "rejected") {
-    return value.reason === "invalid_or_expired";
-  }
-
-  if (value.status !== "consumed" || !isRecord(value.ticket)) {
-    return false;
-  }
-
-  return typeof value.ticket.actorId === "string" && typeof value.ticket.consumedAt === "string";
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }

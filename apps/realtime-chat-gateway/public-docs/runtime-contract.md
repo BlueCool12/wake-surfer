@@ -44,12 +44,15 @@ heartbeat에 응답하지 않는 연결은 정상 close handshake를 기다리�
 | `REALTIME_CHAT_GATEWAY_MAX_CONNECTIONS` | `10000` | 프로세스 전체 연결 상한 |
 | `REALTIME_CHAT_GATEWAY_MAX_PENDING_AUTHENTICATIONS` | `256` | 동시 ticket 인증 대기 상한 |
 | `REALTIME_CHAT_GATEWAY_HEARTBEAT_INTERVAL_MS` | `30000` | ping 주기 |
-| `REALTIME_CHAT_API_REQUEST_TIMEOUT_MS` | `3000` | ticket consume 제한 시간 |
+| `REALTIME_CHAT_API_REQUEST_TIMEOUT_MS` | `6000` | ticket consume 제한 시간 |
 | `REALTIME_CHAT_GATEWAY_SHUTDOWN_GRACE_MS` | `10000` | 종료 drain 유예 시간 |
 
 Node HTTP 헤더, 요청, keep-alive 제한은 각각
 `REALTIME_CHAT_GATEWAY_HTTP_HEADERS_TIMEOUT_MS`, `REALTIME_CHAT_GATEWAY_HTTP_REQUEST_TIMEOUT_MS`,
 `REALTIME_CHAT_GATEWAY_HTTP_KEEP_ALIVE_TIMEOUT_MS`로 설정한다.
+
+Gateway의 API 요청 제한 시간은 API 서버의 handler 제한 시간보다 길게 설정해야 한다. API가 ticket 소비의
+성공 또는 실패를 확정하기 전에 Gateway가 연결을 닫지 않도록 기본값은 API handler 기본값보다 1초 길다.
 
 ## 현재 범위
 

@@ -64,6 +64,7 @@ src/
 - `GatewayAssigner`
 - `GatewayAssignment`
 - `IssueGatewayTicketCommand`
+- `GatewayTicketOperationContext`
 - `createStaticGatewayAssigner`
 
 요청/응답 계약 타입은 `@wake-surfer/realtime-chat-gateway-ticket-contracts`에서 가져온다.
@@ -157,6 +158,11 @@ await database.close();
 
 앱은 저장 함수를 만들거나 주입하지 않는다. 이 모듈은 전달받은 Kysely DB 핸들로 자기 쿼리를 실행한다.
 PostgreSQL 연결 풀과 Kysely 인스턴스 생명주기는 `@wake-surfer/realtime-chat-database`가 소유한다.
+
+앱이 요청 deadline을 소유하는 경우 `issue`와 `consume`의 마지막 인자로
+`GatewayTicketOperationContext`를 전달할 수 있다. 패키지는 gateway 할당과 해시 계산 뒤, 상태 변경 SQL을
+시작하기 직전에 `signal`을 다시 확인한다. 이미 중단된 요청은 새로운 티켓 저장이나 소비 쿼리를 시작하지
+않는다.
 
 ## 정책
 

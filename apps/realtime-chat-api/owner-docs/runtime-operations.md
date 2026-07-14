@@ -31,8 +31,11 @@ request ID
 - Hono handler timeout은 클라이언트 응답 시간을 제한한다.
 - Node HTTP timeout은 느린 헤더와 오래 열린 HTTP 연결을 제한한다.
 - PostgreSQL connection timeout은 연결 획득 시간을 제한한다.
-- DB statement timeout은 아직 별도 후속 작업이다. handler timeout만으로 진행 중인 DB 쿼리가 자동
-  취소된다고 가정하지 않는다.
+- 상태 변경 허용 시간은 handler timeout에서 PostgreSQL 연결 획득 timeout과 statement timeout을 뺀
+  값이다. 이 시점에 operation `AbortSignal`을 중단하고 gateway-ticket 패키지는 SQL 시작 직전에 신호를
+  다시 확인한다.
+- PostgreSQL statement timeout은 이미 실행 중인 SQL이 최종 handler timeout 뒤까지 남지 않도록
+  제한한다. handler timeout만으로 진행 중인 DB 쿼리가 취소된다고 가정하지 않는다.
 
 ## 상태 확인과 종료
 
@@ -51,6 +54,5 @@ request ID
 ## 후속 작업
 
 - 다중 인스턴스 분산 rate limit
-- DB statement timeout과 요청 취소 전파
 - metric backend와 tracing exporter
 - 최종 actor 및 gateway 서비스 인증

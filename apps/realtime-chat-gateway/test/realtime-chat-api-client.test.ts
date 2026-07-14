@@ -43,4 +43,32 @@ describe("realtime chat API client", () => {
       }),
     );
   });
+
+  it("rejects a semantically invalid consumed response", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        Response.json({
+          status: "consumed",
+          ticket: {
+            actorId: " ",
+            consumedAt: "not-a-date",
+          },
+        }),
+      ),
+    );
+    const client = createGatewayTicketApiClient({
+      apiBaseUrl: "http://127.0.0.1:3000",
+      gatewayIdHeader: "x-gateway-id",
+    });
+
+    await expect(
+      client.consumeGatewayTicket({
+        gatewayId: "gateway-1",
+        requestId: "gateway-request_1",
+        signal: new AbortController().signal,
+        ticket: "ticket-1",
+      }),
+    ).rejects.toThrow("응답 형식");
+  });
 });

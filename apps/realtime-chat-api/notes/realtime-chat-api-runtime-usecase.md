@@ -144,5 +144,4 @@ sequenceDiagram
 * 최종 actor JWT/JWKS 검증과 actor mapping 방식
 * mTLS 또는 서명된 서비스 토큰 기반 gateway 인증
 * 다중 API 인스턴스에서 공유하는 분산 rate limit
-* DB statement timeout과 취소 신호 전파
 * metric backend와 tracing exporter

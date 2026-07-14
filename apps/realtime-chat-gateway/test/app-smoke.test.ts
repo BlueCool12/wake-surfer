@@ -116,6 +116,39 @@ describe("실시간 채팅 게이트웨이 앱", () => {
     }
   });
 
+  it("예상하지 못한 인증 처리 예외를 기록하고 소켓을 안전하게 닫는다", async () => {
+    const logger = {
+      error: vi.fn(),
+      info: vi.fn(),
+      warn: vi.fn(),
+    };
+    const app = createRealtimeChatGatewayApp(
+      testConfig(),
+      createDeps({
+        gatewayTicketConsumer: {
+          consumeGatewayTicket: vi.fn(async () => undefined as never),
+        },
+        logger,
+      }),
+    );
+
+    await app.listen({ host: "127.0.0.1", port: 0 });
+    const socket = new WebSocket(`ws://127.0.0.1:${portOf(app.address())}/realtime-chat?ticket=t1`);
+
+    try {
+      await expect(nextClose(socket)).resolves.toMatchObject({ code: 1011 });
+      expect(logger.error).toHaveBeenCalledWith(
+        expect.objectContaining({
+          error: expect.any(Object),
+          requestId: expect.stringMatching(/^gateway-request_/),
+        }),
+        "실시간 채팅 게이트웨이 연결 인증 처리 실패",
+      );
+    } finally {
+      await app.close();
+    }
+  });
+
   it("허용되지 않은 Origin의 upgrade를 거절한다", async () => {
     const app = createRealtimeChatGatewayApp(
       testConfig({ allowedOrigins: ["https://web.example.com"] }),

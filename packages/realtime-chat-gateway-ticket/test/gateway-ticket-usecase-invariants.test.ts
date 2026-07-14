@@ -108,4 +108,52 @@ describe("gateway ticket usecase invariants", () => {
       reason: "invalid_or_expired",
     });
   });
+
+  it("does not start ticket persistence after the operation is aborted", async () => {
+    const abortController = new AbortController();
+
+    await expect(
+      issueGatewayTicket(
+        {
+          actorId: "actor-1",
+        },
+        {
+          ...issueDeps,
+          assignGateway: () => {
+            abortController.abort(new Error("request deadline exceeded"));
+            return {
+              gatewayId: "gateway-a",
+              gatewayUrl: "wss://gateway.example.com/realtime-chat",
+            };
+          },
+          signal: abortController.signal,
+        },
+      ),
+    ).rejects.toThrow("request deadline exceeded");
+  });
+
+  it("does not start ticket consumption after the operation is aborted", async () => {
+    const abortController = new AbortController();
+
+    await expect(
+      consumeGatewayTicket(
+        {
+          ticket: "gt_ticket",
+        },
+        {
+          gatewayId: "gateway-a",
+        },
+        {
+          ...consumeDeps,
+          signal: abortController.signal,
+          ticketHasher: {
+            hash: async () => {
+              abortController.abort(new Error("request deadline exceeded"));
+              return "sha256:ticket";
+            },
+          },
+        },
+      ),
+    ).rejects.toThrow("request deadline exceeded");
+  });
 });

@@ -13,6 +13,7 @@ import type {
   IssueGatewayTicketCommand,
 } from "./usecases/issue-gateway-ticket/issue-gateway-ticket.usecase";
 import { issueGatewayTicket } from "./usecases/issue-gateway-ticket/issue-gateway-ticket.usecase";
+import type { GatewayTicketOperationContext } from "./operation-context";
 
 export type CreateGatewayTicketModuleConfig<
   DB extends GatewayTicketDatabase = GatewayTicketDatabase,
@@ -24,10 +25,14 @@ export type CreateGatewayTicketModuleConfig<
 };
 
 export type GatewayTicketModule = {
-  issue: (command: IssueGatewayTicketCommand) => Promise<IssueGatewayTicketResponse>;
+  issue: (
+    command: IssueGatewayTicketCommand,
+    operationContext?: GatewayTicketOperationContext,
+  ) => Promise<IssueGatewayTicketResponse>;
   consume: (
     command: ConsumeGatewayTicketRequest,
     context: ConsumeGatewayTicketContext,
+    operationContext?: GatewayTicketOperationContext,
   ) => Promise<ConsumeGatewayTicketResponse>;
 };
 
@@ -41,18 +46,20 @@ export function createGatewayTicketModule<DB extends GatewayTicketDatabase = Gat
   const db = config.db as Kysely<GatewayTicketDatabase>;
 
   return {
-    issue(command) {
+    issue(command, operationContext) {
       return issueGatewayTicket(command, {
         db,
         now: createNow,
         assignGateway: config.assignGateway,
         ticketPolicy,
+        ...(operationContext?.signal ? { signal: operationContext.signal } : {}),
       });
     },
-    consume(command, context) {
+    consume(command, context, operationContext) {
       return consumeGatewayTicket(command, context, {
         db,
         now: createNow,
+        ...(operationContext?.signal ? { signal: operationContext.signal } : {}),
       });
     },
   };

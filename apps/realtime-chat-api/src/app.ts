@@ -7,7 +7,7 @@ import type { RequestIdVariables } from "hono/request-id";
 import { secureHeaders } from "hono/secure-headers";
 import { timeout } from "hono/timeout";
 
-import type { ApiErrorResponse } from "@wake-surfer/api-contracts";
+import type { GatewayTicketOperationContext } from "@wake-surfer/realtime-chat-gateway-ticket";
 import {
   ConsumeGatewayTicketRequestBodySchema,
   IssueGatewayTicketRequestBodySchema,
@@ -16,8 +16,18 @@ import type {
   ConsumeGatewayTicketRequest,
   ConsumeGatewayTicketResponse,
   IssueGatewayTicketResponse,
-  RealtimeChatErrorCode,
 } from "@wake-surfer/realtime-chat-gateway-ticket-contracts";
+
+import {
+  createAppHttpError,
+  createGatewayTicketErrorResponse,
+  isAppHttpError,
+  isRequestDeadlineExceededError,
+} from "./http/errors.js";
+import {
+  gatewayTicketOperationDeadline,
+  type GatewayTicketDeadlineVariables,
+} from "./http/gateway-ticket-deadline.js";
 
 export type AppLogger = {
   error: (context: Record<string, unknown>, message: string) => void;
@@ -29,8 +39,12 @@ export type GatewayTicketService = {
   consume: (
     request: ConsumeGatewayTicketRequest,
     context: { gatewayId: string },
+    operationContext: GatewayTicketOperationContext,
   ) => Promise<ConsumeGatewayTicketResponse>;
-  issue: (command: { actorId: string }) => Promise<IssueGatewayTicketResponse>;
+  issue: (
+    command: { actorId: string },
+    operationContext: GatewayTicketOperationContext,
+  ) => Promise<IssueGatewayTicketResponse>;
 };
 
 export type AuthenticatedActor = {
@@ -53,37 +67,15 @@ export type RealtimeChatApiAppOptions = {
   corsOrigins: string[];
   handlerTimeoutMilliseconds: number;
   isDraining: () => boolean;
+  operationAbortMilliseconds: number;
   requestBodyLimitBytes: number;
 };
-
-type GatewayTicketErrorResponse = ApiErrorResponse<RealtimeChatErrorCode>;
-
-export type AppHttpError = Error & {
-  readonly kind: "app_http_error";
-  readonly code: RealtimeChatErrorCode;
-  readonly statusCode: 400 | 401 | 403;
-};
-
-export function createAppHttpError(
-  statusCode: AppHttpError["statusCode"],
-  code: RealtimeChatErrorCode,
-  message: string,
-): AppHttpError {
-  return Object.assign(new Error(message), {
-    code,
-    kind: "app_http_error" as const,
-    statusCode,
-  });
-}
-
-function isAppHttpError(error: unknown): error is AppHttpError {
-  return error instanceof Error && "kind" in error && error.kind === "app_http_error";
-}
 
 const defaultOptions: RealtimeChatApiAppOptions = {
   corsOrigins: [],
   handlerTimeoutMilliseconds: 5_000,
   isDraining: () => false,
+  operationAbortMilliseconds: 3_000,
   requestBodyLimitBytes: 16_384,
 };
 
@@ -96,7 +88,9 @@ export function createRealtimeChatApiApp(
     ...defaultOptions,
     ...options,
   };
-  const app = new Hono<{ Variables: RequestIdVariables }>();
+  const app = new Hono<{
+    Variables: RequestIdVariables & GatewayTicketDeadlineVariables;
+  }>();
 
   app.use("*", requestId({ limitLength: 128 }));
   app.use("*", secureHeaders());
@@ -135,11 +129,7 @@ export function createRealtimeChatApiApp(
     maxSize: runtimeOptions.requestBodyLimitBytes,
     onError: (context) =>
       context.json(
-        {
-          code: "bad_request",
-          message: "request body is too large",
-          status: "error",
-        } satisfies GatewayTicketErrorResponse,
+        createGatewayTicketErrorResponse("bad_request", "request body is too large"),
         413,
       ),
   });
@@ -148,14 +138,16 @@ export function createRealtimeChatApiApp(
     () =>
       new HTTPException(504, {
         res: Response.json(
-          {
-            code: "gateway_ticket_unavailable",
-            message: "gateway ticket request timed out",
-            status: "error",
-          } satisfies GatewayTicketErrorResponse,
+          createGatewayTicketErrorResponse(
+            "gateway_ticket_unavailable",
+            "gateway ticket request timed out",
+          ),
           { status: 504 },
         ),
       }),
+  );
+  const operationDeadline = gatewayTicketOperationDeadline(
+    runtimeOptions.operationAbortMilliseconds,
   );
 
   app.get("/health", (context) => context.json({ status: "ok" as const }));
@@ -180,21 +172,33 @@ export function createRealtimeChatApiApp(
     }
   });
 
-  app.post("/realtime-chat/gateway-tickets", limitedJsonBody, boundedHandler, async (context) => {
-    const actor = await authenticateActor(context.req.raw);
-    await readIssueGatewayTicketRequest(context.req.raw);
+  app.post(
+    "/realtime-chat/gateway-tickets",
+    limitedJsonBody,
+    boundedHandler,
+    operationDeadline,
+    async (context) => {
+      const actor = await authenticateActor(context.req.raw);
+      await readIssueGatewayTicketRequest(context.req.raw);
 
-    const issued = await gatewayTicket.issue({
-      actorId: actor.actorId,
-    });
+      const issued = await gatewayTicket.issue(
+        {
+          actorId: actor.actorId,
+        },
+        {
+          signal: context.get("gatewayTicketOperationSignal"),
+        },
+      );
 
-    return context.json(issued, 201);
-  });
+      return context.json(issued, 201);
+    },
+  );
 
   app.post(
     "/internal/realtime-chat/gateway-tickets/consume",
     limitedJsonBody,
     boundedHandler,
+    operationDeadline,
     async (context) => {
       const [gateway, body] = await Promise.all([
         authenticateGateway(context.req.raw),
@@ -208,6 +212,9 @@ export function createRealtimeChatApiApp(
         {
           gatewayId: gateway.gatewayId,
         },
+        {
+          signal: context.get("gatewayTicketOperationSignal"),
+        },
       );
 
       return context.json(result);
@@ -215,25 +222,24 @@ export function createRealtimeChatApiApp(
   );
 
   app.notFound((context) =>
-    context.json(
-      {
-        code: "bad_request",
-        message: "route not found",
-        status: "error",
-      } satisfies GatewayTicketErrorResponse,
-      404,
-    ),
+    context.json(createGatewayTicketErrorResponse("bad_request", "route not found"), 404),
   );
 
   app.onError((error, context) => {
     if (isAppHttpError(error)) {
       return context.json(
-        {
-          code: error.code,
-          message: error.message,
-          status: "error",
-        } satisfies GatewayTicketErrorResponse,
+        createGatewayTicketErrorResponse(error.code, error.message),
         error.statusCode,
+      );
+    }
+
+    if (isRequestDeadlineExceededError(error)) {
+      return context.json(
+        createGatewayTicketErrorResponse(
+          "gateway_ticket_unavailable",
+          "gateway ticket request timed out",
+        ),
+        504,
       );
     }
 
@@ -252,11 +258,10 @@ export function createRealtimeChatApiApp(
     );
 
     return context.json(
-      {
-        code: "gateway_ticket_unavailable",
-        message: "gateway ticket service unavailable",
-        status: "error",
-      } satisfies GatewayTicketErrorResponse,
+      createGatewayTicketErrorResponse(
+        "gateway_ticket_unavailable",
+        "gateway ticket service unavailable",
+      ),
       500,
     );
   });

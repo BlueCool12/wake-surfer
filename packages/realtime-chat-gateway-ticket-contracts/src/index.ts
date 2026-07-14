@@ -30,15 +30,18 @@ export const ConsumeGatewayTicketRequestBodySchema = z.strictObject({
 
 export type ConsumeGatewayTicketRequest = z.infer<typeof ConsumeGatewayTicketRequestBodySchema>;
 
-export type ConsumeGatewayTicketResponse =
-  | {
-      status: "consumed";
-      ticket: {
-        actorId: ActorId;
-        consumedAt: ISODateTime;
-      };
-    }
-  | {
-      status: "rejected";
-      reason: GatewayTicketRejectedReason;
-    };
+export const ConsumeGatewayTicketResponseSchema = z.discriminatedUnion("status", [
+  z.strictObject({
+    status: z.literal("consumed"),
+    ticket: z.strictObject({
+      actorId: z.string().trim().min(1),
+      consumedAt: z.iso.datetime(),
+    }),
+  }),
+  z.strictObject({
+    status: z.literal("rejected"),
+    reason: z.literal("invalid_or_expired"),
+  }),
+]);
+
+export type ConsumeGatewayTicketResponse = z.infer<typeof ConsumeGatewayTicketResponseSchema>;

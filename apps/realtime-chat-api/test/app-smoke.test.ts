@@ -64,12 +64,26 @@ describe("realtime chat api app", () => {
   });
 
   it("times out slow handlers", async () => {
+    let operationAbortObserved = false;
     const app = createRealtimeChatApiApp(
       createDeps({
-        issue: vi.fn(() => new Promise<never>(() => {})),
+        issue: vi.fn(
+          (_command, operationContext) =>
+            new Promise<never>((_resolve, reject) => {
+              operationContext.signal?.addEventListener(
+                "abort",
+                () => {
+                  operationAbortObserved = true;
+                  reject(operationContext.signal?.reason);
+                },
+                { once: true },
+              );
+            }),
+        ),
       }),
       {
-        handlerTimeoutMilliseconds: 5,
+        handlerTimeoutMilliseconds: 50,
+        operationAbortMilliseconds: 5,
       },
     );
 
@@ -85,6 +99,7 @@ describe("realtime chat api app", () => {
       code: "gateway_ticket_unavailable",
       status: "error",
     });
+    expect(operationAbortObserved).toBe(true);
   });
 
   it("allows only configured browser origins", async () => {
@@ -128,9 +143,14 @@ describe("realtime chat api app", () => {
       ticket: "ticket-1",
     });
     expect(response.status).toBe(201);
-    expect(issue).toHaveBeenCalledWith({
-      actorId: "authenticated-actor",
-    });
+    expect(issue).toHaveBeenCalledWith(
+      {
+        actorId: "authenticated-actor",
+      },
+      {
+        signal: expect.any(AbortSignal),
+      },
+    );
   });
 
   it("rejects issue bodies with client-owned actor fields", async () => {
@@ -200,6 +220,9 @@ describe("realtime chat api app", () => {
       },
       {
         gatewayId: "gateway-1",
+      },
+      {
+        signal: expect.any(AbortSignal),
       },
     );
   });

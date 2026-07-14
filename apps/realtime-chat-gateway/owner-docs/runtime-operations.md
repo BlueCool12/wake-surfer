@@ -8,6 +8,19 @@
 - 프레임워크 객체인 Node `Server`, `WebSocketServer`, `WebSocket`은 경계 자원으로만 다룬다.
 - 변경 가능한 `Map`과 `Set`은 런타임 팩터리 밖으로 노출하지 않고 count 조회 함수만 공개한다.
 
+## 런타임 조립 경계
+
+- `app.ts`는 HTTP/WebSocket 서버, 명시적 연결 상태, 하위 생명주기 함수를 조립한다.
+- `connection/upgrade-policy.ts`는 upgrade 허용 여부만 판단한다.
+- `connection/session-authentication.ts`는 ticket 소비 결과를 accepted/rejected/unavailable/abandoned로
+  분류하며 소켓을 직접 닫지 않는다.
+- `connection/handle-connection.ts`는 인증 결과를 세션 등록 또는 close 부수 효과로 변환하고 분리 실행
+  Promise의 최종 예외를 처리한다.
+- `connection/heartbeat.ts`는 pong 대기 상태와 timer를 소유한다.
+- `ports/gateway-ticket-consumer.ts`는 연결 인증이 의존하는 API 소비 포트를 한 번만 정의한다.
+- `runtime/close-servers.ts`는 WebSocket/HTTP 종료 결과를 합산한다.
+- `runtime/close-runtime.ts`는 앱 종료가 실패해도 나머지 런타임 자원 정리를 항상 시도한다.
+
 ## 연결 생명주기
 
 ```text
@@ -25,6 +38,9 @@ HTTP upgrade
 인증 중 클라이언트가 닫히면 `AbortController`로 ticket API 요청을 취소한다. API client가 취소를
 무시하더라도 gateway의 시간 제한 경쟁 함수가 인증 대기 상태를 해제한다. 인증 결과가 늦게 도착해도
 이미 닫힌 소켓은 세션에 등록하지 않는다.
+
+Gateway의 ticket API timeout은 API handler timeout보다 길어야 한다. API가 일회성 소비 결과를 확정하기
+전에 Gateway가 먼저 timeout을 내면 성공 여부를 복구할 수 없기 때문이다.
 
 ## heartbeat
 

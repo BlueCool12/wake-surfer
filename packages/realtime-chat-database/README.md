@@ -36,6 +36,7 @@ const database = createRealtimeChatDatabase({
     idleTimeoutMillis: 30_000,
     connectionTimeoutMillis: 2_000,
     maxLifetimeSeconds: 300,
+    statementTimeoutMillis: 2_000,
   },
 });
 

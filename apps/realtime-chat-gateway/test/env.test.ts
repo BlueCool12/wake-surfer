@@ -8,7 +8,7 @@ describe("realtime chat gateway runtime configuration", () => {
 
     expect(config).toMatchObject({
       allowedOrigins: [],
-      apiRequestTimeoutMilliseconds: 3_000,
+      apiRequestTimeoutMilliseconds: 6_000,
       heartbeatIntervalMilliseconds: 30_000,
       maxConnections: 10_000,
       maxPendingAuthentications: 256,
