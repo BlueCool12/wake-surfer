@@ -456,4 +456,3 @@ web까지 포함하면 낙관적 메시지가 `pending -> failed`로 바뀌며 �
   않는다.
 - owner는 각 provider의 `AGENTS.md`가 가리키는 `owner-docs/*`를 읽는다.
 - parent directory deny 뒤 child public docs를 재개방하는 permission 구조는 사용하지 않는다.
-

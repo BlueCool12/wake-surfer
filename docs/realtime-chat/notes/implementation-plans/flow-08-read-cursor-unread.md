@@ -673,4 +673,3 @@ And cursor와 unread projection은 변하지 않는다.
 - owner는 provider `AGENTS.md`가 가리키는 `owner-docs/*`를 읽는다.
 - 이 notes 파일을 owner 또는 consumer AGENTS route에 포함하지 않는다.
 - parent directory deny 뒤 child public docs를 재개방하는 permission 구조는 사용하지 않는다.
-
