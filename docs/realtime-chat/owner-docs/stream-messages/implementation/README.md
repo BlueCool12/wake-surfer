@@ -1,6 +1,6 @@
 ﻿# Stream Messages 구현 이슈 문서
 
-이 디렉터리는 구현 owner가 전체 계획을 읽지 않고 자신의 이슈 문서와 직접 선행 이슈만 읽도록 분할한 실행 문서다.
+이 디렉터리는 구현 owner가 전체 계획을 읽지 않고 자신의 이슈 문서와 직접 선행 이슈(티켓)만 읽도록 분할한 실행 문서다.
 
 ## 공통 실행 문서
 
@@ -11,6 +11,7 @@
 - [병렬 실행 계획](./04-execution-waves.md)
 - [출시 관문과 후속 capability](./05-release-gates-and-followups.md)
 - [GitHub 이슈 생성 규칙](./06-github-issue-rules.md)
+- [구현 순서 가이드](./07-implementation-order-guide.md)
 
 ## 외부 선행 이슈
 
