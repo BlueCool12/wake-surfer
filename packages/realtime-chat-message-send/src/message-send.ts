@@ -1,3 +1,4 @@
+import { MessageTargetSchema } from "@wake-surfer/realtime-chat-message-contracts";
 import type {
   ActorId,
   ClientMessageId,
@@ -18,21 +19,6 @@ export type OutboundEventIdGenerator = {
   generate: () => string;
 };
 
-export function getTargetType(target: SendMessageTarget): SendMessageTarget["type"] {
-  return target.type;
-}
-
-export function getTargetId(target: SendMessageTarget): string {
-  switch (target.type) {
-    case "channel":
-      return target.channelId;
-    case "dm":
-      return target.dmConversationId;
-    case "thread":
-      return target.threadId;
-  }
-}
-
 export function assertActorId(actorId: ActorId): void {
   assertNonBlankString(actorId, "actorId");
 }
@@ -49,23 +35,10 @@ export function assertStreamId(streamId: StreamId): void {
   assertNonBlankString(streamId, "streamId");
 }
 
-export function assertMessageTarget(target: SendMessageTarget): void {
-  if (target.type === "channel") {
-    assertNonBlankString(target.channelId, "channelId");
-    return;
+export function assertMessageTarget(target: unknown): asserts target is SendMessageTarget {
+  if (!MessageTargetSchema.safeParse(target).success) {
+    throw new Error("message target이 올바르지 않습니다.");
   }
-
-  if (target.type === "dm") {
-    assertNonBlankString(target.dmConversationId, "dmConversationId");
-    return;
-  }
-
-  if (target.type === "thread") {
-    assertNonBlankString(target.threadId, "threadId");
-    return;
-  }
-
-  throw new Error("message target이 올바르지 않습니다.");
 }
 
 export function assertMessageContent(content: SendMessageContent): void {

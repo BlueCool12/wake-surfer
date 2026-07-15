@@ -1,11 +1,11 @@
 /**
- * `@wake-surfer/realtime-chat-contracts`의 프론트 소비분을 로컬에 미러링한 것.
+ * `@wake-surfer/realtime-chat-message-contracts`로 이전할 프론트 임시 DTO다.
  *
- * 백엔드(`feat/3-realtime-room-chat`)의 계약 패키지가 아직 이 브랜치에 없어서
- * 임시로 여기 둔다. 두 브랜치가 합쳐지면 이 파일을 지우고
- * `import type { ... } from "@wake-surfer/realtime-chat-contracts"`로 갈아끼운다.
+ * 현재 화면은 mock transport와 `SYSTEM` DTO를 함께 사용하므로 즉시 제거하지 않는다. 실제 stream message
+ * adapter를 연결할 때 canonical `PublicMessage`의 `senderActorId`, `target`, `content.type = "text"` 형태로
+ * 수렴시키고 이 파일을 제거한다.
  *
- * 형태는 packages/realtime-chat-contracts/public-docs/api.md를 그대로 따른다.
+ * 이 파일의 `streamType`, `messageType`, `senderId`, `kind`는 기존 mock UI 전용 필드다.
  */
 
 // primitive — 모두 string 계약
