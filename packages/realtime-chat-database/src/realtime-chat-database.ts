@@ -1,9 +1,8 @@
 import type { GatewayTicketDatabase } from "@wake-surfer/realtime-chat-gateway-ticket/table-contract";
-import { createGatewayTicketsTable } from "@wake-surfer/realtime-chat-gateway-ticket/table-contract";
 import type { MessageSendDatabase } from "@wake-surfer/realtime-chat-message-send/table-contract";
-import { createMessageSendTables } from "@wake-surfer/realtime-chat-message-send/table-contract";
 import { Kysely, PostgresDialect } from "kysely";
 import { Pool } from "pg";
+import { runRealtimeChatMigrations } from "./realtime-chat-migrations";
 
 export type RealtimeChatDatabase = GatewayTicketDatabase & MessageSendDatabase;
 
@@ -45,8 +44,7 @@ export function createRealtimeChatDatabase(
   return {
     db,
     async migrate() {
-      await createGatewayTicketsTable(db as unknown as Kysely<GatewayTicketDatabase>);
-      await createMessageSendTables(db as unknown as Kysely<MessageSendDatabase>);
+      await runRealtimeChatMigrations(db);
     },
     close() {
       return db.destroy();
