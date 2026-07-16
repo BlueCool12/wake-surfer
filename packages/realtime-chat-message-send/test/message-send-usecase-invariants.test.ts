@@ -99,6 +99,54 @@ describe("send message usecase invariants", () => {
     });
   });
 
+  it("rejects an oversized text command before resolving or appending", async () => {
+    let resolveCount = 0;
+    let appendCount = 0;
+
+    await expect(
+      sendMessage(
+        {
+          clientMessageId: "client-message-1",
+          target: {
+            type: "channel",
+            channelId: "channel-1",
+          },
+          content: {
+            type: "text",
+            text: "a".repeat(8_193),
+          },
+        },
+        {
+          actorId: "actor-1",
+        },
+        {
+          ...baseDeps,
+          resolveTarget: () => {
+            resolveCount += 1;
+            return baseDeps.resolveTarget({
+              actorId: "actor-1",
+              target: {
+                type: "channel",
+                channelId: "channel-1",
+              },
+            });
+          },
+          appendMessage: async (...args) => {
+            appendCount += 1;
+            return baseDeps.appendMessage(...args);
+          },
+        },
+      ),
+    ).resolves.toEqual({
+      status: "rejected",
+      clientMessageId: "client-message-1",
+      reason: "invalid_content",
+    });
+
+    expect(resolveCount).toBe(0);
+    expect(appendCount).toBe(0);
+  });
+
   it("derives the default resolved stream ID from the shared canonical helper", () => {
     expect(
       createDefaultMessageTargetResolver()({

@@ -96,6 +96,240 @@ describe("realtime-chat PostgreSQL integration harness", () => {
     });
   });
 
+  it("stores text at the UTF-8 8KiB limit and rejects an oversized command", async () => {
+    const messageSend = createMessageSendModule({
+      db: getDatabase().db,
+      authorizeWrite: () => ({
+        status: "allowed",
+      }),
+    });
+    const textAtLimit = "a".repeat(8_192);
+
+    await expect(
+      messageSend.send(
+        {
+          clientMessageId: "client-message-byte-limit",
+          target: {
+            type: "channel",
+            channelId: "channel-byte-limit",
+          },
+          content: {
+            type: "text",
+            text: textAtLimit,
+          },
+        },
+        {
+          actorId: "actor-byte-limit",
+        },
+      ),
+    ).resolves.toMatchObject({
+      status: "accepted",
+      message: {
+        sequence: 1,
+        content: {
+          type: "text",
+          text: textAtLimit,
+        },
+      },
+    });
+
+    await expect(
+      messageSend.send(
+        {
+          clientMessageId: "client-message-byte-limit-oversized",
+          target: {
+            type: "channel",
+            channelId: "channel-byte-limit",
+          },
+          content: {
+            type: "text",
+            text: "a".repeat(8_193),
+          },
+        },
+        {
+          actorId: "actor-byte-limit",
+        },
+      ),
+    ).resolves.toEqual({
+      status: "rejected",
+      clientMessageId: "client-message-byte-limit-oversized",
+      reason: "invalid_content",
+    });
+
+    const persisted = await getDatabase()
+      .db.selectFrom("messages")
+      .select(["sequence", "content_text"])
+      .where("stream_id", "=", "channel:channel-byte-limit")
+      .execute();
+
+    expect(persisted).toEqual([
+      {
+        sequence: 1,
+        content_text: textAtLimit,
+      },
+    ]);
+  });
+
+  it("rolls back target-mismatched appends", async () => {
+    const streamId = "channel:channel-target-mismatch-original";
+    const messageSend = createMessageSendModule({
+      db: getDatabase().db,
+      authorizeWrite: () => ({
+        status: "allowed",
+      }),
+      resolveTarget: () => ({
+        status: "resolved",
+        streamId,
+        recipientActorIds: [],
+      }),
+    });
+
+    await expect(
+      messageSend.send(
+        {
+          clientMessageId: "client-message-target-mismatch-original",
+          target: {
+            type: "channel",
+            channelId: "channel-target-mismatch-original",
+          },
+          content: {
+            type: "text",
+            text: "original target",
+          },
+        },
+        {
+          actorId: "actor-target-mismatch",
+        },
+      ),
+    ).resolves.toMatchObject({
+      status: "accepted",
+    });
+
+    await expect(
+      messageSend.send(
+        {
+          clientMessageId: "client-message-target-mismatch-rejected",
+          target: {
+            type: "channel",
+            channelId: "channel-target-mismatch-rejected",
+          },
+          content: {
+            type: "text",
+            text: "mismatched target",
+          },
+        },
+        {
+          actorId: "actor-target-mismatch",
+        },
+      ),
+    ).rejects.toThrow("기존 메시지 stream의 target이 command target과 일치하지 않습니다.");
+
+    await expect(
+      messageSend.send(
+        {
+          clientMessageId: "client-message-target-mismatch-original",
+          target: {
+            type: "channel",
+            channelId: "channel-target-mismatch-rejected",
+          },
+          content: {
+            type: "text",
+            text: "mismatched idempotent retry",
+          },
+        },
+        {
+          actorId: "actor-target-mismatch",
+        },
+      ),
+    ).rejects.toThrow("기존 메시지 stream의 target이 command target과 일치하지 않습니다.");
+
+    const stream = await getDatabase()
+      .db.selectFrom("message_streams")
+      .select(["target_type", "target_id", "last_sequence"])
+      .where("stream_id", "=", streamId)
+      .executeTakeFirstOrThrow();
+    const messages = await getDatabase()
+      .db.selectFrom("messages")
+      .select(["sequence", "target_type", "target_id"])
+      .where("stream_id", "=", streamId)
+      .execute();
+
+    expect(stream).toEqual({
+      target_type: "channel",
+      target_id: "channel-target-mismatch-original",
+      last_sequence: 1,
+    });
+    expect(messages).toEqual([
+      {
+        sequence: 1,
+        target_type: "channel",
+        target_id: "channel-target-mismatch-original",
+      },
+    ]);
+  });
+
+  it("keeps invariants for concurrent appends", async () => {
+    const concurrentMessageCount = 12;
+    const channelId = "channel-concurrent-append";
+    const streamId = `channel:${channelId}`;
+    const messageSend = createMessageSendModule({
+      db: getDatabase().db,
+      authorizeWrite: () => ({
+        status: "allowed",
+      }),
+    });
+
+    const results = await Promise.all(
+      Array.from({ length: concurrentMessageCount }, (_, index) =>
+        messageSend.send(
+          {
+            clientMessageId: `client-message-concurrent-${index}`,
+            target: {
+              type: "channel",
+              channelId,
+            },
+            content: {
+              type: "text",
+              text: `concurrent message ${index}`,
+            },
+          },
+          {
+            actorId: "actor-concurrent-append",
+          },
+        ),
+      ),
+    );
+
+    for (const result of results) {
+      expect(result.status).toBe("accepted");
+    }
+
+    const stream = await getDatabase()
+      .db.selectFrom("message_streams")
+      .select(["target_type", "target_id", "last_sequence"])
+      .where("stream_id", "=", streamId)
+      .executeTakeFirstOrThrow();
+    const messages = await getDatabase()
+      .db.selectFrom("messages")
+      .select(["sequence", "target_type", "target_id"])
+      .where("stream_id", "=", streamId)
+      .orderBy("sequence", "asc")
+      .execute();
+
+    expect(stream).toEqual({
+      target_type: "channel",
+      target_id: channelId,
+      last_sequence: concurrentMessageCount,
+    });
+    expect(messages).toEqual(
+      Array.from({ length: concurrentMessageCount }, (_, index) => ({
+        sequence: index + 1,
+        target_type: "channel",
+        target_id: channelId,
+      })),
+    );
+  });
+
   it("creates distinct schemas when setup runs concurrently", async () => {
     const results = await Promise.allSettled([
       createRealtimeChatIntegrationTestDatabase(),
