@@ -1,35 +1,34 @@
+import {
+  MessageTargetSchema,
+  TextMessageContentSchema,
+} from "@wake-surfer/realtime-chat-message-contracts";
+import type {
+  ActorId,
+  ISODateTime,
+  MessageTarget,
+  PublicMessage,
+  TextMessageContent,
+} from "@wake-surfer/realtime-chat-message-contracts";
 import { z } from "zod";
 
-export type ActorId = string;
-export type ChannelId = string;
+export type {
+  ActorId,
+  ChannelId,
+  DmConversationId,
+  ISODateTime,
+  MessageId,
+  MessageTarget,
+  PublicMessage,
+  Sequence,
+  StreamId,
+  TextMessageContent,
+  ThreadId,
+} from "@wake-surfer/realtime-chat-message-contracts";
+
 export type ClientMessageId = string;
 export type CommandId = string;
-export type DmConversationId = string;
-export type ISODateTime = string;
-export type MessageId = string;
-export type Sequence = number;
-export type StreamId = string;
-export type ThreadId = string;
 
-export type SendMessageTarget =
-  | {
-      type: "channel";
-      channelId: ChannelId;
-    }
-  | {
-      type: "dm";
-      dmConversationId: DmConversationId;
-    }
-  | {
-      type: "thread";
-      threadId: ThreadId;
-    };
-
-export type TextMessageContent = {
-  type: "text";
-  text: string;
-};
-
+export type SendMessageTarget = MessageTarget;
 export type SendMessageContent = TextMessageContent;
 
 export type SendMessageRequest = {
@@ -46,25 +45,8 @@ const ISODateTimeSchema = z
   .trim()
   .pipe(z.iso.datetime({ offset: true }));
 
-export const SendMessageTargetSchema = z.discriminatedUnion("type", [
-  z.strictObject({
-    type: z.literal("channel"),
-    channelId: NonBlankStringSchema,
-  }),
-  z.strictObject({
-    type: z.literal("dm"),
-    dmConversationId: NonBlankStringSchema,
-  }),
-  z.strictObject({
-    type: z.literal("thread"),
-    threadId: NonBlankStringSchema,
-  }),
-]);
-
-export const SendMessageContentSchema = z.strictObject({
-  type: z.literal("text"),
-  text: NonBlankStringSchema,
-});
+export const SendMessageTargetSchema = MessageTargetSchema;
+export const SendMessageContentSchema = TextMessageContentSchema;
 
 export const SendMessageRequestBodySchema = z.strictObject({
   commandId: NonBlankStringSchema.optional(),
@@ -119,17 +101,6 @@ function removeUndefinedOptionalFields(
 
   return value;
 }
-
-export type PublicMessage = {
-  messageId: MessageId;
-  streamId: StreamId;
-  sequence: Sequence;
-  senderActorId: ActorId;
-  target: SendMessageTarget;
-  content: SendMessageContent;
-  createdAt: ISODateTime;
-  sentAtClient?: ISODateTime;
-};
 
 export type SendMessageRejectedReason = "invalid_content" | "target_not_found" | "write_forbidden";
 
