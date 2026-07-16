@@ -20,7 +20,8 @@ CREATE TABLE IF NOT EXISTS messages (
   target_type text NOT NULL,
   target_id text NOT NULL,
   client_message_id text NOT NULL,
-  content_type text NOT NULL CHECK (content_type = 'text'),
+  content_type text NOT NULL
+    CONSTRAINT messages_content_type_text_check CHECK (content_type = 'text'),
   content_text text NOT NULL,
   sent_at_client timestamptz NULL,
   created_at timestamptz NOT NULL,

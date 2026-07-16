@@ -6,6 +6,45 @@ const MIGRATION_LOCK_KEY = 8_642_341_903_771_529n;
 const MIGRATION_TABLE = "realtime_chat_schema_migrations";
 const LEGACY_BASELINE_VERSION = "001";
 const REALTIME_CHAT_TABLES = ["gateway_tickets", "message_streams", "messages"] as const;
+const MESSAGE_CONTENT_TYPE_TEXT_CONSTRAINT = "messages_content_type_text_check";
+const ADD_MESSAGE_CONTENT_TYPE_TEXT_CONSTRAINT_SQL = `
+ALTER TABLE messages
+ADD CONSTRAINT ${MESSAGE_CONTENT_TYPE_TEXT_CONSTRAINT}
+CHECK (content_type = 'text') NOT VALID
+`;
+const VALIDATE_MESSAGE_CONTENT_TYPE_TEXT_CONSTRAINT_SQL = `
+ALTER TABLE messages
+VALIDATE CONSTRAINT ${MESSAGE_CONTENT_TYPE_TEXT_CONSTRAINT}
+`;
+const MESSAGE_CONTENT_TYPE_TEXT_MIGRATION_CHECKSUM_SOURCE = [
+  ADD_MESSAGE_CONTENT_TYPE_TEXT_CONSTRAINT_SQL,
+  VALIDATE_MESSAGE_CONTENT_TYPE_TEXT_CONSTRAINT_SQL,
+].join("\n");
+const MESSAGE_CONTENT_TEXT_UTF8_8KIB_CONSTRAINT = "messages_content_text_utf8_8kib_check";
+const MESSAGE_CONTENT_TEXT_UTF8_8KIB_AUDIT_SQL = `
+SELECT message_id AS "messageId",
+  stream_id AS "streamId",
+  sequence,
+  octet_length(content_text) AS "byteLength"
+FROM messages
+WHERE octet_length(content_text) > 8192
+ORDER BY stream_id ASC, sequence ASC, message_id ASC
+`;
+const ADD_MESSAGE_CONTENT_TEXT_UTF8_8KIB_CONSTRAINT_SQL = `
+ALTER TABLE messages
+ADD CONSTRAINT ${MESSAGE_CONTENT_TEXT_UTF8_8KIB_CONSTRAINT}
+CHECK (octet_length(content_text) <= 8192) NOT VALID
+`;
+const VALIDATE_MESSAGE_CONTENT_TEXT_UTF8_8KIB_CONSTRAINT_SQL = `
+ALTER TABLE messages
+VALIDATE CONSTRAINT ${MESSAGE_CONTENT_TEXT_UTF8_8KIB_CONSTRAINT}
+`;
+const MESSAGE_CONTENT_TEXT_UTF8_8KIB_MIGRATION_CHECKSUM_SOURCE = [
+  "LOCK TABLE messages IN SHARE ROW EXCLUSIVE MODE",
+  MESSAGE_CONTENT_TEXT_UTF8_8KIB_AUDIT_SQL,
+  ADD_MESSAGE_CONTENT_TEXT_UTF8_8KIB_CONSTRAINT_SQL,
+  VALIDATE_MESSAGE_CONTENT_TEXT_UTF8_8KIB_CONSTRAINT_SQL,
+].join("\n");
 
 type MigrationDatabase = Kysely<RealtimeChatDatabase>;
 
@@ -23,6 +62,13 @@ type RealtimeChatMigrationRunnerOptions = {
 };
 
 type AppliedMigration = Pick<RealtimeChatMigration, "version" | "name" | "checksum">;
+
+type MessageContentTextByteLengthViolation = {
+  messageId: string;
+  streamId: string;
+  sequence: number;
+  byteLength: number;
+};
 
 type LegacyColumn = {
   tableName: (typeof REALTIME_CHAT_TABLES)[number];
@@ -104,6 +150,24 @@ const REALTIME_CHAT_MIGRATIONS: readonly RealtimeChatMigration[] = [
     transaction: "required",
     execute: async (db) => {
       await sql.raw(INITIAL_SCHEMA_SQL).execute(db);
+    },
+  },
+  {
+    version: "002",
+    name: "add_messages_content_text_utf8_8kib_constraint",
+    checksum: createChecksum(MESSAGE_CONTENT_TEXT_UTF8_8KIB_MIGRATION_CHECKSUM_SOURCE),
+    transaction: "required",
+    execute: async (db) => {
+      await addMessageContentTextUtf8ByteLengthConstraint(db);
+    },
+  },
+  {
+    version: "003",
+    name: "add_messages_content_type_text_constraint",
+    checksum: createChecksum(MESSAGE_CONTENT_TYPE_TEXT_MIGRATION_CHECKSUM_SOURCE),
+    transaction: "required",
+    execute: async (db) => {
+      await addMessageContentTypeTextConstraint(db);
     },
   },
 ];
@@ -422,6 +486,30 @@ function getLegacyBaselineMigration(
 
 function createChecksum(content: string): string {
   return createHash("sha256").update(content).digest("hex");
+}
+
+async function addMessageContentTypeTextConstraint(db: MigrationDatabase): Promise<void> {
+  await sql.raw(ADD_MESSAGE_CONTENT_TYPE_TEXT_CONSTRAINT_SQL).execute(db);
+  await sql.raw(VALIDATE_MESSAGE_CONTENT_TYPE_TEXT_CONSTRAINT_SQL).execute(db);
+}
+
+async function addMessageContentTextUtf8ByteLengthConstraint(db: MigrationDatabase): Promise<void> {
+  await sql.raw("LOCK TABLE messages IN SHARE ROW EXCLUSIVE MODE").execute(db);
+
+  const violations = await sql
+    .raw<MessageContentTextByteLengthViolation>(MESSAGE_CONTENT_TEXT_UTF8_8KIB_AUDIT_SQL)
+    .execute(db);
+
+  if (violations.rows.length > 0) {
+    throw new Error(
+      `messages.content_text UTF-8 8KiB 제약을 적용할 수 없습니다. 위반 row: ${JSON.stringify(
+        violations.rows,
+      )}`,
+    );
+  }
+
+  await sql.raw(ADD_MESSAGE_CONTENT_TEXT_UTF8_8KIB_CONSTRAINT_SQL).execute(db);
+  await sql.raw(VALIDATE_MESSAGE_CONTENT_TEXT_UTF8_8KIB_CONSTRAINT_SQL).execute(db);
 }
 
 async function createMigrationTable(db: MigrationDatabase): Promise<void> {
