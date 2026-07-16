@@ -7,10 +7,6 @@ import {
   type GatewayTicketDatabase,
 } from "@wake-surfer/realtime-chat-gateway-ticket/table-contract";
 import { createMessageSendModule } from "@wake-surfer/realtime-chat-message-send";
-import {
-  createMessageSendTables,
-  type MessageSendDatabase,
-} from "@wake-surfer/realtime-chat-message-send/table-contract";
 import { randomUUID } from "node:crypto";
 import { sql, type Kysely } from "kysely";
 import { Pool } from "pg";
@@ -25,6 +21,9 @@ import {
 } from "../src/realtime-chat-database";
 import { runRealtimeChatMigrations } from "../src/realtime-chat-migrations";
 
+const MESSAGE_CONTENT_TYPE_TEXT_CONSTRAINT = "messages_content_type_text_check";
+const MESSAGE_CONTENT_TEXT_UTF8_8KIB_CONSTRAINT = "messages_content_text_utf8_8kib_check";
+
 describe("realtime-chat PostgreSQL integration harness", () => {
   let database: RealtimeChatIntegrationTestDatabase | undefined;
 
@@ -36,7 +35,7 @@ describe("realtime-chat PostgreSQL integration harness", () => {
     await database?.close();
   });
 
-  it("applies the ordered migration to a fresh schema and records its immutable metadata", async () => {
+  it("applies ordered migrations to a fresh schema and records their immutable metadata", async () => {
     const result = await sql<{
       version: string;
       name: string;
@@ -48,13 +47,179 @@ describe("realtime-chat PostgreSQL integration harness", () => {
       ORDER BY version ASC
     `.execute(getDatabase().db);
 
-    expect(result.rows).toHaveLength(1);
-    expect(result.rows[0]).toMatchObject({
-      version: "001",
-      name: "create_gateway_ticket_and_message_schema",
-    });
-    expect(result.rows[0]?.checksum).toMatch(/^[a-f0-9]{64}$/);
-    expect(result.rows[0]?.applied_at).toBeInstanceOf(Date);
+    expect(result.rows).toHaveLength(3);
+    expect(result.rows).toMatchObject([
+      {
+        version: "001",
+        name: "create_gateway_ticket_and_message_schema",
+      },
+      {
+        version: "002",
+        name: "add_messages_content_text_utf8_8kib_constraint",
+      },
+      {
+        version: "003",
+        name: "add_messages_content_type_text_constraint",
+      },
+    ]);
+    for (const migration of result.rows) {
+      expect(migration.checksum).toMatch(/^[a-f0-9]{64}$/);
+      expect(migration.applied_at).toBeInstanceOf(Date);
+    }
+  });
+
+  it("enforces the named UTF-8 8KiB constraint for direct SQL inserts", async () => {
+    const temporaryDatabase = await createTemporarySchemaDatabase();
+    const suffix = randomUUID();
+    const streamId = `channel:direct-sql-${suffix}`;
+
+    try {
+      await temporaryDatabase.database.migrate();
+      await createDirectMessageStream(temporaryDatabase.database.db, streamId);
+      await insertDirectMessage(temporaryDatabase.database.db, {
+        messageId: `message-8192-${suffix}`,
+        streamId,
+        sequence: 1,
+        clientMessageId: `client-8192-${suffix}`,
+        contentText: "a".repeat(8_192),
+      });
+
+      await expect(
+        insertDirectMessage(temporaryDatabase.database.db, {
+          messageId: `message-8193-${suffix}`,
+          streamId,
+          sequence: 2,
+          clientMessageId: `client-8193-${suffix}`,
+          contentText: "a".repeat(8_193),
+        }),
+      ).rejects.toThrow(MESSAGE_CONTENT_TEXT_UTF8_8KIB_CONSTRAINT);
+
+      await expect(
+        insertDirectMessage(temporaryDatabase.database.db, {
+          messageId: `message-system-${suffix}`,
+          streamId,
+          sequence: 3,
+          clientMessageId: `client-system-${suffix}`,
+          contentType: "system",
+          contentText: "system message",
+        }),
+      ).rejects.toThrow(MESSAGE_CONTENT_TYPE_TEXT_CONSTRAINT);
+
+      const constraints = await getMessageConstraintsByName(
+        temporaryDatabase.database.db,
+        MESSAGE_CONTENT_TEXT_UTF8_8KIB_CONSTRAINT,
+      );
+
+      expect(constraints).toHaveLength(1);
+      expect(constraints[0]).toMatchObject({
+        constraint_name: MESSAGE_CONTENT_TEXT_UTF8_8KIB_CONSTRAINT,
+        constraint_type: "c",
+        is_validated: true,
+      });
+      expect(constraints[0]?.definition).toContain("octet_length(content_text) <= 8192");
+      await expect(
+        getMessageConstraintsByName(
+          temporaryDatabase.database.db,
+          MESSAGE_CONTENT_TYPE_TEXT_CONSTRAINT,
+        ),
+      ).resolves.toMatchObject([
+        {
+          constraint_name: MESSAGE_CONTENT_TYPE_TEXT_CONSTRAINT,
+          constraint_type: "c",
+          is_validated: true,
+          definition: "CHECK (content_type = 'text'::text)",
+        },
+      ]);
+    } finally {
+      await temporaryDatabase.close();
+    }
+  });
+
+  it("audits existing violating rows without exposing or changing content", async () => {
+    const temporaryDatabase = await createTemporarySchemaDatabase();
+    const suffix = randomUUID();
+    const streamId = `channel:existing-violation-${suffix}`;
+    const messageId = `message-existing-violation-${suffix}`;
+    const violatingContent = "a".repeat(8_193);
+
+    try {
+      await createGatewayTicketsTable(
+        temporaryDatabase.database.db as unknown as Kysely<GatewayTicketDatabase>,
+      );
+      await createBaselineLegacyMessageSendTables(temporaryDatabase.database.db);
+      await createDirectMessageStream(temporaryDatabase.database.db, streamId);
+      await insertDirectMessage(temporaryDatabase.database.db, {
+        messageId,
+        streamId,
+        sequence: 1,
+        clientMessageId: `client-existing-violation-${suffix}`,
+        contentText: violatingContent,
+      });
+
+      const migrationError = await temporaryDatabase.database.migrate().then(
+        () => undefined,
+        (error: unknown) => error,
+      );
+
+      expect(migrationError).toBeInstanceOf(Error);
+      const errorMessage = (migrationError as Error).message;
+      expect(errorMessage).toContain(messageId);
+      expect(errorMessage).toContain(streamId);
+      expect(errorMessage).toContain('"sequence":1');
+      expect(errorMessage).toContain('"byteLength":8193');
+      expect(errorMessage).not.toContain(violatingContent);
+
+      const persisted = await sql<{ content_text: string }>`
+        SELECT content_text
+        FROM messages
+        WHERE message_id = ${messageId}
+      `.execute(temporaryDatabase.database.db);
+      const migrationHistory = await sql<{ version: string }>`
+        SELECT version
+        FROM realtime_chat_schema_migrations
+        ORDER BY version ASC
+      `.execute(temporaryDatabase.database.db);
+
+      expect(persisted.rows).toEqual([{ content_text: violatingContent }]);
+      expect(migrationHistory.rows).toEqual([{ version: "001" }]);
+      await expect(
+        getMessageConstraintsByName(
+          temporaryDatabase.database.db,
+          MESSAGE_CONTENT_TEXT_UTF8_8KIB_CONSTRAINT,
+        ),
+      ).resolves.toEqual([]);
+    } finally {
+      await temporaryDatabase.close();
+    }
+  });
+
+  it("does not duplicate the UTF-8 8KiB constraint when migrate repeats", async () => {
+    const temporaryDatabase = await createTemporarySchemaDatabase();
+
+    try {
+      await temporaryDatabase.database.migrate();
+      await temporaryDatabase.database.migrate();
+
+      const migrationHistory = await sql<{ version: string }>`
+        SELECT version
+        FROM realtime_chat_schema_migrations
+        ORDER BY version ASC
+      `.execute(temporaryDatabase.database.db);
+
+      expect(migrationHistory.rows).toEqual([
+        { version: "001" },
+        { version: "002" },
+        { version: "003" },
+      ]);
+      await expect(
+        getMessageConstraintsByName(
+          temporaryDatabase.database.db,
+          MESSAGE_CONTENT_TEXT_UTF8_8KIB_CONSTRAINT,
+        ),
+      ).resolves.toHaveLength(1);
+    } finally {
+      await temporaryDatabase.close();
+    }
   });
 
   it("boots gateway ticket tables and consumes an issued ticket", async () => {
@@ -165,16 +330,14 @@ describe("realtime-chat PostgreSQL integration harness", () => {
     }
   });
 
-  it("baselines a current legacy schema without rerunning its table creation", async () => {
+  it("baselines the supported legacy schema before applying later migrations", async () => {
     const temporaryDatabase = await createTemporarySchemaDatabase();
 
     try {
       await createGatewayTicketsTable(
         temporaryDatabase.database.db as unknown as Kysely<GatewayTicketDatabase>,
       );
-      await createMessageSendTables(
-        temporaryDatabase.database.db as unknown as Kysely<MessageSendDatabase>,
-      );
+      await createBaselineLegacyMessageSendTables(temporaryDatabase.database.db);
 
       await temporaryDatabase.database.migrate();
 
@@ -186,14 +349,26 @@ describe("realtime-chat PostgreSQL integration harness", () => {
       }>`
         SELECT version, name, checksum, applied_at
         FROM realtime_chat_schema_migrations
+        ORDER BY version ASC
       `.execute(temporaryDatabase.database.db);
 
-      expect(result.rows).toHaveLength(1);
-      expect(result.rows[0]).toMatchObject({
-        version: "001",
-        name: "create_gateway_ticket_and_message_schema",
-      });
-      expect(result.rows[0]?.applied_at).toBeInstanceOf(Date);
+      expect(result.rows).toMatchObject([
+        {
+          version: "001",
+          name: "create_gateway_ticket_and_message_schema",
+        },
+        {
+          version: "002",
+          name: "add_messages_content_text_utf8_8kib_constraint",
+        },
+        {
+          version: "003",
+          name: "add_messages_content_type_text_constraint",
+        },
+      ]);
+      for (const migration of result.rows) {
+        expect(migration.applied_at).toBeInstanceOf(Date);
+      }
     } finally {
       await temporaryDatabase.close();
     }
@@ -206,9 +381,7 @@ describe("realtime-chat PostgreSQL integration harness", () => {
       await createGatewayTicketsTable(
         temporaryDatabase.database.db as unknown as Kysely<GatewayTicketDatabase>,
       );
-      await createMessageSendTables(
-        temporaryDatabase.database.db as unknown as Kysely<MessageSendDatabase>,
-      );
+      await createBaselineLegacyMessageSendTables(temporaryDatabase.database.db);
 
       await runRealtimeChatMigrations(temporaryDatabase.database.db, {
         migrations: [
@@ -293,9 +466,7 @@ describe("realtime-chat PostgreSQL integration harness", () => {
       await createGatewayTicketsTable(
         temporaryDatabase.database.db as unknown as Kysely<GatewayTicketDatabase>,
       );
-      await createMessageSendTables(
-        temporaryDatabase.database.db as unknown as Kysely<MessageSendDatabase>,
-      );
+      await createBaselineLegacyMessageSendTables(temporaryDatabase.database.db);
       await sql`
         ALTER TABLE messages
         ADD CONSTRAINT messages_reject_all_check CHECK (false)
@@ -323,9 +494,7 @@ describe("realtime-chat PostgreSQL integration harness", () => {
       await createGatewayTicketsTable(
         temporaryDatabase.database.db as unknown as Kysely<GatewayTicketDatabase>,
       );
-      await createMessageSendTables(
-        temporaryDatabase.database.db as unknown as Kysely<MessageSendDatabase>,
-      );
+      await createBaselineLegacyMessageSendTables(temporaryDatabase.database.db);
       await sql
         .raw(
           `
@@ -359,9 +528,7 @@ describe("realtime-chat PostgreSQL integration harness", () => {
       await createGatewayTicketsTable(
         temporaryDatabase.database.db as unknown as Kysely<GatewayTicketDatabase>,
       );
-      await createMessageSendTables(
-        temporaryDatabase.database.db as unknown as Kysely<MessageSendDatabase>,
-      );
+      await createBaselineLegacyMessageSendTables(temporaryDatabase.database.db);
       await sql
         .raw("DROP INDEX messages_stream_sequence_idx")
         .execute(temporaryDatabase.database.db);
@@ -440,7 +607,7 @@ describe("realtime-chat PostgreSQL integration harness", () => {
         ORDER BY version ASC
       `.execute(temporaryDatabase.database.db);
 
-      expect(result.rows).toEqual([{ version: "001" }]);
+      expect(result.rows).toEqual([{ version: "001" }, { version: "002" }, { version: "003" }]);
       await expect(
         temporaryDatabase.database.db.selectFrom("messages").select("message_id").execute(),
       ).resolves.toEqual([]);
@@ -524,6 +691,132 @@ async function createTemporarySchemaDatabase(): Promise<TemporarySchemaDatabase>
 
     throw error;
   }
+}
+
+async function createBaselineLegacyMessageSendTables(
+  db: RealtimeChatDatabaseHandle["db"],
+): Promise<void> {
+  await sql
+    .raw(
+      `
+      CREATE TABLE message_streams (
+        stream_id text PRIMARY KEY,
+        target_type text NOT NULL,
+        target_id text NOT NULL,
+        last_sequence integer NOT NULL DEFAULT 0,
+        created_at timestamptz NOT NULL
+      );
+
+      CREATE UNIQUE INDEX message_streams_target_idx
+        ON message_streams (target_type, target_id);
+
+      CREATE TABLE messages (
+        message_id text PRIMARY KEY,
+        stream_id text NOT NULL REFERENCES message_streams(stream_id),
+        sequence integer NOT NULL,
+        sender_actor_id text NOT NULL,
+        target_type text NOT NULL,
+        target_id text NOT NULL,
+        client_message_id text NOT NULL,
+        content_type text NOT NULL,
+        content_text text NOT NULL,
+        sent_at_client timestamptz NULL,
+        created_at timestamptz NOT NULL,
+        UNIQUE (stream_id, sequence),
+        UNIQUE (sender_actor_id, stream_id, client_message_id)
+      );
+
+      CREATE INDEX messages_stream_sequence_idx
+        ON messages (stream_id, sequence);
+    `,
+    )
+    .execute(db);
+}
+
+async function createDirectMessageStream(
+  db: RealtimeChatDatabaseHandle["db"],
+  streamId: string,
+): Promise<void> {
+  await sql`
+    INSERT INTO message_streams (
+      stream_id,
+      target_type,
+      target_id,
+      last_sequence,
+      created_at
+    )
+    VALUES (${streamId}, ${"channel"}, ${streamId.slice("channel:".length)}, 0, now())
+  `.execute(db);
+}
+
+async function insertDirectMessage(
+  db: RealtimeChatDatabaseHandle["db"],
+  input: {
+    messageId: string;
+    streamId: string;
+    sequence: number;
+    clientMessageId: string;
+    contentType?: string;
+    contentText: string;
+  },
+): Promise<void> {
+  await sql`
+    INSERT INTO messages (
+      message_id,
+      stream_id,
+      sequence,
+      sender_actor_id,
+      target_type,
+      target_id,
+      client_message_id,
+      content_type,
+      content_text,
+      sent_at_client,
+      created_at
+    )
+    VALUES (
+      ${input.messageId},
+      ${input.streamId},
+      ${input.sequence},
+      ${"actor-direct-sql"},
+      ${"channel"},
+      ${input.streamId.slice("channel:".length)},
+      ${input.clientMessageId},
+      ${input.contentType ?? "text"},
+      ${input.contentText},
+      NULL,
+      now()
+    )
+  `.execute(db);
+}
+
+async function getMessageConstraintsByName(
+  db: RealtimeChatDatabaseHandle["db"],
+  constraintName: string,
+): Promise<
+  {
+    constraint_name: string;
+    constraint_type: string;
+    is_validated: boolean;
+    definition: string;
+  }[]
+> {
+  const result = await sql<{
+    constraint_name: string;
+    constraint_type: string;
+    is_validated: boolean;
+    definition: string;
+  }>`
+    SELECT conname AS constraint_name,
+      contype AS constraint_type,
+      convalidated AS is_validated,
+      pg_get_constraintdef(oid, true) AS definition
+    FROM pg_catalog.pg_constraint
+    WHERE conrelid = 'messages'::regclass
+      AND conname = ${constraintName}
+  `.execute(db);
+
+  return result.rows;
 }
 
 function getTestDatabaseUrl(): string {
