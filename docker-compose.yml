@@ -7,7 +7,7 @@ services:
     ports:
       - "127.0.0.1:${REALTIME_CHAT_POSTGRES_PORT:-5432}:5432"
     volumes:
-      - realtime-chat-postgres-data:/var/lib/postgresql/data
+      - realtime-chat-postgres-data:/var/lib/postgresql
     healthcheck:
       test: ["CMD-SHELL", 'pg_isready -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}"']
       interval: 10s
@@ -16,6 +16,7 @@ services:
       start_period: 10s
     networks:
       - internal
+      - postgres-host-access
 
   realtime-chat-redis:
     image: redis:8.8.0-alpine
@@ -38,3 +39,5 @@ volumes:
 networks:
   internal:
     internal: true
+  postgres-host-access:
+    driver: bridge

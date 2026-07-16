@@ -8,6 +8,7 @@
     "lint": "eslint .",
     "format": "prettier . --write",
     "format:check": "prettier . --check",
+    "test:integration:realtime-chat": "pnpm --filter @wake-surfer/realtime-chat-database test:integration",
     "docker:up": "docker compose up -d",
     "docker:down": "docker compose down",
     "docker:logs": "docker compose logs -f",

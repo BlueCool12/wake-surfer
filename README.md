@@ -39,3 +39,23 @@ pnpm docker:up
 pnpm lint
 pnpm format:check
 ```
+
+### realtime-chat PostgreSQL 통합 테스트
+
+통합 테스트는 Docker Compose의 PostgreSQL 18을 사용합니다. 먼저 의존 서비스를 실행한 뒤,
+`TEST_DATABASE_URL`을 명시하고 루트 명령 하나로 실행합니다. 이 환경 변수는 필수이며 일반 runtime
+database URL로 대체되지 않습니다.
+
+```powershell
+pnpm docker:up
+$env:TEST_DATABASE_URL = "postgresql://wake_surfer_realtime_chat:wake_surfer_realtime_chat_dev_password@localhost:5432/wake_surfer_realtime_chat"
+pnpm test:integration:realtime-chat
+```
+
+```bash
+pnpm docker:up
+TEST_DATABASE_URL=postgresql://wake_surfer_realtime_chat:wake_surfer_realtime_chat_dev_password@localhost:5432/wake_surfer_realtime_chat pnpm test:integration:realtime-chat
+```
+
+각 테스트 suite와 worker는 고유한 임시 PostgreSQL schema에서 공통 realtime-chat bootstrap을 실행하고,
+성공·실패 뒤 해당 schema를 삭제합니다. 따라서 로컬 PostgreSQL의 다른 schema를 지우지 않습니다.
