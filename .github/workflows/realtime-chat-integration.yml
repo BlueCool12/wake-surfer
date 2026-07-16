@@ -1,0 +1,38 @@
+name: realtime-chat integration
+
+on:
+  pull_request:
+  push:
+    branches:
+      - dev
+
+jobs:
+  postgres-integration:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:18-alpine
+        env:
+          POSTGRES_USER: wake_surfer_realtime_chat
+          POSTGRES_PASSWORD: wake_surfer_realtime_chat_test_password
+          POSTGRES_DB: wake_surfer_realtime_chat
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U wake_surfer_realtime_chat -d wake_surfer_realtime_chat"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.7.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm test:integration:realtime-chat
+        env:
+          TEST_DATABASE_URL: postgresql://wake_surfer_realtime_chat:wake_surfer_realtime_chat_test_password@localhost:5432/wake_surfer_realtime_chat
