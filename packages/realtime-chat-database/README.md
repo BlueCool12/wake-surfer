@@ -79,3 +79,31 @@ export type RealtimeChatDatabase = GatewayTicketDatabase & AnotherFeatureDatabas
 - `realtime-chat-database`는 feature의 DB 계약 타입을 참조한다.
 - feature 패키지는 `realtime-chat-database`를 참조하지 않는다.
 - 앱은 `realtime-chat-database`와 필요한 feature 패키지를 조립한다.
+
+## PostgreSQL 통합 테스트
+
+실제 PostgreSQL을 사용하는 통합 테스트는 이 패키지의 `./integration-test` 서브패스를 사용한다.
+테스트 suite마다 `TEST_DATABASE_URL`로 연결한 DB에 고유한 임시 schema를 만들고, 공통 `migrate()`를
+적용한다. `close()`는 테스트 성공·실패와 관계없이 해당 schema를 삭제한다.
+
+```ts
+import {
+  createRealtimeChatIntegrationTestDatabase,
+  type RealtimeChatIntegrationTestDatabase,
+} from "@wake-surfer/realtime-chat-database/integration-test";
+import { afterAll, beforeAll } from "vitest";
+
+let database: RealtimeChatIntegrationTestDatabase | undefined;
+
+beforeAll(async () => {
+  database = await createRealtimeChatIntegrationTestDatabase();
+});
+
+afterAll(async () => {
+  await database?.close();
+});
+```
+
+`TEST_DATABASE_URL`은 필수이며 다른 runtime database URL로 대체하지 않는다. bootstrap migration이
+실패하면 helper는 성공한 database handle을 반환하지 않고, 생성한 임시 schema를 정리한 뒤 실패를 다시
+전파한다. 병렬 worker와 suite는 UUID가 포함된 서로 다른 schema를 사용한다.
