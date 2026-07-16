@@ -1,6 +1,7 @@
 import type { PublicMessage } from "@wake-surfer/realtime-chat-message-send-contracts";
 import type { Kysely } from "kysely";
 import { describe, expect, it } from "vitest";
+import { createDefaultMessageTargetResolver } from "../src";
 import type { MessageSendDatabase } from "../src/message-send-table";
 import {
   sendMessage,
@@ -95,6 +96,22 @@ describe("send message usecase invariants", () => {
       status: "rejected",
       clientMessageId: "client-message-1",
       reason: "invalid_content",
+    });
+  });
+
+  it("derives the default resolved stream ID from the shared canonical helper", () => {
+    expect(
+      createDefaultMessageTargetResolver()({
+        actorId: "actor-1",
+        target: {
+          type: "channel",
+          channelId: "channel-1",
+        },
+      }),
+    ).toEqual({
+      status: "resolved",
+      streamId: "channel:channel-1",
+      recipientActorIds: [],
     });
   });
 

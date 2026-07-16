@@ -25,6 +25,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@wake-surfer/realtime-chat-message-contracts": "workspace:*",
     "@wake-surfer/realtime-chat-message-send-contracts": "workspace:*",
     "kysely": "0.28.8"
   },

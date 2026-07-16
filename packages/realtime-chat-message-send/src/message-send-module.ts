@@ -9,13 +9,12 @@ import type {
   SendMessageTarget,
   StreamId,
 } from "@wake-surfer/realtime-chat-message-send-contracts";
+import { getCanonicalStreamId } from "@wake-surfer/realtime-chat-message-contracts";
 import type { Kysely } from "kysely";
 import {
   assertMessageTarget,
   createDefaultMessageIdGenerator,
   createDefaultOutboundEventIdGenerator,
-  getTargetId,
-  getTargetType,
 } from "./message-send";
 import type { MessageIdGenerator, OutboundEventIdGenerator } from "./message-send";
 import type { MessageSendDatabase } from "./message-send-table";
@@ -89,12 +88,9 @@ export function createDefaultMessageTargetResolver(): MessageTargetResolver {
   return ({ target }) => {
     assertMessageTarget(target);
 
-    const targetType = getTargetType(target);
-    const targetId = getTargetId(target);
-
     return {
       status: "resolved",
-      streamId: `${targetType}:${targetId}`,
+      streamId: getCanonicalStreamId(target),
       recipientActorIds: [],
     };
   };
