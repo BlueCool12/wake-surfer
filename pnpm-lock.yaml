@@ -184,6 +184,19 @@ importers:
         specifier: 4.1.6
         version: 4.1.6(@types/node@24.13.2)(vite@8.1.3(@types/node@24.13.2)(yaml@2.9.0))
 
+  packages/realtime-chat-stream-messages-contracts:
+    dependencies:
+      '@wake-surfer/realtime-chat-message-contracts':
+        specifier: workspace:*
+        version: link:../realtime-chat-message-contracts
+      zod:
+        specifier: 4.2.1
+        version: 4.2.1
+    devDependencies:
+      vitest:
+        specifier: 4.1.6
+        version: 4.1.6(@types/node@24.13.2)(vite@8.1.3(@types/node@24.13.2)(yaml@2.9.0))
+
 packages:
 
   '@emnapi/core@1.11.1':
