@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
+  MAX_GATEWAY_TICKET_RAW_BYTES,
+  MIN_GATEWAY_TICKET_RAW_BYTES,
   assertActorId,
   assertGatewayAssignment,
   assertGatewayId,
@@ -53,9 +55,27 @@ describe("gateway ticket policy", () => {
     expect(() =>
       assertGatewayTicketPolicy({
         ttlMilliseconds: 60_000,
-        rawTicketBytes: 16,
+        rawTicketBytes: MIN_GATEWAY_TICKET_RAW_BYTES,
       }),
     ).not.toThrow();
+  });
+
+  it("accepts the maximum raw ticket byte length", () => {
+    expect(() =>
+      assertGatewayTicketPolicy({
+        ttlMilliseconds: 60_000,
+        rawTicketBytes: MAX_GATEWAY_TICKET_RAW_BYTES,
+      }),
+    ).not.toThrow();
+  });
+
+  it("rejects raw ticket byte length above the maximum", () => {
+    expect(() =>
+      assertGatewayTicketPolicy({
+        ttlMilliseconds: 60_000,
+        rawTicketBytes: MAX_GATEWAY_TICKET_RAW_BYTES + 1,
+      }),
+    ).toThrow("rawTicketBytes");
   });
 
   it("calculates issued and expiration timestamps from ttl", () => {
