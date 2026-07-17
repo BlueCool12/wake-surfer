@@ -8,8 +8,12 @@ import type {
   Sequence,
   StreamId,
 } from "@wake-surfer/realtime-chat-message-send-contracts";
+import {
+  getMessageTargetId,
+  getMessageTargetType,
+  PublicMessageSchema,
+} from "@wake-surfer/realtime-chat-message-contracts";
 import { sql, type Kysely } from "kysely";
-import { getTargetId, getTargetType } from "../../message-send";
 import type { MessageSendDatabase } from "../../message-send-table";
 
 export type MessageAppendInput = {
@@ -86,8 +90,8 @@ export async function appendMessage(
   input: MessageAppendInput,
 ): Promise<MessageAppendResult> {
   return db.transaction().execute(async (trx) => {
-    const targetType = getTargetType(input.target);
-    const targetId = getTargetId(input.target);
+    const targetType = getMessageTargetType(input.target);
+    const targetId = getMessageTargetId(input.target);
 
     await trx
       .insertInto("message_streams")
@@ -171,7 +175,7 @@ export async function appendMessage(
 }
 
 function parseMessageRow(row: MessageRow): PublicMessage {
-  return {
+  const parsed = PublicMessageSchema.safeParse({
     messageId: parseString(row.messageId, "messageId"),
     streamId: parseString(row.streamId, "streamId"),
     sequence: parseSequence(row.sequence),
@@ -182,7 +186,13 @@ function parseMessageRow(row: MessageRow): PublicMessage {
     ...(row.sentAtClient === null || row.sentAtClient === undefined
       ? {}
       : { sentAtClient: parseIsoDateTime(row.sentAtClient, "sentAtClient") }),
-  };
+  });
+
+  if (!parsed.success) {
+    throw new Error("메시지 쿼리가 올바른 공개 message 계약을 반환하지 않았습니다.");
+  }
+
+  return parsed.data;
 }
 
 function parseTarget(targetType: unknown, targetId: unknown): SendMessageTarget {

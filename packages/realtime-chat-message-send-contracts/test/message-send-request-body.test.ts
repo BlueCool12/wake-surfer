@@ -136,6 +136,25 @@ describe("send message request body parser", () => {
     });
   });
 
+  it("rejects text that exceeds the UTF-8 byte limit", () => {
+    expect(
+      parseSendMessageRequestBody({
+        clientMessageId: "client-message-1",
+        target: {
+          type: "channel",
+          channelId: "channel-1",
+        },
+        content: {
+          type: "text",
+          text: `${"가".repeat(2_729)}😀aa`,
+        },
+      }),
+    ).toEqual({
+      ok: false,
+      message: "메시지 전송 요청 본문이 올바르지 않습니다.",
+    });
+  });
+
   it("accepts an ISO datetime with an explicit timezone offset", () => {
     expect(
       parseSendMessageRequestBody({
