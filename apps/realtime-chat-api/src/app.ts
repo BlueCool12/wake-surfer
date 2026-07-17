@@ -305,16 +305,26 @@ async function readConsumeGatewayTicketRequest(
 }
 
 async function readOptionalJsonBody(request: Request): Promise<unknown> {
-  if (request.body === null) {
+  const rawBody = await request.text();
+
+  if (rawBody.length === 0) {
     return undefined;
   }
 
-  return readRequiredJsonBody(request);
+  return parseJsonBody(rawBody);
 }
 
 async function readRequiredJsonBody(request: Request): Promise<unknown> {
   try {
-    return await request.json();
+    return parseJsonBody(await request.text());
+  } catch {
+    throw createAppHttpError(400, "bad_request", "request body must be valid JSON");
+  }
+}
+
+function parseJsonBody(rawBody: string): unknown {
+  try {
+    return JSON.parse(rawBody) as unknown;
   } catch {
     throw createAppHttpError(400, "bad_request", "request body must be valid JSON");
   }

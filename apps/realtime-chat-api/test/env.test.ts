@@ -1,3 +1,7 @@
+import {
+  MAX_GATEWAY_TICKET_RAW_BYTES,
+  MIN_GATEWAY_TICKET_RAW_BYTES,
+} from "@wake-surfer/realtime-chat-gateway-ticket";
 import { describe, expect, it } from "vitest";
 
 import { loadEnv } from "../src/config/env.js";
@@ -49,6 +53,27 @@ describe("realtime chat API runtime configuration", () => {
         REALTIME_CHAT_POSTGRES_STATEMENT_TIMEOUT_MS: "2000",
       }),
     ).toThrow(/leave time/);
+  });
+
+  it.each([MIN_GATEWAY_TICKET_RAW_BYTES, MAX_GATEWAY_TICKET_RAW_BYTES])(
+    "accepts gateway ticket raw byte boundary %i",
+    (gatewayTicketRawBytes) => {
+      expect(
+        loadEnv({
+          ...requiredEnv(),
+          REALTIME_CHAT_GATEWAY_TICKET_RAW_BYTES: String(gatewayTicketRawBytes),
+        }).gatewayTicketRawBytes,
+      ).toBe(gatewayTicketRawBytes);
+    },
+  );
+
+  it("rejects gateway ticket raw bytes above the policy maximum", () => {
+    expect(() =>
+      loadEnv({
+        ...requiredEnv(),
+        REALTIME_CHAT_GATEWAY_TICKET_RAW_BYTES: String(MAX_GATEWAY_TICKET_RAW_BYTES + 1),
+      }),
+    ).toThrow(/REALTIME_CHAT_GATEWAY_TICKET_RAW_BYTES/);
   });
 });
 

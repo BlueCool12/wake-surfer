@@ -1,3 +1,8 @@
+import {
+  MAX_GATEWAY_TICKET_RAW_BYTES,
+  MIN_GATEWAY_TICKET_RAW_BYTES,
+} from "@wake-surfer/realtime-chat-gateway-ticket";
+
 export type RealtimeChatApiConfig = {
   actorIdHeader: string;
   corsOrigins: string[];
@@ -41,7 +46,8 @@ export function loadEnv(env: NodeJS.ProcessEnv = process.env): RealtimeChatApiCo
     gatewayId: readRequiredString(env, "REALTIME_CHAT_GATEWAY_ID"),
     gatewayIdHeader: readOptionalString(env, "REALTIME_CHAT_GATEWAY_ID_HEADER", "x-gateway-id"),
     gatewayTicketRawBytes: readInteger(env, "REALTIME_CHAT_GATEWAY_TICKET_RAW_BYTES", 32, {
-      min: 16,
+      max: MAX_GATEWAY_TICKET_RAW_BYTES,
+      min: MIN_GATEWAY_TICKET_RAW_BYTES,
     }),
     gatewayTicketTtlMilliseconds: readInteger(env, "REALTIME_CHAT_GATEWAY_TICKET_TTL_MS", 60_000, {
       min: 1_000,

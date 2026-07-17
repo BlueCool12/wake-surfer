@@ -1,3 +1,6 @@
+import { once } from "node:events";
+
+import { serve } from "@hono/node-server";
 import { describe, expect, it, vi } from "vitest";
 
 import { createRealtimeChatApiApp } from "../src/app.js";
@@ -151,6 +154,64 @@ describe("realtime chat api app", () => {
         signal: expect.any(AbortSignal),
       },
     );
+  });
+
+  it("issues a gateway ticket without a body through the Node server adapter", async () => {
+    const issue = vi.fn(async () => ({
+      expiresAt: "2026-07-09T00:01:00.000Z",
+      gatewayUrl: "ws://localhost:3001/realtime-chat",
+      ticket: "ticket-1",
+    }));
+    const app = createRealtimeChatApiApp(
+      createDeps({
+        issue,
+      }),
+    );
+    const server = serve({
+      fetch: app.fetch,
+      hostname: "127.0.0.1",
+      port: 0,
+    });
+
+    try {
+      await once(server, "listening");
+      const address = server.address();
+
+      if (address === null || typeof address === "string") {
+        throw new Error("realtime chat API test server did not expose a TCP port");
+      }
+
+      const response = await fetch(
+        `http://127.0.0.1:${address.port}/realtime-chat/gateway-tickets`,
+        {
+          headers: {
+            "x-actor-id": "authenticated-actor",
+          },
+          method: "POST",
+        },
+      );
+
+      expect(response.status).toBe(201);
+      expect(issue).toHaveBeenCalledWith(
+        {
+          actorId: "authenticated-actor",
+        },
+        {
+          signal: expect.any(AbortSignal),
+        },
+      );
+    } finally {
+      await new Promise<void>((resolve, reject) => {
+        server.close((error) => {
+          if (error) {
+            reject(error);
+            return;
+          }
+
+          resolve();
+        });
+      });
+    }
   });
 
   it("rejects issue bodies with client-owned actor fields", async () => {

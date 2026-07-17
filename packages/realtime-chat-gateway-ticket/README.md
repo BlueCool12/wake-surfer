@@ -169,8 +169,9 @@ PostgreSQL 연결 풀과 Kysely 인스턴스 생명주기는 `@wake-surfer/realt
 티켓 원문 바이트 수, TTL, 해시 방식, 일회성 소비 규칙은 이 패키지의 서버 런타임 정책이다. 앱이
 호출마다 바꾸지 않는다.
 
-`ticketTtlMilliseconds`와 `rawTicketBytes`는 `createGatewayTicketModule` 생성 시 반드시 넘긴다. 누락되거나
-잘못된 값이면 모듈 생성 단계에서 예외가 발생해야 하며, 서버는 그 상태로 뜨면 안 된다.
+`ticketTtlMilliseconds`와 `rawTicketBytes`는 `createGatewayTicketModule` 생성 시 반드시 넘긴다. `rawTicketBytes`는
+16에서 64 사이의 정수여야 한다. 누락되거나 잘못된 값이면 모듈 생성 단계에서 예외가 발생해야 하며,
+서버는 그 상태로 뜨면 안 된다.
 
 ## 서버군 동작
 

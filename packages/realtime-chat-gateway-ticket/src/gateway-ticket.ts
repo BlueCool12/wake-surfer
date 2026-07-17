@@ -59,6 +59,9 @@ export type GatewayTicketPolicyConfig = {
   rawTicketBytes: number;
 };
 
+export const MIN_GATEWAY_TICKET_RAW_BYTES = 16;
+export const MAX_GATEWAY_TICKET_RAW_BYTES = 64;
+
 export function createGatewayTicketPolicy(config: GatewayTicketPolicyConfig): GatewayTicketPolicy {
   const policy = {
     ttlMilliseconds: config.ttlMilliseconds,
@@ -87,8 +90,14 @@ export function assertGatewayTicketPolicy(policy: GatewayTicketPolicy): void {
     throw new Error("게이트웨이 티켓 ttlMilliseconds는 양의 정수여야 합니다.");
   }
 
-  if (!Number.isInteger(policy.rawTicketBytes) || policy.rawTicketBytes < 16) {
-    throw new Error("게이트웨이 티켓 rawTicketBytes는 16 이상이어야 합니다.");
+  if (
+    !Number.isInteger(policy.rawTicketBytes) ||
+    policy.rawTicketBytes < MIN_GATEWAY_TICKET_RAW_BYTES ||
+    policy.rawTicketBytes > MAX_GATEWAY_TICKET_RAW_BYTES
+  ) {
+    throw new Error(
+      `게이트웨이 티켓 rawTicketBytes는 ${MIN_GATEWAY_TICKET_RAW_BYTES} 이상 ${MAX_GATEWAY_TICKET_RAW_BYTES} 이하여야 합니다.`,
+    );
   }
 }
 
