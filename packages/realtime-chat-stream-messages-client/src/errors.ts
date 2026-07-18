@@ -22,9 +22,14 @@ export class StreamMessageProtocolError extends Error {
 export type StreamMessagesTransportErrorCode =
   | "stream_unavailable"
   | "invalid_cursor"
+  | "bad_request"
   | "rate_limited"
   | "stream_messages_unavailable"
   | "protocol_failure"
+  | "session_not_ready"
+  | "socket_closed"
+  | "stale_response"
+  | "timeout"
   | "cancelled";
 
 export class StreamMessagesTransportError extends Error {
@@ -43,6 +48,8 @@ export class StreamMessagesTransportError extends Error {
     this.name = "StreamMessagesTransportError";
     this.code = code;
     this.retryAfterMs = options.retryAfterMs;
-    this.retryable = options.retryable ?? code === "stream_messages_unavailable";
+    this.retryable =
+      options.retryable ??
+      (code === "stream_messages_unavailable" || code === "socket_closed" || code === "timeout");
   }
 }

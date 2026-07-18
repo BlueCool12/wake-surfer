@@ -281,15 +281,15 @@ function isAbortError(error: unknown): boolean {
 
 function delayWithAbort(milliseconds: number, signal: AbortSignal): Promise<void> {
   return new Promise((resolve, reject) => {
-    const timer = setTimeout(resolve, milliseconds);
-    signal.addEventListener(
-      "abort",
-      () => {
-        clearTimeout(timer);
-        reject(new StreamMessagesTransportError("cancelled"));
-      },
-      { once: true },
-    );
+    const handleAbort = () => {
+      clearTimeout(timer);
+      reject(new StreamMessagesTransportError("cancelled"));
+    };
+    const timer = setTimeout(() => {
+      signal.removeEventListener("abort", handleAbort);
+      resolve();
+    }, milliseconds);
+    signal.addEventListener("abort", handleAbort, { once: true });
   });
 }
 
