@@ -4,10 +4,11 @@ import { describe, expect, it, vi } from "vitest";
 import { createRuntimeDeps } from "../src/runtime/create-runtime-deps.js";
 
 describe("realtime chat API runtime dependencies", () => {
-  it("closes the database when runtime composition fails after pool creation", async () => {
+  it("validates runtime configuration before creating a database pool", async () => {
     const close = vi.fn(async () => undefined);
     const migrate = vi.fn(async () => undefined);
     const database = createDatabaseHandle({ close, migrate });
+    const createDatabase = vi.fn(() => database);
 
     await expect(
       createRuntimeDeps(
@@ -16,12 +17,13 @@ describe("realtime chat API runtime dependencies", () => {
           REALTIME_CHAT_GATEWAY_URL: "https://gateway.example.com/realtime-chat",
         },
         {
-          createDatabase: () => database,
+          createDatabase,
         },
       ),
     ).rejects.toThrow(/URL/);
+    expect(createDatabase).not.toHaveBeenCalled();
     expect(migrate).not.toHaveBeenCalled();
-    expect(close).toHaveBeenCalledOnce();
+    expect(close).not.toHaveBeenCalled();
   });
 
   it("closes the database when migration fails during startup", async () => {
