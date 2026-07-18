@@ -18,7 +18,7 @@
   "scripts": {
     "build": "pnpm --filter @wake-surfer/realtime-chat-message-contracts build && tsc -p tsconfig.json",
     "clean": "tsc -b tsconfig.json --clean",
-    "test": "vitest run"
+    "test": "pnpm --filter @wake-surfer/realtime-chat-message-contracts build && vitest run"
   },
   "dependencies": {
     "@wake-surfer/realtime-chat-message-contracts": "workspace:*",
