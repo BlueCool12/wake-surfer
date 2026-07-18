@@ -5,6 +5,7 @@ import {
   getStreamMessagesSession,
   type KeyValueStorage,
   type StreamMessagesRecoveryPhase,
+  StreamMessagesTransportError,
 } from "@wake-surfer/realtime-chat-stream-messages-client";
 
 import type { ChatRoomRuntime } from "./transport/chatTransport";
@@ -199,8 +200,19 @@ export class ChatRoomModel extends Emitter {
   }
 
   async #runStart(): Promise<void> {
-    await this.#runtime.messageTransport.connect();
-    await this.streamSession.bootstrap(this.#runtime.streamMessagesTransport);
+    try {
+      await this.#runtime.messageTransport.connect();
+      await this.streamSession.bootstrap(this.#runtime.streamMessagesTransport);
+    } catch (error) {
+      this.streamSession.recovery.setPhase(
+        error instanceof StreamMessagesTransportError && error.code === "ticket_rejected"
+          ? "authentication_failure"
+          : error instanceof StreamMessagesTransportError && error.retryable
+            ? "retryable_failure"
+            : "protocol_failure",
+      );
+      throw error;
+    }
   }
 
   #attachMessageSubscriptions(): void {

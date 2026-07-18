@@ -21,6 +21,7 @@
     "typecheck": "tsc -p tsconfig.test.json"
   },
   "dependencies": {
+    "@wake-surfer/realtime-chat-gateway-ticket-contracts": "workspace:*",
     "@wake-surfer/realtime-chat-message-contracts": "workspace:*",
     "@wake-surfer/realtime-chat-stream-messages-contracts": "workspace:*"
   },

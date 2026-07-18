@@ -91,6 +91,7 @@ function ChatRoomPage() {
               </button>
             ) : recoveryPhase === "stream_unavailable" ||
               recoveryPhase === "invalid_cursor" ||
+              recoveryPhase === "authentication_failure" ||
               recoveryPhase === "protocol_failure" ? (
               <p className={styles.recoveryError}>메시지 기록을 안전하게 불러오지 못했어요.</p>
             ) : null}

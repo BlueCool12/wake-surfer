@@ -1,4 +1,5 @@
 export * from "./cursor-storage.js";
+export * from "./authenticated-realtime-session.js";
 export * from "./browser-transport.js";
 export * from "./emitter.js";
 export * from "./errors.js";

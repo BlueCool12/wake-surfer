@@ -10,6 +10,7 @@ export type StreamMessagesRecoveryPhase =
   | "invalid_cursor"
   | "retryable_failure"
   | "protocol_failure"
+  | "authentication_failure"
   | "cancelled";
 
 export class StreamMessagesRecoveryModel extends Emitter {

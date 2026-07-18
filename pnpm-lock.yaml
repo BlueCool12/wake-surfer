@@ -232,6 +232,9 @@ importers:
 
   packages/realtime-chat-stream-messages-client:
     dependencies:
+      '@wake-surfer/realtime-chat-gateway-ticket-contracts':
+        specifier: workspace:*
+        version: link:../realtime-chat-gateway-ticket-contracts
       '@wake-surfer/realtime-chat-message-contracts':
         specifier: workspace:*
         version: link:../realtime-chat-message-contracts

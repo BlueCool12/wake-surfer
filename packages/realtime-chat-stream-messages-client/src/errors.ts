@@ -27,6 +27,7 @@ export type StreamMessagesTransportErrorCode =
   | "stream_messages_unavailable"
   | "protocol_failure"
   | "session_not_ready"
+  | "ticket_rejected"
   | "socket_closed"
   | "stale_response"
   | "timeout"
