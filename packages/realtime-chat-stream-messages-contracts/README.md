@@ -15,6 +15,16 @@ Stream Messages의 latest, older, sync-after 조회 경계에서 공유하는 ve
 세 Query는 request/response schema를 공유하지 않는다. 공통 message item은 이 패키지가 아니라
 `@wake-surfer/realtime-chat-message-contracts`의 `PublicMessage`를 사용한다.
 
+## 모듈과 리뷰 순서
+
+1. `common.ts`: cursor, limit, request ID, channel stream 공통 primitive
+2. `latest.ts`, `older.ts`, `sync-after.ts`: 서로 독립된 Query request/response와 page 의미
+3. `errors.ts`: domain rejection과 retryable infrastructure failure
+4. `serialization.ts`: boundary별 canonical final envelope와 UTF-8 측정
+5. `test/`: request, response, error, serialization별 독립 계약 검증
+
+`index.ts`는 기존 공개 symbol을 유지하는 barrel이다. page 내부 검증 helper는 공개하지 않는다.
+
 ## 입력과 pagination
 
 - latest request에는 client-controlled cursor와 limit가 없다.
