@@ -63,6 +63,15 @@ importers:
 
   apps/web:
     dependencies:
+      '@wake-surfer/realtime-chat-message-contracts':
+        specifier: workspace:*
+        version: link:../../packages/realtime-chat-message-contracts
+      '@wake-surfer/realtime-chat-message-send-contracts':
+        specifier: workspace:*
+        version: link:../../packages/realtime-chat-message-send-contracts
+      '@wake-surfer/realtime-chat-stream-messages-client':
+        specifier: workspace:*
+        version: link:../../packages/realtime-chat-stream-messages-client
       lucide-react:
         specifier: ^1.23.0
         version: 1.23.0(react@19.2.7)
@@ -94,6 +103,9 @@ importers:
       vite:
         specifier: ^8.1.1
         version: 8.1.3(@types/node@24.13.2)(yaml@2.9.0)
+      vitest:
+        specifier: 4.1.6
+        version: 4.1.6(@types/node@24.13.2)(vite@8.1.3(@types/node@24.13.2)(yaml@2.9.0))
 
   packages/api-contracts: {}
 

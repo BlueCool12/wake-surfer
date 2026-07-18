@@ -1,14 +1,19 @@
+import {
+  getCanonicalStreamId,
+  type PublicMessage,
+} from "@wake-surfer/realtime-chat-message-contracts";
+import type { SendMessageResponse } from "@wake-surfer/realtime-chat-message-send-contracts";
+
 import type {
+  ChatMessageTransport,
+  ChatRoomRuntime,
+  ChatRoomRuntimeContext,
   MessageAcceptedResponse,
   MessageRejectedResponse,
-  PublicMessageDto,
-  UserId,
-} from "../contracts";
-import type { ChatTransport, ChatTransportContext } from "./chatTransport";
+} from "./chatTransport";
 
-/** 목 환경에서 "나"로 간주할 사용자 id. 실제로는 인증(actorId)에서 온다. */
-export const MOCK_ME: UserId = "user-me";
-const MOCK_OTHER: UserId = "user-wave";
+export const MOCK_ME = "user-me";
+const MOCK_OTHER = "user-wave";
 
 type Listener<T> = (value: T) => void;
 
@@ -25,119 +30,158 @@ function createEmitter<T>() {
   };
 }
 
-/**
- * 백엔드 없이 채팅방 화면을 구동하기 위한 인메모리 구현.
- * 히스토리를 시드하고, 보낸 메시지를 짧은 지연 후 accepted → created 로 에코한다.
- * 실제 소켓 구현으로 교체될 자리 표시자다.
- */
-export function createMockChatTransport(context: ChatTransportContext): ChatTransport {
-  const created = createEmitter<PublicMessageDto>();
+export function createMockChatRoomRuntime(context: ChatRoomRuntimeContext): ChatRoomRuntime {
+  const created = createEmitter<PublicMessage>();
   const accepted = createEmitter<MessageAcceptedResponse>();
   const rejected = createEmitter<MessageRejectedResponse>();
-
-  const streamId = `stream-${context.channelId}`;
+  const streamId = getCanonicalStreamId({ type: "channel", channelId: context.channelId });
   let sequence = 0;
   const nextSequence = () => (sequence += 1);
-  // 목 전용: 한 번 실패시킨 clientMessageId 를 기억해 재시도 땐 성공시킨다.
   const failedOnce = new Set<string>();
-
-  const history: PublicMessageDto[] = [
-    {
-      messageId: "m1",
-      streamId,
-      streamType: "CHANNEL",
-      sequence: nextSequence(),
-      senderId: MOCK_OTHER,
-      messageType: "USER",
-      content: { kind: "text", text: "안녕하세요! 실시간 채팅 목업이에요 👋" },
-      createdAt: new Date(Date.now() - 1000 * 60 * 5).toISOString(),
-    },
-    {
-      messageId: "m2",
-      streamId,
-      streamType: "CHANNEL",
-      sequence: nextSequence(),
-      senderId: MOCK_ME,
-      messageType: "USER",
-      content: { kind: "text", text: "네, 아래 입력창으로 보내보면 에코로 답이 와요." },
-      createdAt: new Date(Date.now() - 1000 * 60 * 4).toISOString(),
-    },
+  const history: PublicMessage[] = [
+    createMessage(
+      "m1",
+      nextSequence(),
+      MOCK_OTHER,
+      "안녕하세요! 실시간 채팅 목업이에요 👋",
+      new Date(Date.now() - 1000 * 60 * 5).toISOString(),
+    ),
+    createMessage(
+      "m2",
+      nextSequence(),
+      context.actorId,
+      "네, 아래 입력창으로 보내보면 에코로 답이 와요.",
+      new Date(Date.now() - 1000 * 60 * 4).toISOString(),
+    ),
   ];
 
-  return {
-    async connect() {
-      // 실제 구현: 티켓 발급 + 소켓 연결 + gateway.connected 대기.
-    },
+  function createMessage(
+    messageId: string,
+    messageSequence: number,
+    senderActorId: string,
+    text: string,
+    createdAt: string,
+  ): PublicMessage {
+    return {
+      messageId,
+      streamId,
+      sequence: messageSequence,
+      senderActorId,
+      target: { type: "channel", channelId: context.channelId },
+      content: { type: "text", text },
+      createdAt,
+    };
+  }
 
-    disconnect() {
-      // 실제 구현: 소켓 close.
-    },
-
-    async loadHistory() {
-      return [...history];
-    },
-
+  const messageTransport: ChatMessageTransport = {
+    async connect() {},
+    disconnect() {},
     sendChannelMessage({ clientMessageId, content }) {
       window.setTimeout(() => {
-        // 목 전용: "/fail"로 시작하는 메시지는 첫 전송을 실패시켜 재시도 UI를 테스트할 수 있다.
-        // 같은 clientMessageId 로 재시도하면 두 번째엔 성공한다. (실제 트랜스포트엔 없는 장치)
         if (content.text.startsWith("/fail") && !failedOnce.has(clientMessageId)) {
           failedOnce.add(clientMessageId);
           rejected.emit({
             status: "rejected",
             commandId: crypto.randomUUID(),
             clientMessageId,
-            reason: "MESSAGE_SAVE_FAILED",
-            message: "목 전송 실패 — 다시 시도해보세요.",
+            reason: "write_forbidden",
           });
           return;
         }
 
-        // 수락 응답 (낙관적 항목 확정)
-        const messageId = `m-${crypto.randomUUID()}`;
-        const seq = nextSequence();
-        const serverCreatedAt = new Date().toISOString();
-
-        accepted.emit({
+        const message = createMessage(
+          `m-${crypto.randomUUID()}`,
+          nextSequence(),
+          context.actorId,
+          content.text,
+          new Date().toISOString(),
+        );
+        history.push(message);
+        const response: SendMessageResponse = {
           status: "accepted",
           commandId: crypto.randomUUID(),
           clientMessageId,
-          messageId,
-          streamId,
-          streamType: "CHANNEL",
-          sequence: seq,
-          serverCreatedAt,
-        });
+          message,
+        };
+        accepted.emit(response);
+        created.emit(message);
 
-        created.emit({
-          messageId,
-          streamId,
-          streamType: "CHANNEL",
-          sequence: seq,
-          senderId: MOCK_ME,
-          messageType: "USER",
-          content,
-          createdAt: serverCreatedAt,
-        });
-
-        // 상대방이 답하는 것처럼 에코
         window.setTimeout(() => {
-          created.emit({
-            messageId: `m-${crypto.randomUUID()}`,
-            streamId,
-            streamType: "CHANNEL",
-            sequence: nextSequence(),
-            senderId: MOCK_OTHER,
-            messageType: "USER",
-            content: { kind: "text", text: `“${content.text}” 잘 받았어요!` },
-            createdAt: new Date().toISOString(),
-          });
+          const echo = createMessage(
+            `m-${crypto.randomUUID()}`,
+            nextSequence(),
+            MOCK_OTHER,
+            `“${content.text}” 잘 받았어요!`,
+            new Date().toISOString(),
+          );
+          history.push(echo);
+          created.emit(echo);
         }, 700);
       }, 250);
     },
-
     onMessageCreated: created.subscribe,
     onMessageAccepted: accepted.subscribe,
     onMessageRejected: rejected.subscribe,
+  };
+
+  return {
+    messageTransport,
+    streamMessagesTransport: {
+      async loadLatest() {
+        const throughSequence = sequence;
+        const messages = history.filter((message) => message.sequence <= throughSequence).slice(-5);
+        const oldest = messages[0];
+        const response = {
+          streamId,
+          throughSequence,
+          messages,
+          nextBeforeSequence: oldest?.sequence ?? null,
+          hasMoreBefore: (oldest?.sequence ?? 1) > 1,
+        };
+        return measured(response);
+      },
+      async loadOlder(request) {
+        const candidates = history.filter((message) => message.sequence < request.beforeSequence);
+        const messages = candidates.slice(-request.limit);
+        const oldest = messages[0];
+        const response = {
+          streamId,
+          beforeSequence: request.beforeSequence,
+          messages,
+          nextBeforeSequence: oldest?.sequence ?? null,
+          hasMoreBefore: (oldest?.sequence ?? 1) > 1,
+        };
+        return measured(response);
+      },
+      async syncAfter(request) {
+        const throughSequence = request.throughSequence ?? sequence;
+        const messages = history
+          .filter(
+            (message) =>
+              message.sequence > request.afterSequence && message.sequence <= throughSequence,
+          )
+          .slice(0, request.limit);
+        const nextAfterSequence = messages.at(-1)?.sequence ?? throughSequence;
+        const response = {
+          streamId,
+          afterSequence: request.afterSequence,
+          throughSequence,
+          messages,
+          nextAfterSequence,
+          hasMoreAfter: nextAfterSequence < throughSequence,
+        };
+        return measured(response);
+      },
+    },
+  };
+}
+
+function measured<Response>(response: Response): {
+  response: Response;
+  rawUtf8ByteLength: number;
+} {
+  return {
+    response,
+    rawUtf8ByteLength: new TextEncoder().encode(JSON.stringify(response)).byteLength,
   };
 }

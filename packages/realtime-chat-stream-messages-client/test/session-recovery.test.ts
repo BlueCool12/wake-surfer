@@ -267,6 +267,51 @@ describe("Stream Messages cursor recovery", () => {
     expect(session.recovery.phase).toBe("cancelled");
   });
 
+  it("does not apply an older page that completes after session cancellation", async () => {
+    const storage = createMemoryStorage();
+    const session = createSession(storage);
+    await session.bootstrap(
+      createTransport({
+        loadLatest: vi.fn(async () => ({
+          response: {
+            streamId: "channel:channel-recovery",
+            throughSequence: 3,
+            messages: createMessages(2, 3),
+            nextBeforeSequence: 2,
+            hasMoreBefore: true,
+          },
+          rawUtf8ByteLength: 200,
+        })),
+      }),
+    );
+    let resolveOlder:
+      ((value: Awaited<ReturnType<StreamMessagesTransport["loadOlder"]>>) => void) | undefined;
+    const transport = createTransport({
+      loadOlder: vi.fn(
+        () =>
+          new Promise<Awaited<ReturnType<StreamMessagesTransport["loadOlder"]>>>((resolve) => {
+            resolveOlder = resolve;
+          }),
+      ),
+    });
+    const older = session.loadOlder(transport);
+    await Promise.resolve();
+    session.cancel();
+    resolveOlder?.({
+      response: {
+        streamId: "channel:channel-recovery",
+        beforeSequence: 2,
+        messages: createMessages(1, 1),
+        nextBeforeSequence: 1,
+        hasMoreBefore: false,
+      },
+      rawUtf8ByteLength: 100,
+    });
+
+    await expect(older).rejects.toMatchObject({ code: "cancelled" });
+    expect(session.timeline.messages.map((message) => message.sequence)).toEqual([2, 3]);
+  });
+
   function createSession(
     storage: KeyValueStorage,
     overrides: Partial<ConstructorParameters<typeof StreamMessagesSessionModel>[0]> = {},

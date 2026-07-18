@@ -33,6 +33,7 @@ export class StreamMessagesSessionModel {
   readonly #yieldControl: () => Promise<void>;
   #activeRecovery: Promise<void> | undefined;
   #abortController: AbortController | undefined;
+  #olderAbortController: AbortController | undefined;
 
   constructor(readonly options: StreamMessagesSessionModelOptions) {
     this.timeline = new StreamMessagesTimelineModel(options.channelId);
@@ -68,23 +69,36 @@ export class StreamMessagesSessionModel {
   async loadOlder(transport: StreamMessagesTransport, limit = 50): Promise<void> {
     const beforeSequence = this.timeline.historyBeforeCursor;
 
-    if (beforeSequence === null || !this.timeline.hasMoreBefore) {
+    if (
+      beforeSequence === null ||
+      !this.timeline.hasMoreBefore ||
+      this.#olderAbortController !== undefined
+    ) {
       return;
     }
 
     const abortController = new AbortController();
+    this.#olderAbortController = abortController;
     const request: OlderStreamMessagesHttpRequest = {
       channelId: this.options.channelId,
       beforeSequence,
       limit,
     };
-    const page = await transport.loadOlder(request, { signal: abortController.signal });
-    assertRawByteLength(page.rawUtf8ByteLength);
-    this.timeline.applyOlder(page.response);
+    try {
+      const page = await transport.loadOlder(request, { signal: abortController.signal });
+      assertNotAborted(abortController.signal);
+      assertRawByteLength(page.rawUtf8ByteLength);
+      this.timeline.applyOlder(page.response);
+    } finally {
+      if (this.#olderAbortController === abortController) {
+        this.#olderAbortController = undefined;
+      }
+    }
   }
 
   cancel(): void {
     this.#abortController?.abort();
+    this.#olderAbortController?.abort();
     this.recovery.setPhase("cancelled");
   }
 
