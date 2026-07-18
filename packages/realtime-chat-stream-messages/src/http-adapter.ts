@@ -24,6 +24,7 @@ import { timeout } from "hono/timeout";
 import { StreamMessagesDataIntegrityError, StreamMessagesDomainError } from "./errors.js";
 
 import type { StreamMessagesModule } from "./stream-messages-module.js";
+import type { StreamMessagesQueryRateLimiter } from "./distributed-rate-limiter.js";
 
 export type StreamMessagesHttpActor = {
   actorId: string;
@@ -40,6 +41,8 @@ export type RegisterStreamMessagesPublicHttpRoutesConfig = {
     request: Request,
   ) => Promise<StreamMessagesHttpActor> | StreamMessagesHttpActor;
   logger: StreamMessagesHttpLogger;
+  getTrustedSourceIp?: (request: Request) => Promise<string> | string;
+  rateLimiter?: StreamMessagesQueryRateLimiter;
   streamMessages: StreamMessagesModule;
   timeoutMilliseconds?: number;
 };
@@ -66,6 +69,12 @@ export function registerStreamMessagesPublicHttpRoutes(
   app: Hono,
   config: RegisterStreamMessagesPublicHttpRoutesConfig,
 ): void {
+  if ((config.rateLimiter === undefined) !== (config.getTrustedSourceIp === undefined)) {
+    throw new TypeError(
+      "Stream Messages public rate limiter와 trusted source IP provider는 함께 설정해야 합니다.",
+    );
+  }
+
   registerStreamMessagesTimeouts(app, config.timeoutMilliseconds, [
     "/realtime-chat/channels/:channelId/messages/latest",
     "/realtime-chat/channels/:channelId/messages/older",
@@ -78,6 +87,7 @@ export function registerStreamMessagesPublicHttpRoutes(
     const request = parseLatestRequest(context.req.param("channelId"));
 
     try {
+      await enforcePublicRateLimit(config, context.req.raw, actor.actorId, requestId);
       const result = await config.streamMessages.loadLatest(request, {
         actorId: actor.actorId,
         measureFinalEnvelope: measureLatestStreamMessagesHttpFinalEnvelope,
@@ -107,6 +117,7 @@ export function registerStreamMessagesPublicHttpRoutes(
     const request = parseOlderRequest(context.req.param("channelId"), context.req.url);
 
     try {
+      await enforcePublicRateLimit(config, context.req.raw, actor.actorId, requestId);
       const result = await config.streamMessages.loadOlder(request, {
         actorId: actor.actorId,
         measureFinalEnvelope: measureOlderStreamMessagesHttpFinalEnvelope,
@@ -128,6 +139,34 @@ export function registerStreamMessagesPublicHttpRoutes(
       });
     }
   });
+}
+
+async function enforcePublicRateLimit(
+  config: RegisterStreamMessagesPublicHttpRoutesConfig,
+  request: Request,
+  actorId: string,
+  requestId: string,
+): Promise<void> {
+  if (config.rateLimiter === undefined || config.getTrustedSourceIp === undefined) {
+    return;
+  }
+
+  const sourceIp = await config.getTrustedSourceIp(request);
+  const decision = await config.rateLimiter.checkPublic({ actorId, sourceIp });
+
+  if (!decision.allowed) {
+    throw createHttpError(
+      429,
+      {
+        status: "error",
+        code: "rate_limited",
+        message: "Stream Messages query rate limit exceeded",
+        retryAfterMs: decision.retryAfterMs,
+      },
+      requestId,
+      { "retry-after": String(Math.ceil(decision.retryAfterMs / 1_000)) },
+    );
+  }
 }
 
 export function registerStreamMessagesInternalHttpRoutes(
@@ -450,19 +489,24 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function createHttpError(
-  status: 400 | 404 | 409 | 503,
+  status: 400 | 404 | 409 | 429 | 503,
   body: StreamMessagesHttpErrorResponse,
   requestId?: string,
+  responseHeaders?: HeadersInit,
 ): HTTPException {
   return new HTTPException(status, {
-    res: createJsonResponse(JSON.stringify(body), status, requestId),
+    res: createJsonResponse(JSON.stringify(body), status, requestId, responseHeaders),
   });
 }
 
-function createJsonResponse(serialized: string, status: number, requestId?: string): Response {
-  const headers = new Headers({
-    "content-type": "application/json; charset=UTF-8",
-  });
+function createJsonResponse(
+  serialized: string,
+  status: number,
+  requestId?: string,
+  responseHeaders?: HeadersInit,
+): Response {
+  const headers = new Headers(responseHeaders);
+  headers.set("content-type", "application/json; charset=UTF-8");
 
   if (requestId !== undefined) {
     headers.set("x-request-id", requestId);

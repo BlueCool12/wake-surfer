@@ -142,10 +142,8 @@ export function createRealtimeChatApiApp(deps: RealtimeChatApiAppDeps): Hono {
   });
 
   app.post("/internal/realtime-chat/gateway-tickets/consume", async (context) => {
-    const [gateway, body] = await Promise.all([
-      authenticateGateway(context.req.raw),
-      readConsumeGatewayTicketRequest(context.req.raw),
-    ]);
+    const gateway = await authenticateGateway(context.req.raw);
+    const body = await readConsumeGatewayTicketRequest(context.req.raw);
 
     let result: ConsumeGatewayTicketResponse;
 

@@ -109,6 +109,66 @@ describe("Stream Messages public HTTP adapter", () => {
     expect(JSON.stringify(logger.error.mock.calls)).not.toContain("sensitive-message-content");
   });
 
+  it("enforces actor and trusted source-IP rate limits with retry metadata", async () => {
+    const app = new Hono();
+    const loadLatest = vi.fn();
+    const checkPublic = vi.fn(async () => ({ allowed: false as const, retryAfterMs: 1_250 }));
+    registerStreamMessagesPublicHttpRoutes(app, {
+      authenticateActor: () => ({ actorId: "actor-rate" }),
+      getTrustedSourceIp: () => "203.0.113.5",
+      logger: createLogger(),
+      rateLimiter: {
+        checkPublic,
+        checkSyncActor: vi.fn(),
+      },
+      streamMessages: createStreamMessages({ loadLatest }),
+    });
+
+    const result = await app.request("/realtime-chat/channels/channel-http/messages/latest", {
+      headers: {
+        "x-forwarded-for": "client-forged-ip",
+        "x-request-id": "request-rate",
+      },
+    });
+
+    expect(result.status).toBe(429);
+    expect(result.headers.get("retry-after")).toBe("2");
+    await expect(result.json()).resolves.toMatchObject({
+      code: "rate_limited",
+      retryAfterMs: 1_250,
+    });
+    expect(checkPublic).toHaveBeenCalledWith({
+      actorId: "actor-rate",
+      sourceIp: "203.0.113.5",
+    });
+    expect(loadLatest).not.toHaveBeenCalled();
+  });
+
+  it("fails public queries closed when the distributed limiter is unavailable", async () => {
+    const app = new Hono();
+    const loadLatest = vi.fn();
+    registerStreamMessagesPublicHttpRoutes(app, {
+      authenticateActor: () => ({ actorId: "actor-rate" }),
+      getTrustedSourceIp: () => "203.0.113.5",
+      logger: createLogger(),
+      rateLimiter: {
+        checkPublic: vi.fn(async () => {
+          throw new Error("redis unavailable");
+        }),
+        checkSyncActor: vi.fn(),
+      },
+      streamMessages: createStreamMessages({ loadLatest }),
+    });
+
+    const result = await app.request("/realtime-chat/channels/channel-http/messages/latest");
+    expect(result.status).toBe(503);
+    await expect(result.json()).resolves.toMatchObject({
+      code: "stream_messages_unavailable",
+      retryable: true,
+    });
+    expect(loadLatest).not.toHaveBeenCalled();
+  });
+
   it("authenticates Gateway before reading the asserted actor for internal sync", async () => {
     const callOrder: string[] = [];
     const sourceMessage = createLatestResponse().messages[0]!;
