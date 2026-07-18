@@ -6,20 +6,6 @@ const MIGRATION_LOCK_KEY = 8_642_341_903_771_529n;
 const MIGRATION_TABLE = "realtime_chat_schema_migrations";
 const LEGACY_BASELINE_VERSION = "001";
 const REALTIME_CHAT_TABLES = ["gateway_tickets", "message_streams", "messages"] as const;
-const MESSAGE_CONTENT_TYPE_TEXT_CONSTRAINT = "messages_content_type_text_check";
-const ADD_MESSAGE_CONTENT_TYPE_TEXT_CONSTRAINT_SQL = `
-ALTER TABLE messages
-ADD CONSTRAINT ${MESSAGE_CONTENT_TYPE_TEXT_CONSTRAINT}
-CHECK (content_type = 'text') NOT VALID
-`;
-const VALIDATE_MESSAGE_CONTENT_TYPE_TEXT_CONSTRAINT_SQL = `
-ALTER TABLE messages
-VALIDATE CONSTRAINT ${MESSAGE_CONTENT_TYPE_TEXT_CONSTRAINT}
-`;
-const MESSAGE_CONTENT_TYPE_TEXT_MIGRATION_CHECKSUM_SOURCE = [
-  ADD_MESSAGE_CONTENT_TYPE_TEXT_CONSTRAINT_SQL,
-  VALIDATE_MESSAGE_CONTENT_TYPE_TEXT_CONSTRAINT_SQL,
-].join("\n");
 const MESSAGE_CONTENT_TEXT_UTF8_8KIB_CONSTRAINT = "messages_content_text_utf8_8kib_check";
 const MESSAGE_CONTENT_TEXT_UTF8_8KIB_AUDIT_SQL = `
 SELECT message_id AS "messageId",
@@ -159,15 +145,6 @@ const REALTIME_CHAT_MIGRATIONS: readonly RealtimeChatMigration[] = [
     transaction: "required",
     execute: async (db) => {
       await addMessageContentTextUtf8ByteLengthConstraint(db);
-    },
-  },
-  {
-    version: "003",
-    name: "add_messages_content_type_text_constraint",
-    checksum: createChecksum(MESSAGE_CONTENT_TYPE_TEXT_MIGRATION_CHECKSUM_SOURCE),
-    transaction: "required",
-    execute: async (db) => {
-      await addMessageContentTypeTextConstraint(db);
     },
   },
 ];
@@ -486,11 +463,6 @@ function getLegacyBaselineMigration(
 
 function createChecksum(content: string): string {
   return createHash("sha256").update(content).digest("hex");
-}
-
-async function addMessageContentTypeTextConstraint(db: MigrationDatabase): Promise<void> {
-  await sql.raw(ADD_MESSAGE_CONTENT_TYPE_TEXT_CONSTRAINT_SQL).execute(db);
-  await sql.raw(VALIDATE_MESSAGE_CONTENT_TYPE_TEXT_CONSTRAINT_SQL).execute(db);
 }
 
 async function addMessageContentTextUtf8ByteLengthConstraint(db: MigrationDatabase): Promise<void> {
