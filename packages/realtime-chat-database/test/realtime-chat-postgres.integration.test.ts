@@ -22,6 +22,7 @@ import {
 import { runRealtimeChatMigrations } from "../src/realtime-chat-migrations";
 
 const MESSAGE_CONTENT_TEXT_UTF8_8KIB_CONSTRAINT = "messages_content_text_utf8_8kib_check";
+const MESSAGE_CONTENT_TYPE_TEXT_CONSTRAINT = "messages_content_type_text_check";
 
 describe("realtime-chat PostgreSQL integration harness", () => {
   let database: RealtimeChatIntegrationTestDatabase | undefined;
@@ -46,7 +47,7 @@ describe("realtime-chat PostgreSQL integration harness", () => {
       ORDER BY version ASC
     `.execute(getDatabase().db);
 
-    expect(result.rows).toHaveLength(2);
+    expect(result.rows).toHaveLength(3);
     expect(result.rows).toMatchObject([
       {
         version: "001",
@@ -55,6 +56,10 @@ describe("realtime-chat PostgreSQL integration harness", () => {
       {
         version: "002",
         name: "add_messages_content_text_utf8_8kib_constraint",
+      },
+      {
+        version: "003",
+        name: "add_messages_content_type_text_constraint",
       },
     ]);
     for (const migration of result.rows) {
@@ -101,6 +106,43 @@ describe("realtime-chat PostgreSQL integration harness", () => {
         is_validated: true,
       });
       expect(constraints[0]?.definition).toContain("octet_length(content_text) <= 8192");
+    } finally {
+      await temporaryDatabase.close();
+    }
+  });
+
+  it("enforces the named text content type constraint for direct SQL inserts", async () => {
+    const temporaryDatabase = await createTemporarySchemaDatabase();
+    const suffix = randomUUID();
+    const streamId = `channel:direct-content-type-${suffix}`;
+
+    try {
+      await temporaryDatabase.database.migrate();
+      await createDirectMessageStream(temporaryDatabase.database.db, streamId);
+
+      await expect(
+        insertDirectMessage(temporaryDatabase.database.db, {
+          messageId: `message-system-${suffix}`,
+          streamId,
+          sequence: 1,
+          clientMessageId: `client-system-${suffix}`,
+          contentType: "system",
+          contentText: "must not be stored as a user message",
+        }),
+      ).rejects.toThrow(MESSAGE_CONTENT_TYPE_TEXT_CONSTRAINT);
+
+      const constraints = await getMessageConstraintsByName(
+        temporaryDatabase.database.db,
+        MESSAGE_CONTENT_TYPE_TEXT_CONSTRAINT,
+      );
+
+      expect(constraints).toHaveLength(1);
+      expect(constraints[0]).toMatchObject({
+        constraint_name: MESSAGE_CONTENT_TYPE_TEXT_CONSTRAINT,
+        constraint_type: "c",
+        is_validated: true,
+      });
+      expect(constraints[0]?.definition).toContain("content_type = 'text'::text");
     } finally {
       await temporaryDatabase.close();
     }
@@ -164,7 +206,66 @@ describe("realtime-chat PostgreSQL integration harness", () => {
     }
   });
 
-  it("does not duplicate the UTF-8 8KiB constraint when migrate repeats", async () => {
+  it("audits existing non-text rows without exposing or changing message content", async () => {
+    const temporaryDatabase = await createTemporarySchemaDatabase();
+    const suffix = randomUUID();
+    const streamId = `channel:existing-content-type-violation-${suffix}`;
+    const messageId = `message-existing-content-type-violation-${suffix}`;
+    const sensitiveContent = `sensitive-message-${suffix}`;
+
+    try {
+      await createGatewayTicketsTable(
+        temporaryDatabase.database.db as unknown as Kysely<GatewayTicketDatabase>,
+      );
+      await createBaselineLegacyMessageSendTables(temporaryDatabase.database.db);
+      await createDirectMessageStream(temporaryDatabase.database.db, streamId);
+      await insertDirectMessage(temporaryDatabase.database.db, {
+        messageId,
+        streamId,
+        sequence: 1,
+        clientMessageId: `client-existing-content-type-violation-${suffix}`,
+        contentType: "system",
+        contentText: sensitiveContent,
+      });
+
+      const migrationError = await temporaryDatabase.database.migrate().then(
+        () => undefined,
+        (error: unknown) => error,
+      );
+
+      expect(migrationError).toBeInstanceOf(Error);
+      const errorMessage = (migrationError as Error).message;
+      expect(errorMessage).toContain(messageId);
+      expect(errorMessage).toContain(streamId);
+      expect(errorMessage).toContain('"sequence":1');
+      expect(errorMessage).toContain('"contentType":"system"');
+      expect(errorMessage).not.toContain(sensitiveContent);
+
+      const persisted = await sql<{ content_type: string; content_text: string }>`
+        SELECT content_type, content_text
+        FROM messages
+        WHERE message_id = ${messageId}
+      `.execute(temporaryDatabase.database.db);
+      const migrationHistory = await sql<{ version: string }>`
+        SELECT version
+        FROM realtime_chat_schema_migrations
+        ORDER BY version ASC
+      `.execute(temporaryDatabase.database.db);
+
+      expect(persisted.rows).toEqual([{ content_type: "system", content_text: sensitiveContent }]);
+      expect(migrationHistory.rows).toEqual([{ version: "001" }, { version: "002" }]);
+      await expect(
+        getMessageConstraintsByName(
+          temporaryDatabase.database.db,
+          MESSAGE_CONTENT_TYPE_TEXT_CONSTRAINT,
+        ),
+      ).resolves.toEqual([]);
+    } finally {
+      await temporaryDatabase.close();
+    }
+  });
+
+  it("does not duplicate named message constraints when migrate repeats", async () => {
     const temporaryDatabase = await createTemporarySchemaDatabase();
 
     try {
@@ -177,11 +278,21 @@ describe("realtime-chat PostgreSQL integration harness", () => {
         ORDER BY version ASC
       `.execute(temporaryDatabase.database.db);
 
-      expect(migrationHistory.rows).toEqual([{ version: "001" }, { version: "002" }]);
+      expect(migrationHistory.rows).toEqual([
+        { version: "001" },
+        { version: "002" },
+        { version: "003" },
+      ]);
       await expect(
         getMessageConstraintsByName(
           temporaryDatabase.database.db,
           MESSAGE_CONTENT_TEXT_UTF8_8KIB_CONSTRAINT,
+        ),
+      ).resolves.toHaveLength(1);
+      await expect(
+        getMessageConstraintsByName(
+          temporaryDatabase.database.db,
+          MESSAGE_CONTENT_TYPE_TEXT_CONSTRAINT,
         ),
       ).resolves.toHaveLength(1);
     } finally {
@@ -539,6 +650,10 @@ describe("realtime-chat PostgreSQL integration harness", () => {
         temporaryDatabase.database.db as unknown as Kysely<GatewayTicketDatabase>,
       );
       await createBaselineLegacyMessageSendTables(temporaryDatabase.database.db);
+      await sql`
+        ALTER TABLE messages
+        ADD CHECK (content_type = 'text')
+      `.execute(temporaryDatabase.database.db);
 
       await temporaryDatabase.database.migrate();
 
@@ -561,6 +676,10 @@ describe("realtime-chat PostgreSQL integration harness", () => {
         {
           version: "002",
           name: "add_messages_content_text_utf8_8kib_constraint",
+        },
+        {
+          version: "003",
+          name: "add_messages_content_type_text_constraint",
         },
       ]);
       for (const migration of result.rows) {
@@ -804,7 +923,7 @@ describe("realtime-chat PostgreSQL integration harness", () => {
         ORDER BY version ASC
       `.execute(temporaryDatabase.database.db);
 
-      expect(result.rows).toEqual([{ version: "001" }, { version: "002" }]);
+      expect(result.rows).toEqual([{ version: "001" }, { version: "002" }, { version: "003" }]);
       await expect(
         temporaryDatabase.database.db.selectFrom("messages").select("message_id").execute(),
       ).resolves.toEqual([]);

@@ -31,6 +31,31 @@ const MESSAGE_CONTENT_TEXT_UTF8_8KIB_MIGRATION_CHECKSUM_SOURCE = [
   ADD_MESSAGE_CONTENT_TEXT_UTF8_8KIB_CONSTRAINT_SQL,
   VALIDATE_MESSAGE_CONTENT_TEXT_UTF8_8KIB_CONSTRAINT_SQL,
 ].join("\n");
+const MESSAGE_CONTENT_TYPE_TEXT_CONSTRAINT = "messages_content_type_text_check";
+const MESSAGE_CONTENT_TYPE_TEXT_AUDIT_SQL = `
+SELECT message_id AS "messageId",
+  stream_id AS "streamId",
+  sequence,
+  content_type AS "contentType"
+FROM messages
+WHERE content_type IS DISTINCT FROM 'text'
+ORDER BY stream_id ASC, sequence ASC, message_id ASC
+`;
+const ADD_MESSAGE_CONTENT_TYPE_TEXT_CONSTRAINT_SQL = `
+ALTER TABLE messages
+ADD CONSTRAINT ${MESSAGE_CONTENT_TYPE_TEXT_CONSTRAINT}
+CHECK (content_type = 'text') NOT VALID
+`;
+const VALIDATE_MESSAGE_CONTENT_TYPE_TEXT_CONSTRAINT_SQL = `
+ALTER TABLE messages
+VALIDATE CONSTRAINT ${MESSAGE_CONTENT_TYPE_TEXT_CONSTRAINT}
+`;
+const MESSAGE_CONTENT_TYPE_TEXT_MIGRATION_CHECKSUM_SOURCE = [
+  "LOCK TABLE messages IN SHARE ROW EXCLUSIVE MODE",
+  MESSAGE_CONTENT_TYPE_TEXT_AUDIT_SQL,
+  ADD_MESSAGE_CONTENT_TYPE_TEXT_CONSTRAINT_SQL,
+  VALIDATE_MESSAGE_CONTENT_TYPE_TEXT_CONSTRAINT_SQL,
+].join("\n");
 
 type MigrationDatabase = Kysely<RealtimeChatDatabase>;
 
@@ -54,6 +79,13 @@ type MessageContentTextByteLengthViolation = {
   streamId: string;
   sequence: number;
   byteLength: number;
+};
+
+type MessageContentTypeViolation = {
+  messageId: string;
+  streamId: string;
+  sequence: number;
+  contentType: string;
 };
 
 type LegacyColumn = {
@@ -145,6 +177,15 @@ const REALTIME_CHAT_MIGRATIONS: readonly RealtimeChatMigration[] = [
     transaction: "required",
     execute: async (db) => {
       await addMessageContentTextUtf8ByteLengthConstraint(db);
+    },
+  },
+  {
+    version: "003",
+    name: "add_messages_content_type_text_constraint",
+    checksum: createChecksum(MESSAGE_CONTENT_TYPE_TEXT_MIGRATION_CHECKSUM_SOURCE),
+    transaction: "required",
+    execute: async (db) => {
+      await addMessageContentTypeTextConstraint(db);
     },
   },
 ];
@@ -339,6 +380,14 @@ const LEGACY_CONSTRAINTS: readonly LegacyConstraint[] = [
   },
 ];
 
+const OPTIONAL_LEGACY_CONSTRAINTS: readonly LegacyConstraint[] = [
+  {
+    tableName: "messages",
+    type: "c",
+    definition: "CHECK (content_type = 'text'::text)",
+  },
+];
+
 const LEGACY_INDEXES: readonly LegacyIndex[] = [
   {
     tableName: "gateway_tickets",
@@ -482,6 +531,25 @@ async function addMessageContentTextUtf8ByteLengthConstraint(db: MigrationDataba
 
   await sql.raw(ADD_MESSAGE_CONTENT_TEXT_UTF8_8KIB_CONSTRAINT_SQL).execute(db);
   await sql.raw(VALIDATE_MESSAGE_CONTENT_TEXT_UTF8_8KIB_CONSTRAINT_SQL).execute(db);
+}
+
+async function addMessageContentTypeTextConstraint(db: MigrationDatabase): Promise<void> {
+  await sql.raw("LOCK TABLE messages IN SHARE ROW EXCLUSIVE MODE").execute(db);
+
+  const violations = await sql
+    .raw<MessageContentTypeViolation>(MESSAGE_CONTENT_TYPE_TEXT_AUDIT_SQL)
+    .execute(db);
+
+  if (violations.rows.length > 0) {
+    throw new Error(
+      `messages.content_type text 제약을 적용할 수 없습니다. 위반 row: ${JSON.stringify(
+        violations.rows,
+      )}`,
+    );
+  }
+
+  await sql.raw(ADD_MESSAGE_CONTENT_TYPE_TEXT_CONSTRAINT_SQL).execute(db);
+  await sql.raw(VALIDATE_MESSAGE_CONTENT_TYPE_TEXT_CONSTRAINT_SQL).execute(db);
 }
 
 async function createMigrationTable(db: MigrationDatabase): Promise<void> {
@@ -651,14 +719,23 @@ async function assertLegacyConstraints(db: MigrationDatabase): Promise<void> {
       AND constraint_definition.contype IN ('c', 'f', 'p', 'u', 'x')
   `.execute(db);
 
-  assertExactSet(
-    result.rows.map((constraint) =>
+  const optionalLegacyConstraintSignatures = new Set(
+    OPTIONAL_LEGACY_CONSTRAINTS.map((constraint) =>
+      createConstraintSignature(constraint.tableName, constraint.type, constraint.definition),
+    ),
+  );
+  const actualConstraintSignatures = result.rows
+    .map((constraint) =>
       createConstraintSignature(
         constraint.table_name,
         constraint.constraint_type,
         constraint.definition,
       ),
-    ),
+    )
+    .filter((signature) => !optionalLegacyConstraintSignatures.has(signature));
+
+  assertExactSet(
+    actualConstraintSignatures,
     LEGACY_CONSTRAINTS.map((constraint) =>
       createConstraintSignature(constraint.tableName, constraint.type, constraint.definition),
     ),
