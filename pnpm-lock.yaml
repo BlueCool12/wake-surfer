@@ -41,6 +41,9 @@ importers:
       '@wake-surfer/realtime-chat-gateway-ticket-contracts':
         specifier: workspace:*
         version: link:../../packages/realtime-chat-gateway-ticket-contracts
+      '@wake-surfer/realtime-chat-stream-messages':
+        specifier: workspace:*
+        version: link:../../packages/realtime-chat-stream-messages
       hono:
         specifier: ^4.12.28
         version: 4.12.28
@@ -198,10 +201,16 @@ importers:
       '@wake-surfer/realtime-chat-stream-messages-contracts':
         specifier: workspace:*
         version: link:../realtime-chat-stream-messages-contracts
+      hono:
+        specifier: ^4.12.28
+        version: 4.12.28
       kysely:
         specifier: 0.28.8
         version: 0.28.8
     devDependencies:
+      '@types/node':
+        specifier: ^24.13.2
+        version: 24.13.2
       '@wake-surfer/realtime-chat-database':
         specifier: workspace:*
         version: link:../realtime-chat-database

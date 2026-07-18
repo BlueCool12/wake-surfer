@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 
-import type { ApiErrorResponse } from "@wake-surfer/api-contracts";
+import type { ApiCommonErrorCode, ApiErrorResponse } from "@wake-surfer/api-contracts";
 import {
   ConsumeGatewayTicketRequestBodySchema,
   IssueGatewayTicketRequestBodySchema,
@@ -11,6 +11,14 @@ import type {
   IssueGatewayTicketResponse,
   RealtimeChatErrorCode,
 } from "@wake-surfer/realtime-chat-gateway-ticket-contracts";
+import {
+  registerStreamMessagesInternalHttpRoutes,
+  registerStreamMessagesPublicHttpRoutes,
+  type StreamMessagesModule,
+} from "@wake-surfer/realtime-chat-stream-messages";
+import { cors } from "hono/cors";
+import { HTTPException } from "hono/http-exception";
+import { timeout } from "hono/timeout";
 
 export type AppLogger = {
   error: (context: Record<string, unknown>, message: string) => void;
@@ -37,18 +45,31 @@ export type AuthenticatedGateway = {
 export type RealtimeChatApiAppDeps = {
   authenticateActor: (request: Request) => Promise<AuthenticatedActor> | AuthenticatedActor;
   authenticateGateway: (request: Request) => Promise<AuthenticatedGateway> | AuthenticatedGateway;
+  cors?: {
+    allowedHeaders: string[];
+    allowedOrigins: string[];
+  };
   gatewayTicket: GatewayTicketService;
+  getAssertedActor?: (request: Request) => Promise<AuthenticatedActor> | AuthenticatedActor;
   logger: AppLogger;
+  requestTimeoutMilliseconds?: number;
+  streamMessages?: StreamMessagesModule;
 };
 
-type GatewayTicketErrorResponse = ApiErrorResponse<RealtimeChatErrorCode>;
+type RealtimeChatApiErrorCode = RealtimeChatErrorCode | ApiCommonErrorCode;
+type RealtimeChatApiErrorResponse = ApiErrorResponse<RealtimeChatApiErrorCode>;
 
 export class AppHttpError extends Error {
-  readonly code: RealtimeChatErrorCode;
-  readonly statusCode: 400 | 401 | 403;
+  readonly code: RealtimeChatApiErrorCode;
+  readonly statusCode: 400 | 401 | 403 | 404 | 500 | 503;
 
-  constructor(statusCode: 400 | 401 | 403, code: RealtimeChatErrorCode, message: string) {
-    super(message);
+  constructor(
+    statusCode: 400 | 401 | 403 | 404 | 500 | 503,
+    code: RealtimeChatApiErrorCode,
+    message: string,
+    options?: ErrorOptions,
+  ) {
+    super(message, options);
     this.code = code;
     this.statusCode = statusCode;
   }
@@ -58,15 +79,64 @@ export function createRealtimeChatApiApp(deps: RealtimeChatApiAppDeps): Hono {
   const { authenticateActor, authenticateGateway, gatewayTicket, logger } = deps;
   const app = new Hono();
 
+  if (deps.cors !== undefined) {
+    app.use(
+      "/realtime-chat/*",
+      cors({
+        allowHeaders: deps.cors.allowedHeaders,
+        allowMethods: ["GET", "POST", "OPTIONS"],
+        credentials: true,
+        exposeHeaders: ["x-request-id", "retry-after"],
+        origin: deps.cors.allowedOrigins,
+      }),
+    );
+  }
+
+  if (deps.requestTimeoutMilliseconds !== undefined) {
+    app.use(
+      "/realtime-chat/gateway-tickets",
+      timeout(
+        deps.requestTimeoutMilliseconds,
+        () =>
+          new HTTPException(503, {
+            res: new Response(
+              JSON.stringify({
+                code: "gateway_ticket_unavailable",
+                message: "gateway ticket service unavailable",
+                status: "error",
+              } satisfies RealtimeChatApiErrorResponse),
+              {
+                status: 503,
+                headers: { "content-type": "application/json; charset=UTF-8" },
+              },
+            ),
+          }),
+      ),
+    );
+  }
+
   app.get("/health", (context) => context.json({ status: "ok" as const }));
 
   app.post("/realtime-chat/gateway-tickets", async (context) => {
     const actor = await authenticateActor(context.req.raw);
     await readIssueGatewayTicketRequest(context.req.raw);
 
-    const issued = await gatewayTicket.issue({
-      actorId: actor.actorId,
-    });
+    let issued: IssueGatewayTicketResponse;
+
+    try {
+      issued = await gatewayTicket.issue({
+        actorId: actor.actorId,
+      });
+    } catch (error) {
+      throw new AppHttpError(
+        503,
+        "gateway_ticket_unavailable",
+        "gateway ticket service unavailable",
+        {
+          cause: error,
+        },
+      );
+    }
 
     return context.json(issued, 201);
   });
@@ -77,17 +147,53 @@ export function createRealtimeChatApiApp(deps: RealtimeChatApiAppDeps): Hono {
       readConsumeGatewayTicketRequest(context.req.raw),
     ]);
 
-    const result = await gatewayTicket.consume(
-      {
-        ticket: body.ticket,
-      },
-      {
-        gatewayId: gateway.gatewayId,
-      },
-    );
+    let result: ConsumeGatewayTicketResponse;
+
+    try {
+      result = await gatewayTicket.consume(
+        {
+          ticket: body.ticket,
+        },
+        {
+          gatewayId: gateway.gatewayId,
+        },
+      );
+    } catch (error) {
+      throw new AppHttpError(
+        503,
+        "gateway_ticket_unavailable",
+        "gateway ticket service unavailable",
+        {
+          cause: error,
+        },
+      );
+    }
 
     return context.json(result);
   });
+
+  if (deps.streamMessages !== undefined) {
+    registerStreamMessagesPublicHttpRoutes(app, {
+      authenticateActor,
+      logger,
+      streamMessages: deps.streamMessages,
+      ...(deps.requestTimeoutMilliseconds === undefined
+        ? {}
+        : { timeoutMilliseconds: deps.requestTimeoutMilliseconds }),
+    });
+
+    if (deps.getAssertedActor !== undefined) {
+      registerStreamMessagesInternalHttpRoutes(app, {
+        authenticateGateway,
+        getAssertedActor: deps.getAssertedActor,
+        logger,
+        streamMessages: deps.streamMessages,
+        ...(deps.requestTimeoutMilliseconds === undefined
+          ? {}
+          : { timeoutMilliseconds: deps.requestTimeoutMilliseconds }),
+      });
+    }
+  }
 
   app.notFound((context) =>
     context.json(
@@ -95,44 +201,104 @@ export function createRealtimeChatApiApp(deps: RealtimeChatApiAppDeps): Hono {
         code: "bad_request",
         message: "route not found",
         status: "error",
-      } satisfies GatewayTicketErrorResponse,
+      } satisfies RealtimeChatApiErrorResponse,
       404,
     ),
   );
 
   app.onError((error, context) => {
+    const httpExceptionResponse = getHttpExceptionResponse(error);
+
+    if (httpExceptionResponse !== undefined) {
+      return httpExceptionResponse;
+    }
+
     if (error instanceof AppHttpError) {
+      if (error.statusCode >= 500) {
+        logRequestFailure(
+          logger,
+          error,
+          context.req.method,
+          context.req.path,
+          context.req.header("x-request-id"),
+        );
+      }
+
       return context.json(
         {
           code: error.code,
           message: error.message,
           status: "error",
-        } satisfies GatewayTicketErrorResponse,
+        } satisfies RealtimeChatApiErrorResponse,
         error.statusCode,
       );
     }
 
-    logger.error(
-      {
-        error: serializeError(error),
-        method: context.req.method,
-        path: context.req.path,
-        requestId: context.req.header("x-request-id") ?? null,
-      },
-      "realtime chat api request failed",
+    logRequestFailure(
+      logger,
+      error,
+      context.req.method,
+      context.req.path,
+      context.req.header("x-request-id"),
     );
 
     return context.json(
       {
-        code: "gateway_ticket_unavailable",
-        message: "gateway ticket service unavailable",
+        code: "internal_error",
+        message: "realtime chat API unavailable",
         status: "error",
-      } satisfies GatewayTicketErrorResponse,
+      } satisfies RealtimeChatApiErrorResponse,
       500,
     );
   });
 
   return app;
+}
+
+function getHttpExceptionResponse(error: unknown): Response | undefined {
+  if (error instanceof HTTPException) {
+    return error.getResponse();
+  }
+
+  if (!(error instanceof Error)) {
+    return undefined;
+  }
+
+  const candidate = error as Error & {
+    getResponse?: () => unknown;
+    status?: unknown;
+  };
+
+  if (
+    typeof candidate.getResponse !== "function" ||
+    typeof candidate.status !== "number" ||
+    !Number.isInteger(candidate.status) ||
+    candidate.status < 400 ||
+    candidate.status > 599
+  ) {
+    return undefined;
+  }
+
+  const response = candidate.getResponse();
+  return response instanceof Response ? response : undefined;
+}
+
+function logRequestFailure(
+  logger: AppLogger,
+  error: unknown,
+  method: string,
+  path: string,
+  requestId: string | undefined,
+): void {
+  logger.error(
+    {
+      error: serializeError(error),
+      method,
+      path,
+      requestId: requestId ?? null,
+    },
+    "realtime chat api request failed",
+  );
 }
 
 async function readIssueGatewayTicketRequest(request: Request): Promise<void> {

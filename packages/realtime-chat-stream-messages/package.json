@@ -26,9 +26,11 @@
     "@wake-surfer/realtime-chat-message-contracts": "workspace:*",
     "@wake-surfer/realtime-chat-message-send": "workspace:*",
     "@wake-surfer/realtime-chat-stream-messages-contracts": "workspace:*",
+    "hono": "^4.12.28",
     "kysely": "0.28.8"
   },
   "devDependencies": {
+    "@types/node": "^24.13.2",
     "@wake-surfer/realtime-chat-database": "workspace:*",
     "vitest": "4.1.6"
   }

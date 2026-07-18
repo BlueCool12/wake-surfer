@@ -75,6 +75,7 @@ function createDatabaseHandle(
 function requiredEnv(): NodeJS.ProcessEnv {
   return {
     REALTIME_CHAT_DATABASE_URL: "postgres://localhost/wake_surfer",
+    REALTIME_CHAT_GATEWAY_API_TOKEN: "a".repeat(32),
     REALTIME_CHAT_GATEWAY_ID: "gateway-1",
     REALTIME_CHAT_GATEWAY_URL: "ws://localhost:3001/realtime-chat",
   };

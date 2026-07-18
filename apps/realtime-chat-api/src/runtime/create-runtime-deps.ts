@@ -53,8 +53,20 @@ export async function createRuntimeDeps(
     return {
       appDeps: {
         ...createHeaderAuthContext(config),
+        cors: {
+          allowedHeaders: [
+            "authorization",
+            "content-type",
+            "x-request-id",
+            config.actorIdHeader,
+            config.gatewayIdHeader,
+            config.gatewayAssertedActorHeader,
+          ],
+          allowedOrigins: config.corsAllowedOrigins,
+        },
         gatewayTicket,
         logger,
+        requestTimeoutMilliseconds: config.requestTimeoutMilliseconds,
       },
       close: async () => {
         await database.close();
