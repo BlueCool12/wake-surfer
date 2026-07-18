@@ -85,6 +85,7 @@ export function registerStreamMessagesPublicHttpRoutes(
     assertAllowedQueryParameters(context.req.url, []);
     const actor = await config.authenticateActor(context.req.raw);
     const request = parseLatestRequest(context.req.param("channelId"));
+    const startedAt = performance.now();
 
     try {
       await enforcePublicRateLimit(config, context.req.raw, actor.actorId, requestId);
@@ -97,6 +98,18 @@ export function registerStreamMessagesPublicHttpRoutes(
         serialized,
         result.envelopeUtf8ByteLength,
         getLatestStreamMessagesHttpResponseUtf8ByteLength(result.response),
+      );
+      config.logger.info(
+        {
+          channelId: request.channelId,
+          durationMs: elapsedMilliseconds(startedAt),
+          hasMore: result.response.hasMoreBefore,
+          messageCount: result.response.messages.length,
+          query: "latest",
+          requestId,
+          serializedBytes: result.envelopeUtf8ByteLength,
+        },
+        "stream messages query completed",
       );
 
       return createJsonResponse(serialized, 200, requestId);
@@ -115,6 +128,7 @@ export function registerStreamMessagesPublicHttpRoutes(
     assertAllowedQueryParameters(context.req.url, ["beforeSequence", "limit"]);
     const actor = await config.authenticateActor(context.req.raw);
     const request = parseOlderRequest(context.req.param("channelId"), context.req.url);
+    const startedAt = performance.now();
 
     try {
       await enforcePublicRateLimit(config, context.req.raw, actor.actorId, requestId);
@@ -127,6 +141,18 @@ export function registerStreamMessagesPublicHttpRoutes(
         serialized,
         result.envelopeUtf8ByteLength,
         getOlderStreamMessagesHttpResponseUtf8ByteLength(result.response),
+      );
+      config.logger.info(
+        {
+          channelId: request.channelId,
+          durationMs: elapsedMilliseconds(startedAt),
+          hasMore: result.response.hasMoreBefore,
+          messageCount: result.response.messages.length,
+          query: "older",
+          requestId,
+          serializedBytes: result.envelopeUtf8ByteLength,
+        },
+        "stream messages query completed",
       );
 
       return createJsonResponse(serialized, 200, requestId);
@@ -186,6 +212,7 @@ export function registerStreamMessagesInternalHttpRoutes(
       context.req.raw,
       requestId,
     );
+    const startedAt = performance.now();
 
     try {
       const result = await config.streamMessages.syncAfter(request, {
@@ -207,6 +234,18 @@ export function registerStreamMessagesInternalHttpRoutes(
       }
 
       const response = InternalSyncAfterStreamMessagesHttpResponseSchema.parse(result.response);
+      config.logger.info(
+        {
+          channelId: request.channelId,
+          durationMs: elapsedMilliseconds(startedAt),
+          hasMore: response.hasMoreAfter,
+          messageCount: response.messages.length,
+          query: "sync-after",
+          requestId,
+          serializedBytes: result.envelopeUtf8ByteLength,
+        },
+        "stream messages query completed",
+      );
       return createJsonResponse(JSON.stringify(response), 200, requestId);
     } catch (error) {
       throw mapStreamMessagesHttpError(error, {
@@ -466,6 +505,8 @@ function mapStreamMessagesHttpError(
       channelId: context.channelId,
       errorName: error instanceof Error ? error.name : "UnknownError",
       integrityReason: error instanceof StreamMessagesDataIntegrityError ? error.reason : undefined,
+      integrityMetadata:
+        error instanceof StreamMessagesDataIntegrityError ? error.metadata : undefined,
       query: context.query,
       requestId: context.requestId,
     },
@@ -482,6 +523,10 @@ function mapStreamMessagesHttpError(
     },
     context.requestId,
   );
+}
+
+function elapsedMilliseconds(startedAt: number): number {
+  return Math.max(0, Math.round((performance.now() - startedAt) * 100) / 100);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

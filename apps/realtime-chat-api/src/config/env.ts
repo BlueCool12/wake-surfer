@@ -4,6 +4,7 @@ import {
 } from "@wake-surfer/realtime-chat-gateway-ticket";
 
 export type RealtimeChatApiConfig = {
+  actorAuthSecurity: "development" | "trusted-edge";
   actorIdHeader: string;
   corsAllowedOrigins: string[];
   databaseUrl: string;
@@ -30,7 +31,9 @@ export type RealtimeChatApiConfig = {
 export function loadEnv(env: NodeJS.ProcessEnv = process.env): RealtimeChatApiConfig {
   const nodeEnvironment = readNodeEnvironment(env);
   const internalTransportSecurity = readInternalTransportSecurity(env);
+  const actorAuthSecurity = readActorAuthSecurity(env);
   const gatewayApiToken = readRequiredString(env, "REALTIME_CHAT_GATEWAY_API_TOKEN");
+  const gatewayUrl = readRequiredString(env, "REALTIME_CHAT_GATEWAY_URL");
 
   if (new TextEncoder().encode(gatewayApiToken).byteLength < 32) {
     throw new Error("REALTIME_CHAT_GATEWAY_API_TOKEN must contain at least 32 UTF-8 bytes");
@@ -42,7 +45,22 @@ export function loadEnv(env: NodeJS.ProcessEnv = process.env): RealtimeChatApiCo
     );
   }
 
+  if (nodeEnvironment === "production" && actorAuthSecurity !== "trusted-edge") {
+    throw new Error("production requires REALTIME_CHAT_ACTOR_AUTH_SECURITY=trusted-edge");
+  }
+
+  const parsedGatewayUrl = new URL(gatewayUrl);
+
+  if (parsedGatewayUrl.protocol !== "ws:" && parsedGatewayUrl.protocol !== "wss:") {
+    throw new Error("REALTIME_CHAT_GATEWAY_URL must use ws or wss");
+  }
+
+  if (nodeEnvironment === "production" && parsedGatewayUrl.protocol !== "wss:") {
+    throw new Error("production REALTIME_CHAT_GATEWAY_URL must use wss");
+  }
+
   return {
+    actorAuthSecurity,
     actorIdHeader: readOptionalString(env, "REALTIME_CHAT_ACTOR_ID_HEADER", "x-actor-id"),
     corsAllowedOrigins: readCorsAllowedOrigins(env),
     databaseUrl: readRequiredString(env, "REALTIME_CHAT_DATABASE_URL"),
@@ -61,7 +79,7 @@ export function loadEnv(env: NodeJS.ProcessEnv = process.env): RealtimeChatApiCo
     gatewayTicketTtlMilliseconds: readInteger(env, "REALTIME_CHAT_GATEWAY_TICKET_TTL_MS", 60_000, {
       min: 1_000,
     }),
-    gatewayUrl: readRequiredString(env, "REALTIME_CHAT_GATEWAY_URL"),
+    gatewayUrl,
     internalTransportSecurity,
     logLevel: readOptionalString(env, "LOG_LEVEL", "info"),
     nodeEnvironment,
@@ -92,6 +110,16 @@ export function loadEnv(env: NodeJS.ProcessEnv = process.env): RealtimeChatApiCo
       }),
     },
   };
+}
+
+function readActorAuthSecurity(env: NodeJS.ProcessEnv): RealtimeChatApiConfig["actorAuthSecurity"] {
+  const value = readOptionalString(env, "REALTIME_CHAT_ACTOR_AUTH_SECURITY", "development");
+
+  if (value === "development" || value === "trusted-edge") {
+    return value;
+  }
+
+  throw new Error("REALTIME_CHAT_ACTOR_AUTH_SECURITY must be development or trusted-edge");
 }
 
 function readCorsAllowedOrigins(env: NodeJS.ProcessEnv): string[] {

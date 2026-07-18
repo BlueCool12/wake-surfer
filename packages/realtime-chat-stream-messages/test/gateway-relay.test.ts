@@ -72,6 +72,16 @@ describe("Gateway Stream Messages relay", () => {
         }),
       }),
     ]);
+    expect(fixture.logger.info).toHaveBeenCalledWith(
+      expect.objectContaining({
+        messageCount: 1,
+        query: "sync-after",
+        requestId: "request-1",
+        serializedBytes: expect.any(Number),
+      }),
+      "Gateway Stream Messages relay completed",
+    );
+    expect(JSON.stringify(fixture.logger.info.mock.calls)).not.toContain("hello");
   });
 
   it("maps domain rejection and retryable infrastructure failure to separate events", async () => {
@@ -226,6 +236,7 @@ function createFixture(
     syncAfter: vi.fn(async () => createSyncResponse()),
     ...apiOverrides,
   };
+  const logger = { error: vi.fn(), info: vi.fn(), warn: vi.fn() };
   const runtime: GatewayStreamMessagesRuntime = {
     closeSession: (sessionId, generation, code) => {
       closed.push({ sessionId, generation, code });
@@ -255,7 +266,7 @@ function createFixture(
   registerGatewayStreamMessagesRelay({
     apiClient,
     getSession: (sessionId) => (sessionId === session.sessionId ? session : undefined),
-    logger: { error: vi.fn(), warn: vi.fn() },
+    logger,
     ...(rateLimiter === undefined ? {} : { rateLimiter }),
     runtime,
   });
@@ -263,6 +274,7 @@ function createFixture(
   return {
     apiClient,
     closed,
+    logger,
     emitClose: () =>
       sessionClosedListener?.({
         sessionId: session.sessionId,

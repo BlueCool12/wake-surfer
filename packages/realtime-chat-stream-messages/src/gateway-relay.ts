@@ -60,6 +60,7 @@ export type GatewayStreamMessagesRuntime = {
 
 export type GatewayStreamMessagesRelayLogger = {
   error: (metadata: Record<string, unknown>, message: string) => void;
+  info: (metadata: Record<string, unknown>, message: string) => void;
   warn: (metadata: Record<string, unknown>, message: string) => void;
 };
 
@@ -207,6 +208,7 @@ async function handleStreamSync(
     sessionId: session.sessionId,
   };
   inFlight.set(inFlightKey, request);
+  const startedAt = performance.now();
 
   try {
     const response = await options.apiClient.syncAfter(
@@ -231,11 +233,25 @@ async function handleStreamSync(
       requestId: event.requestId,
       ...response,
     });
+    const serialized = serializeChatStreamSyncedEvent(clientEvent);
     await options.runtime.send(
       session.sessionId,
       session.connectionGeneration,
       "chat.stream.synced",
-      serializeChatStreamSyncedEvent(clientEvent),
+      serialized,
+    );
+    options.logger.info(
+      {
+        channelId: event.channelId,
+        durationMs: elapsedMilliseconds(startedAt),
+        hasMore: response.hasMoreAfter,
+        messageCount: response.messages.length,
+        query: "sync-after",
+        requestId: event.requestId,
+        serializedBytes: new TextEncoder().encode(serialized).byteLength,
+        sessionId: session.sessionId,
+      },
+      "Gateway Stream Messages relay completed",
     );
   } catch (error) {
     if (request.abortController.signal.aborted) {
@@ -262,6 +278,16 @@ async function mapAndSendError(
 ): Promise<void> {
   if (error instanceof GatewayStreamMessagesApiError) {
     if (isDomainRejection(error.code)) {
+      options.logger.warn(
+        {
+          channelId: event.channelId,
+          code: error.code,
+          outcome: "domain_rejection",
+          requestId: event.requestId,
+          sessionId: session.sessionId,
+        },
+        "Gateway Stream Messages request rejected",
+      );
       await sendRejected(options.runtime, session, event.requestId, error.code, {
         ...(error.code === "rate_limited" && error.retryAfterMs !== undefined
           ? { retryAfterMs: error.retryAfterMs }
@@ -379,4 +405,8 @@ function isDomainRejection(
     code === "bad_request" ||
     code === "rate_limited"
   );
+}
+
+function elapsedMilliseconds(startedAt: number): number {
+  return Math.max(0, Math.round((performance.now() - startedAt) * 100) / 100);
 }

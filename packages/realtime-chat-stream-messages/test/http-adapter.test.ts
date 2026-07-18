@@ -20,7 +20,8 @@ describe("Stream Messages public HTTP adapter", () => {
       response,
       envelopeUtf8ByteLength: getLatestStreamMessagesHttpResponseUtf8ByteLength(response),
     }));
-    const app = createApp({ loadLatest });
+    const logger = createLogger();
+    const app = createApp({ loadLatest }, logger);
 
     const result = await app.request("/realtime-chat/channels/channel-http/messages/latest", {
       headers: {
@@ -39,6 +40,17 @@ describe("Stream Messages public HTTP adapter", () => {
         measureFinalEnvelope: expect.any(Function),
       }),
     );
+    expect(logger.info).toHaveBeenCalledWith(
+      expect.objectContaining({
+        hasMore: false,
+        messageCount: 1,
+        query: "latest",
+        requestId: "request-http-latest",
+        serializedBytes: expect.any(Number),
+      }),
+      "stream messages query completed",
+    );
+    expect(JSON.stringify(logger.info.mock.calls)).not.toContain("hello");
   });
 
   it("rejects unknown, duplicate, and out-of-range query fields before calling a handler", async () => {

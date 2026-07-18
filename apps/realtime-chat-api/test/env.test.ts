@@ -49,9 +49,31 @@ describe("realtime chat API runtime configuration", () => {
       loadEnv({
         ...requiredEnv(),
         NODE_ENV: "production",
+        REALTIME_CHAT_ACTOR_AUTH_SECURITY: "trusted-edge",
         REALTIME_CHAT_INTERNAL_TRANSPORT_SECURITY: "service-mesh-tls",
+        REALTIME_CHAT_GATEWAY_URL: "wss://gateway.example.test/realtime-chat",
       }).internalTransportSecurity,
     ).toBe("service-mesh-tls");
+  });
+
+  it("requires an explicit trusted actor edge and WSS Gateway URL in production", () => {
+    expect(() =>
+      loadEnv({
+        ...requiredEnv(),
+        NODE_ENV: "production",
+        REALTIME_CHAT_INTERNAL_TRANSPORT_SECURITY: "direct-tls",
+        REALTIME_CHAT_GATEWAY_URL: "wss://gateway.example.test/realtime-chat",
+      }),
+    ).toThrow(/ACTOR_AUTH_SECURITY/);
+
+    expect(() =>
+      loadEnv({
+        ...requiredEnv(),
+        NODE_ENV: "production",
+        REALTIME_CHAT_ACTOR_AUTH_SECURITY: "trusted-edge",
+        REALTIME_CHAT_INTERNAL_TRANSPORT_SECURITY: "direct-tls",
+      }),
+    ).toThrow(/must use wss/);
   });
 
   it("parses only explicit HTTP CORS origins", () => {

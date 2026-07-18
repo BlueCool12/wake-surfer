@@ -58,7 +58,6 @@ export async function createRuntimeDeps(
             "authorization",
             "content-type",
             "x-request-id",
-            config.actorIdHeader,
             config.gatewayIdHeader,
             config.gatewayAssertedActorHeader,
           ],
