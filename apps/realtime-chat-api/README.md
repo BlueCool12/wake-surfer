@@ -13,6 +13,9 @@ The app owns runtime wiring only:
 
 Gateway ticket rules and SQL remain owned by packages.
 
+Database schema migration is not part of application startup. The root Compose
+`realtime-chat-migrate` one-shot service must apply the Atlas versioned migrations before this app starts.
+
 ## Endpoints
 
 ```txt

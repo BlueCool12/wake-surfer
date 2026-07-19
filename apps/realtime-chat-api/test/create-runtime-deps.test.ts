@@ -6,8 +6,7 @@ import { createRuntimeDeps } from "../src/runtime/create-runtime-deps.js";
 describe("realtime chat API runtime dependencies", () => {
   it("validates runtime configuration before creating a database pool", async () => {
     const close = vi.fn(async () => undefined);
-    const migrate = vi.fn(async () => undefined);
-    const database = createDatabaseHandle({ close, migrate });
+    const database = createDatabaseHandle(close);
     const createDatabase = vi.fn(() => database);
 
     await expect(
@@ -22,55 +21,29 @@ describe("realtime chat API runtime dependencies", () => {
       ),
     ).rejects.toThrow(/URL/);
     expect(createDatabase).not.toHaveBeenCalled();
-    expect(migrate).not.toHaveBeenCalled();
     expect(close).not.toHaveBeenCalled();
   });
 
-  it("closes the database when migration fails during startup", async () => {
-    const startupError = new Error("migration failed");
+  it("leaves schema migration outside the app startup and exposes database cleanup", async () => {
     const close = vi.fn(async () => undefined);
-    const database = createDatabaseHandle({
-      close,
-      migrate: vi.fn(async () => {
-        throw startupError;
-      }),
-    });
+    const database = createDatabaseHandle(close);
 
-    await expect(
-      createRuntimeDeps(requiredEnv(), {
-        createDatabase: () => database,
-      }),
-    ).rejects.toBe(startupError);
-    expect(close).toHaveBeenCalledOnce();
-  });
-
-  it("preserves startup and database cleanup errors", async () => {
-    const startupError = new Error("migration failed");
-    const closeError = new Error("database close failed");
-    const database = createDatabaseHandle({
-      close: vi.fn(async () => {
-        throw closeError;
-      }),
-      migrate: vi.fn(async () => {
-        throw startupError;
-      }),
-    });
-
-    const error = await createRuntimeDeps(requiredEnv(), {
+    const runtime = await createRuntimeDeps(requiredEnv(), {
       createDatabase: () => database,
-    }).catch((caught: unknown) => caught);
+    });
 
-    expect(error).toBeInstanceOf(AggregateError);
-    expect((error as AggregateError).errors).toEqual([startupError, closeError]);
+    expect(close).not.toHaveBeenCalled();
+    await runtime.close();
+    expect(close).toHaveBeenCalledOnce();
   });
 });
 
 function createDatabaseHandle(
-  overrides: Pick<RealtimeChatDatabaseHandle, "close" | "migrate">,
+  close: RealtimeChatDatabaseHandle["close"],
 ): RealtimeChatDatabaseHandle {
   return {
     db: {} as RealtimeChatDatabaseHandle["db"],
-    ...overrides,
+    close,
   };
 }
 

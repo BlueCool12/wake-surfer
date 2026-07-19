@@ -16,3 +16,4 @@ coverage/
 *.log
 AGENTS.override.md
 .codex
+docs

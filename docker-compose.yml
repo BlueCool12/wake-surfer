@@ -18,6 +18,20 @@ services:
       - internal
       - postgres-host-access
 
+  realtime-chat-migrate:
+    build:
+      context: ./packages/realtime-chat-database
+      dockerfile: docker/Dockerfile
+    restart: "no"
+    env_file:
+      - ./packages/realtime-chat-database/docker/atlas.dev.env
+    command: ["migrate", "apply", "--env", "runtime", "--config", "file:///workspace/atlas.hcl"]
+    depends_on:
+      realtime-chat-postgres:
+        condition: service_healthy
+    networks:
+      - internal
+
   realtime-chat-redis:
     image: redis:8.8.0-alpine
     restart: unless-stopped

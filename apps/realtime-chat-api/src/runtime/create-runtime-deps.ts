@@ -48,8 +48,6 @@ export async function createRuntimeDeps(
       ticketTtlMilliseconds: config.gatewayTicketTtlMilliseconds,
     });
 
-    await database.migrate();
-
     return {
       appDeps: {
         ...createHeaderAuthContext(config),
