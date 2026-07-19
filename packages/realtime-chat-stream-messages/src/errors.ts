@@ -15,11 +15,7 @@ export class StreamMessagesDomainError extends Error {
 }
 
 export type StreamMessagesDataIntegrityReason =
-  | "stream_target_mismatch"
-  | "sequence_gap"
-  | "invalid_storage_row"
-  | "oversized_row"
-  | "invalid_envelope_measurement";
+  "stream_target_mismatch" | "sequence_gap" | "invalid_storage_row";
 
 export class StreamMessagesDataIntegrityError extends Error {
   readonly reason: StreamMessagesDataIntegrityReason;

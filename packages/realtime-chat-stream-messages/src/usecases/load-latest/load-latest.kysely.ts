@@ -1,9 +1,9 @@
-import { MAX_LATEST_STREAM_MESSAGES } from "@wake-surfer/realtime-chat-stream-messages-contracts";
 import type { Kysely } from "kysely";
 
 import { StreamMessagesDataIntegrityError } from "../../errors.js";
 import {
   assertExpectedSequenceWindow,
+  MAX_LATEST_MESSAGES_QUERY_COUNT,
   parseStreamMessageRow,
   type StreamMessageRow,
 } from "../../stream-messages.js";
@@ -14,7 +14,7 @@ export type LatestMessagesSnapshot = {
   messages: ReturnType<typeof parseStreamMessageRow>[];
 };
 
-const LATEST_QUERY_ROW_LIMIT = MAX_LATEST_STREAM_MESSAGES + 1;
+const LATEST_QUERY_ROW_LIMIT = MAX_LATEST_MESSAGES_QUERY_COUNT + 1;
 
 export async function readLatestMessagesSnapshot<DB extends StreamMessagesDatabase>(
   db: Kysely<DB>,
@@ -81,7 +81,7 @@ export async function readLatestMessagesSnapshot<DB extends StreamMessagesDataba
 
       return {
         headSequence,
-        messages: messages.slice(-MAX_LATEST_STREAM_MESSAGES),
+        messages: messages.slice(-MAX_LATEST_MESSAGES_QUERY_COUNT),
       };
     });
 }

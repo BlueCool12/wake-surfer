@@ -14,11 +14,6 @@ import {
   type GatewayStreamMessagesApiClient,
 } from "./gateway-api-client.js";
 
-import type {
-  StreamMessagesQueryRateLimiter,
-  StreamMessagesRateLimitDecision,
-} from "./distributed-rate-limiter.js";
-
 export const MAX_GATEWAY_STREAM_SYNC_INBOUND_UTF8_BYTES = 16_384;
 export const DUPLICATE_STREAM_SYNC_RETRY_AFTER_MS = 100;
 
@@ -64,11 +59,18 @@ export type GatewayStreamMessagesRelayLogger = {
   warn: (metadata: Record<string, unknown>, message: string) => void;
 };
 
+export type GatewayStreamMessagesRateLimitDecision =
+  { allowed: true } | { allowed: false; retryAfterMs: number };
+
+export type GatewayStreamMessagesRateLimiter = {
+  checkSyncActor: (context: { actorId: string }) => Promise<GatewayStreamMessagesRateLimitDecision>;
+};
+
 export type RegisterGatewayStreamMessagesRelayOptions = {
   apiClient: GatewayStreamMessagesApiClient;
   getSession: (sessionId: string) => GatewayStreamMessagesSession | undefined;
   logger: GatewayStreamMessagesRelayLogger;
-  rateLimiter?: StreamMessagesQueryRateLimiter;
+  rateLimiter?: GatewayStreamMessagesRateLimiter;
   runtime: GatewayStreamMessagesRuntime;
 };
 
@@ -176,7 +178,7 @@ async function handleStreamSync(
   }
 
   if (options.rateLimiter !== undefined) {
-    let decision: StreamMessagesRateLimitDecision;
+    let decision: GatewayStreamMessagesRateLimitDecision;
 
     try {
       decision = await options.rateLimiter.checkSyncActor({ actorId: session.actorId });

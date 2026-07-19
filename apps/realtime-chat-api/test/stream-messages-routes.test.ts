@@ -3,12 +3,23 @@ import { Hono } from "hono";
 import { describe, expect, it, vi } from "vitest";
 
 import {
-  registerStreamMessagesInternalHttpRoutes,
-  registerStreamMessagesPublicHttpRoutes,
   StreamMessagesDomainError,
+  type LoadLatestMessages,
+  type LoadOlderMessages,
+  type SyncAfterMessages,
+} from "@wake-surfer/realtime-chat-stream-messages";
+import {
+  registerLoadLatestMessagesHttpRoute,
+  registerLoadOlderMessagesHttpRoute,
+  registerStreamMessagesInternalHttpRoutes,
   type StreamMessagesHttpLogger,
-  type StreamMessagesModule,
-} from "../src/index.js";
+} from "../src/features/stream-messages/routes.js";
+
+type StreamMessagesHandlers = {
+  loadLatest: LoadLatestMessages;
+  loadOlder: LoadOlderMessages;
+  syncAfter: SyncAfterMessages;
+};
 
 describe("Stream Messages public HTTP adapter", () => {
   it("serializes latest with the canonical contract and preserves request correlation", async () => {
@@ -116,15 +127,14 @@ describe("Stream Messages public HTTP adapter", () => {
     const app = new Hono();
     const loadLatest = vi.fn();
     const checkPublic = vi.fn(async () => ({ allowed: false as const, retryAfterMs: 1_250 }));
-    registerStreamMessagesPublicHttpRoutes(app, {
+    registerLoadLatestMessagesHttpRoute(app, {
       authenticateActor: () => ({ actorId: "actor-rate" }),
       getTrustedSourceIp: () => "203.0.113.5",
       logger: createLogger(),
       rateLimiter: {
         checkPublic,
-        checkSyncActor: vi.fn(),
       },
-      streamMessages: createStreamMessages({ loadLatest }),
+      loadLatest,
     });
 
     const result = await app.request("/realtime-chat/channels/channel-http/messages/latest", {
@@ -150,7 +160,7 @@ describe("Stream Messages public HTTP adapter", () => {
   it("fails public queries closed when the distributed limiter is unavailable", async () => {
     const app = new Hono();
     const loadLatest = vi.fn();
-    registerStreamMessagesPublicHttpRoutes(app, {
+    registerLoadLatestMessagesHttpRoute(app, {
       authenticateActor: () => ({ actorId: "actor-rate" }),
       getTrustedSourceIp: () => "203.0.113.5",
       logger: createLogger(),
@@ -158,9 +168,8 @@ describe("Stream Messages public HTTP adapter", () => {
         checkPublic: vi.fn(async () => {
           throw new Error("redis unavailable");
         }),
-        checkSyncActor: vi.fn(),
       },
-      streamMessages: createStreamMessages({ loadLatest }),
+      loadLatest,
     });
 
     const result = await app.request("/realtime-chat/channels/channel-http/messages/latest");
@@ -189,7 +198,7 @@ describe("Stream Messages public HTTP adapter", () => {
       nextAfterSequence: 1,
       hasMoreAfter: false,
     };
-    const syncAfter = vi.fn<StreamMessagesModule["syncAfter"]>(async () => response);
+    const syncAfter = vi.fn<SyncAfterMessages>(async () => response);
     const app = new Hono();
     registerStreamMessagesInternalHttpRoutes(app, {
       authenticateGateway: () => {
@@ -201,7 +210,7 @@ describe("Stream Messages public HTTP adapter", () => {
         return { actorId: "actor-asserted" };
       },
       logger: createLogger(),
-      streamMessages: createStreamMessages({ syncAfter }),
+      syncAfter,
     });
 
     const result = await app.request(
@@ -226,13 +235,13 @@ describe("Stream Messages public HTTP adapter", () => {
   });
 
   it("rejects client-owned actor and stream hints on internal sync", async () => {
-    const syncAfter = vi.fn<StreamMessagesModule["syncAfter"]>();
+    const syncAfter = vi.fn<SyncAfterMessages>();
     const app = new Hono();
     registerStreamMessagesInternalHttpRoutes(app, {
       authenticateGateway: () => ({ gatewayId: "gateway-1" }),
       getAssertedActor: () => ({ actorId: "actor-asserted" }),
       logger: createLogger(),
-      streamMessages: createStreamMessages({ syncAfter }),
+      syncAfter,
     });
 
     const result = await app.request(
@@ -257,22 +266,31 @@ describe("Stream Messages public HTTP adapter", () => {
   });
 });
 
-function createApp(overrides: Partial<StreamMessagesModule>, logger = createLogger()): Hono {
+function createApp(overrides: Partial<StreamMessagesHandlers>, logger = createLogger()): Hono {
   const app = new Hono();
-  const streamMessages = createStreamMessages(overrides);
+  const handlers = createStreamMessagesHandlers(overrides);
 
-  registerStreamMessagesPublicHttpRoutes(app, {
+  registerLoadLatestMessagesHttpRoute(app, {
     authenticateActor: (request) => ({
       actorId: request.headers.get("x-actor-id") ?? "",
     }),
     logger,
-    streamMessages,
+    loadLatest: handlers.loadLatest,
+  });
+  registerLoadOlderMessagesHttpRoute(app, {
+    authenticateActor: (request) => ({
+      actorId: request.headers.get("x-actor-id") ?? "",
+    }),
+    logger,
+    loadOlder: handlers.loadOlder,
   });
 
   return app;
 }
 
-function createStreamMessages(overrides: Partial<StreamMessagesModule>): StreamMessagesModule {
+function createStreamMessagesHandlers(
+  overrides: Partial<StreamMessagesHandlers>,
+): StreamMessagesHandlers {
   return {
     loadLatest:
       overrides.loadLatest ??

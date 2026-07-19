@@ -11,14 +11,20 @@ import type {
   IssueGatewayTicketResponse,
   RealtimeChatErrorCode,
 } from "@wake-surfer/realtime-chat-gateway-ticket-contracts";
-import {
-  registerStreamMessagesInternalHttpRoutes,
-  registerStreamMessagesPublicHttpRoutes,
-  type StreamMessagesModule,
+import type {
+  LoadLatestMessages,
+  LoadOlderMessages,
+  SyncAfterMessages,
 } from "@wake-surfer/realtime-chat-stream-messages";
 import { cors } from "hono/cors";
 import { HTTPException } from "hono/http-exception";
 import { timeout } from "hono/timeout";
+
+import {
+  registerLoadLatestMessagesHttpRoute,
+  registerLoadOlderMessagesHttpRoute,
+  registerStreamMessagesInternalHttpRoutes,
+} from "./features/stream-messages/routes.js";
 
 export type AppLogger = {
   error: (context: Record<string, unknown>, message: string) => void;
@@ -51,9 +57,11 @@ export type RealtimeChatApiAppDeps = {
   };
   gatewayTicket: GatewayTicketService;
   getAssertedActor?: (request: Request) => Promise<AuthenticatedActor> | AuthenticatedActor;
+  loadLatestMessages?: LoadLatestMessages;
+  loadOlderMessages?: LoadOlderMessages;
   logger: AppLogger;
   requestTimeoutMilliseconds?: number;
-  streamMessages?: StreamMessagesModule;
+  syncAfterMessages?: SyncAfterMessages;
 };
 
 type RealtimeChatApiErrorCode = RealtimeChatErrorCode | ApiCommonErrorCode;
@@ -170,27 +178,38 @@ export function createRealtimeChatApiApp(deps: RealtimeChatApiAppDeps): Hono {
     return context.json(result);
   });
 
-  if (deps.streamMessages !== undefined) {
-    registerStreamMessagesPublicHttpRoutes(app, {
+  if (deps.loadLatestMessages !== undefined) {
+    registerLoadLatestMessagesHttpRoute(app, {
       authenticateActor,
+      loadLatest: deps.loadLatestMessages,
       logger,
-      streamMessages: deps.streamMessages,
       ...(deps.requestTimeoutMilliseconds === undefined
         ? {}
         : { timeoutMilliseconds: deps.requestTimeoutMilliseconds }),
     });
+  }
 
-    if (deps.getAssertedActor !== undefined) {
-      registerStreamMessagesInternalHttpRoutes(app, {
-        authenticateGateway,
-        getAssertedActor: deps.getAssertedActor,
-        logger,
-        streamMessages: deps.streamMessages,
-        ...(deps.requestTimeoutMilliseconds === undefined
-          ? {}
-          : { timeoutMilliseconds: deps.requestTimeoutMilliseconds }),
-      });
-    }
+  if (deps.loadOlderMessages !== undefined) {
+    registerLoadOlderMessagesHttpRoute(app, {
+      authenticateActor,
+      loadOlder: deps.loadOlderMessages,
+      logger,
+      ...(deps.requestTimeoutMilliseconds === undefined
+        ? {}
+        : { timeoutMilliseconds: deps.requestTimeoutMilliseconds }),
+    });
+  }
+
+  if (deps.syncAfterMessages !== undefined && deps.getAssertedActor !== undefined) {
+    registerStreamMessagesInternalHttpRoutes(app, {
+      authenticateGateway,
+      getAssertedActor: deps.getAssertedActor,
+      logger,
+      syncAfter: deps.syncAfterMessages,
+      ...(deps.requestTimeoutMilliseconds === undefined
+        ? {}
+        : { timeoutMilliseconds: deps.requestTimeoutMilliseconds }),
+    });
   }
 
   app.notFound((context) =>

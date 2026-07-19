@@ -7,10 +7,29 @@ import type {
   SyncAfterStreamMessagesResponse,
 } from "@wake-surfer/realtime-chat-stream-messages-contracts";
 
-import { StreamMessagesDataIntegrityError } from "./errors.js";
-import type { LatestMessagesPage } from "./usecases/load-latest/load-latest.usecase.js";
-import type { OlderMessagesPage } from "./usecases/load-older/load-older.usecase.js";
-import type { SyncAfterMessagesPage } from "./usecases/sync-after/sync-after.usecase.js";
+import {
+  type LatestMessagesPage,
+  type OlderMessagesPage,
+  type SyncAfterMessagesPage,
+} from "@wake-surfer/realtime-chat-stream-messages";
+
+export type StreamMessagesEnvelopeIntegrityReason =
+  "oversized_row" | "invalid_envelope_measurement";
+
+export class StreamMessagesEnvelopeIntegrityError extends Error {
+  readonly reason: StreamMessagesEnvelopeIntegrityReason;
+  readonly metadata: Readonly<Record<string, number | string>>;
+
+  constructor(
+    reason: StreamMessagesEnvelopeIntegrityReason,
+    metadata: Readonly<Record<string, number | string>>,
+  ) {
+    super(`Stream Messages envelope 무결성 검증에 실패했습니다: ${reason}`);
+    this.name = "StreamMessagesEnvelopeIntegrityError";
+    this.reason = reason;
+    this.metadata = metadata;
+  }
+}
 
 export type MeasuredPage<Response> = {
   response: Response;
@@ -125,7 +144,7 @@ function fitContiguousMessages<Response>(input: {
     }
 
     if (messages.length === 0) {
-      throw new StreamMessagesDataIntegrityError("invalid_envelope_measurement", {
+      throw new StreamMessagesEnvelopeIntegrityError("invalid_envelope_measurement", {
         utf8ByteLength: measurement.utf8ByteLength,
       });
     }
@@ -133,7 +152,7 @@ function fitContiguousMessages<Response>(input: {
     if (messages.length === 1) {
       const message = messages[0]!;
 
-      throw new StreamMessagesDataIntegrityError("oversized_row", {
+      throw new StreamMessagesEnvelopeIntegrityError("oversized_row", {
         messageId: message.messageId,
         streamId: message.streamId,
         sequence: message.sequence,
@@ -147,7 +166,7 @@ function fitContiguousMessages<Response>(input: {
 
 function assertValidMeasurement(measurement: FinalEnvelopeMeasurement): void {
   if (!Number.isSafeInteger(measurement.utf8ByteLength) || measurement.utf8ByteLength < 0) {
-    throw new StreamMessagesDataIntegrityError("invalid_envelope_measurement", {
+    throw new StreamMessagesEnvelopeIntegrityError("invalid_envelope_measurement", {
       utf8ByteLength: String(measurement.utf8ByteLength),
     });
   }

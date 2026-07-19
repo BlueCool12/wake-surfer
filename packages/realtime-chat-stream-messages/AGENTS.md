@@ -7,4 +7,5 @@
 
 공개 API, Query 의미 또는 consumer-facing invariant를 바꾸면 같은 변경에서 README를 갱신한다.
 
-`src/usecases`는 package 내부 구현이며 consumer에게 직접 노출하지 않는다.
+세 slice factory는 package root에서 각각 공개한다. `src/usecases` 경로 자체는 package 내부 구현이며
+consumer에게 deep import로 노출하지 않는다.

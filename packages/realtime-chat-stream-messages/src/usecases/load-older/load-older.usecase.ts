@@ -2,6 +2,9 @@ import type { PublicMessage } from "@wake-surfer/realtime-chat-message-contracts
 import type { Kysely } from "kysely";
 
 import {
+  assertBeforeSequence,
+  assertChannelId,
+  assertQueryPageSize,
   authorizeChannelRead,
   getChannelStreamId,
   type ChannelReadAuthorizer,
@@ -29,11 +32,25 @@ export type LoadOlderMessagesDeps<DB extends StreamMessagesDatabase = StreamMess
   authorizeRead: ChannelReadAuthorizer;
 };
 
+export type LoadOlderMessages = (
+  query: LoadOlderMessagesQuery,
+  context: StreamMessagesQueryContext,
+) => Promise<OlderMessagesPage>;
+
+export function createLoadOlderMessages<DB extends StreamMessagesDatabase>(
+  deps: LoadOlderMessagesDeps<DB>,
+): LoadOlderMessages {
+  return (query, context) => loadOlderMessages(query, context, deps);
+}
+
 export async function loadOlderMessages<DB extends StreamMessagesDatabase>(
   query: LoadOlderMessagesQuery,
   context: StreamMessagesQueryContext,
   deps: LoadOlderMessagesDeps<DB>,
 ): Promise<OlderMessagesPage> {
+  assertChannelId(query.channelId);
+  assertBeforeSequence(query.beforeSequence);
+  assertQueryPageSize(query.limit);
   await authorizeChannelRead(deps.authorizeRead, context.actorId, query.channelId);
   const streamId = getChannelStreamId(query.channelId);
   const messages = await readOlderMessages(deps.db, {

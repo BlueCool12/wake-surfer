@@ -21,15 +21,21 @@ import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
 import { timeout } from "hono/timeout";
 
-import { StreamMessagesDataIntegrityError, StreamMessagesDomainError } from "./errors.js";
+import {
+  StreamMessagesDataIntegrityError,
+  StreamMessagesDomainError,
+  type LoadLatestMessages,
+  type LoadOlderMessages,
+  type SyncAfterMessages,
+} from "@wake-surfer/realtime-chat-stream-messages";
 import {
   fitLatestMessagesPage,
   fitOlderMessagesPage,
   fitSyncAfterMessagesPage,
+  StreamMessagesEnvelopeIntegrityError,
 } from "./page-policy.js";
 
-import type { StreamMessagesModule } from "./stream-messages-module.js";
-import type { StreamMessagesQueryRateLimiter } from "./distributed-rate-limiter.js";
+import type { StreamMessagesPublicRateLimiter } from "./distributed-rate-limiter.js";
 
 export type StreamMessagesHttpActor = {
   actorId: string;
@@ -41,15 +47,22 @@ export type StreamMessagesHttpLogger = {
   warn: (context: Record<string, unknown>, message: string) => void;
 };
 
-export type RegisterStreamMessagesPublicHttpRoutesConfig = {
+export type StreamMessagesPublicHttpRouteConfig = {
   authenticateActor: (
     request: Request,
   ) => Promise<StreamMessagesHttpActor> | StreamMessagesHttpActor;
   logger: StreamMessagesHttpLogger;
   getTrustedSourceIp?: (request: Request) => Promise<string> | string;
-  rateLimiter?: StreamMessagesQueryRateLimiter;
-  streamMessages: StreamMessagesModule;
+  rateLimiter?: StreamMessagesPublicRateLimiter;
   timeoutMilliseconds?: number;
+};
+
+export type RegisterLoadLatestMessagesHttpRouteConfig = StreamMessagesPublicHttpRouteConfig & {
+  loadLatest: LoadLatestMessages;
+};
+
+export type RegisterLoadOlderMessagesHttpRouteConfig = StreamMessagesPublicHttpRouteConfig & {
+  loadOlder: LoadOlderMessages;
 };
 
 export type StreamMessagesHttpGateway = {
@@ -64,25 +77,20 @@ export type RegisterStreamMessagesInternalHttpRoutesConfig = {
     request: Request,
   ) => Promise<StreamMessagesHttpActor> | StreamMessagesHttpActor;
   logger: StreamMessagesHttpLogger;
-  streamMessages: StreamMessagesModule;
+  syncAfter: SyncAfterMessages;
   timeoutMilliseconds?: number;
 };
 
 const MAX_INTERNAL_SYNC_REQUEST_UTF8_BYTES = 16_384;
 
-export function registerStreamMessagesPublicHttpRoutes(
+export function registerLoadLatestMessagesHttpRoute(
   app: Hono,
-  config: RegisterStreamMessagesPublicHttpRoutesConfig,
+  config: RegisterLoadLatestMessagesHttpRouteConfig,
 ): void {
-  if ((config.rateLimiter === undefined) !== (config.getTrustedSourceIp === undefined)) {
-    throw new TypeError(
-      "Stream Messages public rate limiter와 trusted source IP provider는 함께 설정해야 합니다.",
-    );
-  }
+  assertPublicRateLimitConfig(config);
 
   registerStreamMessagesTimeouts(app, config.timeoutMilliseconds, [
     "/realtime-chat/channels/:channelId/messages/latest",
-    "/realtime-chat/channels/:channelId/messages/older",
   ]);
 
   app.get("/realtime-chat/channels/:channelId/messages/latest", async (context) => {
@@ -94,7 +102,7 @@ export function registerStreamMessagesPublicHttpRoutes(
 
     try {
       await enforcePublicRateLimit(config, context.req.raw, actor.actorId, requestId);
-      const page = await config.streamMessages.loadLatest(request, {
+      const page = await config.loadLatest(request, {
         actorId: actor.actorId,
       });
       const result = fitLatestMessagesPage(page, measureLatestStreamMessagesHttpFinalEnvelope);
@@ -127,6 +135,17 @@ export function registerStreamMessagesPublicHttpRoutes(
       });
     }
   });
+}
+
+export function registerLoadOlderMessagesHttpRoute(
+  app: Hono,
+  config: RegisterLoadOlderMessagesHttpRouteConfig,
+): void {
+  assertPublicRateLimitConfig(config);
+
+  registerStreamMessagesTimeouts(app, config.timeoutMilliseconds, [
+    "/realtime-chat/channels/:channelId/messages/older",
+  ]);
 
   app.get("/realtime-chat/channels/:channelId/messages/older", async (context) => {
     const requestId = getRequestId(context.req.raw);
@@ -137,7 +156,7 @@ export function registerStreamMessagesPublicHttpRoutes(
 
     try {
       await enforcePublicRateLimit(config, context.req.raw, actor.actorId, requestId);
-      const page = await config.streamMessages.loadOlder(request, {
+      const page = await config.loadOlder(request, {
         actorId: actor.actorId,
       });
       const result = fitOlderMessagesPage(page, measureOlderStreamMessagesHttpFinalEnvelope);
@@ -173,7 +192,7 @@ export function registerStreamMessagesPublicHttpRoutes(
 }
 
 async function enforcePublicRateLimit(
-  config: RegisterStreamMessagesPublicHttpRoutesConfig,
+  config: StreamMessagesPublicHttpRouteConfig,
   request: Request,
   actorId: string,
   requestId: string,
@@ -200,6 +219,14 @@ async function enforcePublicRateLimit(
   }
 }
 
+function assertPublicRateLimitConfig(config: StreamMessagesPublicHttpRouteConfig): void {
+  if ((config.rateLimiter === undefined) !== (config.getTrustedSourceIp === undefined)) {
+    throw new TypeError(
+      "Stream Messages public rate limiter와 trusted source IP provider는 함께 설정해야 합니다.",
+    );
+  }
+}
+
 export function registerStreamMessagesInternalHttpRoutes(
   app: Hono,
   config: RegisterStreamMessagesInternalHttpRoutesConfig,
@@ -220,7 +247,7 @@ export function registerStreamMessagesInternalHttpRoutes(
     const startedAt = performance.now();
 
     try {
-      const page = await config.streamMessages.syncAfter(
+      const page = await config.syncAfter(
         {
           channelId: request.channelId,
           afterSequence: request.afterSequence,
@@ -241,7 +268,7 @@ export function registerStreamMessagesInternalHttpRoutes(
         result.envelopeUtf8ByteLength !== canonicalClientEventByteLength ||
         canonicalClientEventByteLength > MAX_STREAM_MESSAGES_PAGE_ENVELOPE_UTF8_BYTES
       ) {
-        throw new StreamMessagesDataIntegrityError("invalid_envelope_measurement", {
+        throw new StreamMessagesEnvelopeIntegrityError("invalid_envelope_measurement", {
           canonicalByteLength: canonicalClientEventByteLength,
           measuredByteLength: result.envelopeUtf8ByteLength,
         });
@@ -470,7 +497,7 @@ function assertFinalEnvelope(
     new TextEncoder().encode(serialized).byteLength !== measuredByteLength ||
     measuredByteLength > MAX_STREAM_MESSAGES_PAGE_ENVELOPE_UTF8_BYTES
   ) {
-    throw new StreamMessagesDataIntegrityError("invalid_envelope_measurement", {
+    throw new StreamMessagesEnvelopeIntegrityError("invalid_envelope_measurement", {
       canonicalByteLength,
       measuredByteLength,
     });
@@ -518,9 +545,16 @@ function mapStreamMessagesHttpError(
     {
       channelId: context.channelId,
       errorName: error instanceof Error ? error.name : "UnknownError",
-      integrityReason: error instanceof StreamMessagesDataIntegrityError ? error.reason : undefined,
+      integrityReason:
+        error instanceof StreamMessagesDataIntegrityError ||
+        error instanceof StreamMessagesEnvelopeIntegrityError
+          ? error.reason
+          : undefined,
       integrityMetadata:
-        error instanceof StreamMessagesDataIntegrityError ? error.metadata : undefined,
+        error instanceof StreamMessagesDataIntegrityError ||
+        error instanceof StreamMessagesEnvelopeIntegrityError
+          ? error.metadata
+          : undefined,
       query: context.query,
       requestId: context.requestId,
     },

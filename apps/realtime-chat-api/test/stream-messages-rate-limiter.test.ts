@@ -4,7 +4,7 @@ import {
   StreamMessagesRateLimitUnavailableError,
   createStreamMessagesQueryRateLimiter,
   type StreamMessagesRedisEval,
-} from "../src/index.js";
+} from "../src/features/stream-messages/distributed-rate-limiter.js";
 
 describe("Stream Messages distributed rate limiter", () => {
   it("requires a strong digest secret and only permits stricter finite limits", () => {

@@ -1,21 +1,24 @@
 # @wake-surfer/realtime-chat-stream-messages
 
-인증된 actor가 channel message stream을 조회하는 세 Query를 제공한다.
+인증된 actor가 channel message stream을 조회하는 세 개의 독립적인 유스케이스를 제공한다.
 
-## 공개 Query
+## 공개 유스케이스
 
-- `loadLatest`: 현재 stream head를 기준으로 가장 최근 message를 최대 5개 조회한다.
-- `loadOlder`: `beforeSequence` 이전의 message를 과거 방향으로 조회한다.
-- `syncAfter`: `afterSequence` 이후의 message를 고정된 `throughSequence`까지 조회한다.
+- `createLoadLatestMessages`: 현재 stream head를 기준으로 가장 최근 message를 최대 5개 조회한다.
+- `createLoadOlderMessages`: `beforeSequence` 이전의 message를 과거 방향으로 조회한다.
+- `createSyncAfterMessages`: `afterSequence` 이후의 message를 고정된 `throughSequence`까지 조회한다.
 
-세 Query는 message를 sequence 오름차순으로 반환한다. `older`와 `sync-after` cursor는 exclusive이며,
+세 유스케이스는 message를 sequence 오름차순으로 반환한다. `older`와 `sync-after` cursor는 exclusive이며,
 첫 `sync-after`가 정한 `throughSequence`는 복구가 끝날 때까지 유지한다.
+
+각 factory는 자신의 slice 호출 함수만 반환한다. 세 유스케이스를 하나의 `Module` 객체로 묶어 공개하지
+않는다.
 
 ## 책임
 
 - channel 읽기 권한을 확인한다.
 - channel을 canonical stream ID로 해석한다.
-- cursor와 fixed-watermark 규칙을 적용한다.
+- cursor, fixed-watermark와 count limit 규칙을 적용한다.
 - PostgreSQL을 일관된 read-only snapshot으로 조회한다.
 - 조회 구간의 sequence 연속성과 저장 row의 무결성을 확인한다.
 - `./table-contract`에서 독립 읽기 타입 `StreamMessagesDatabase`를 제공한다.
@@ -24,29 +27,38 @@
 
 - message append와 쓰기 모델
 - schema SQL과 migration 적용
-- HTTP 또는 WebSocket 요청 인증 정보 추출
-- JSON 직렬화와 최종 UTF-8 envelope 크기 측정
-- rate limit, timeout, request ID, logging
-- Gateway relay와 Web recovery orchestration
-
-`StreamMessagesModule`은 개수 기준의 논리적 page를 반환한다. package가 제공하는 HTTP 어댑터는 최종
-48KiB envelope에 맞춰 message와 continuation cursor를 조정한다.
+- HTTP 또는 WebSocket 요청 검증·인증·오류 mapping
+- 공개 request/response DTO와 JSON 직렬화
+- 최종 UTF-8 envelope 크기 측정과 48KiB 적용
+- rate limit, timeout, request ID와 logging
+- Gateway API client, WebSocket relay와 Web recovery orchestration
 
 ## 사용 예시
 
 ```ts
-import { createStreamMessagesModule } from "@wake-surfer/realtime-chat-stream-messages";
+import {
+  createLoadLatestMessages,
+  createLoadOlderMessages,
+  createSyncAfterMessages,
+} from "@wake-surfer/realtime-chat-stream-messages";
 
-const streamMessages = createStreamMessagesModule({
+const dependencies = {
   db,
   authorizeRead: ({ actorId, channelId }) =>
     canReadChannel(actorId, channelId) ? { status: "allowed" } : { status: "denied" },
-});
+};
 
-const page = await streamMessages.loadLatest(
+const loadLatest = createLoadLatestMessages(dependencies);
+const loadOlder = createLoadOlderMessages(dependencies);
+const syncAfter = createSyncAfterMessages(dependencies);
+
+const page = await loadLatest(
   { channelId: "channel-1" },
   { actorId: "actor-1" },
 );
 ```
+
+`actorId`는 이미 인증된 application principal의 식별자다. 어떤 header, session, ticket 또는 token에서
+actor를 확정할지는 소비 app이 결정한다.
 
 소비자는 package root와 `./table-contract`만 import하고 `src/usecases`를 직접 import하지 않는다.

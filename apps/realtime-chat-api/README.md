@@ -8,6 +8,7 @@ The app owns runtime wiring only:
 - create the PostgreSQL/Kysely runtime resource
 - assemble `@wake-surfer/realtime-chat-gateway-ticket`
 - expose Hono HTTP endpoints
+- own Stream Messages public/internal HTTP transport mapping
 - map domain rejections and infrastructure failures
 - provide Pino logging and graceful shutdown
 
@@ -22,7 +23,15 @@ Database schema migration is not part of application startup. The root Compose
 GET  /health
 POST /realtime-chat/gateway-tickets
 POST /internal/realtime-chat/gateway-tickets/consume
+GET  /realtime-chat/channels/:channelId/messages/latest
+GET  /realtime-chat/channels/:channelId/messages/older
+POST /internal/realtime-chat/channels/:channelId/messages/sync-after
 ```
+
+Stream Messages route는 해당 개별 유스케이스가 app dependency로 제공될 때만 mount된다. app은 외부
+schema 검증, 인증된 actor context 연결, 48KiB final-envelope 조정, HTTP 오류/status, rate limit과
+request 관측성을 소유한다. 조회 권한, cursor, watermark와 Kysely는
+`@wake-surfer/realtime-chat-stream-messages`가 소유한다.
 
 `POST /realtime-chat/gateway-tickets` uses the authenticated actor context from
 `REALTIME_CHAT_ACTOR_ID_HEADER`. It does not trust `actorId`, `userId`, or `workspaceId` from the request body.

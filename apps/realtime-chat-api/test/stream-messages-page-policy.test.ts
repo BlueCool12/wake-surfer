@@ -1,13 +1,13 @@
 import type { PublicMessage } from "@wake-surfer/realtime-chat-message-contracts";
 import { describe, expect, it } from "vitest";
 
-import { StreamMessagesDataIntegrityError } from "../src/errors.js";
 import {
   fitLatestMessagesPage,
   fitNewestContiguousMessages,
   fitOldestContiguousMessages,
   fitSyncAfterMessagesPage,
-} from "../src/page-policy.js";
+  StreamMessagesEnvelopeIntegrityError,
+} from "../src/features/stream-messages/page-policy.js";
 
 describe("Stream Messages final envelope page policy", () => {
   it("keeps the closest newest contiguous range for latest and older pages", () => {
@@ -91,7 +91,7 @@ describe("Stream Messages final envelope page policy", () => {
           isWithinLimit: false,
         }),
       }),
-    ).toThrowError(StreamMessagesDataIntegrityError);
+    ).toThrowError(StreamMessagesEnvelopeIntegrityError);
 
     try {
       fitNewestContiguousMessages({

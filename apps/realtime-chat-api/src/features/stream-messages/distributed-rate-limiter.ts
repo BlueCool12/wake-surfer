@@ -52,13 +52,19 @@ export type StreamMessagesRedisEval = {
 export type StreamMessagesRateLimitDecision =
   { allowed: true } | { allowed: false; retryAfterMs: number };
 
-export type StreamMessagesQueryRateLimiter = {
+export type StreamMessagesPublicRateLimiter = {
   checkPublic: (context: {
     actorId: string;
     sourceIp: string;
   }) => Promise<StreamMessagesRateLimitDecision>;
+};
+
+export type StreamMessagesSyncRateLimiter = {
   checkSyncActor: (context: { actorId: string }) => Promise<StreamMessagesRateLimitDecision>;
 };
+
+export type StreamMessagesQueryRateLimiter = StreamMessagesPublicRateLimiter &
+  StreamMessagesSyncRateLimiter;
 
 export type CreateStreamMessagesQueryRateLimiterOptions = {
   keyHmacSecret: string;

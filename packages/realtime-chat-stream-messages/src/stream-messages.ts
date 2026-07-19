@@ -17,6 +17,9 @@ export type StreamMessagesQueryContext = {
   actorId: string;
 };
 
+export const MAX_LATEST_MESSAGES_QUERY_COUNT = 5;
+export const MAX_STREAM_MESSAGES_QUERY_PAGE_SIZE = 100;
+
 export type StreamMessageRow = {
   messageId: unknown;
   streamId: unknown;
@@ -44,6 +47,28 @@ export async function authorizeChannelRead(
   if (authorization.status === "denied") {
     throw new StreamMessagesDomainError("stream_unavailable");
   }
+}
+
+export function assertChannelId(channelId: string): void {
+  assertNonBlankIdentifier(channelId, "channelId");
+}
+
+export function assertBeforeSequence(beforeSequence: number): void {
+  assertSafeIntegerInRange(beforeSequence, "beforeSequence", 1);
+}
+
+export function assertAfterSequence(afterSequence: number): void {
+  assertSafeIntegerInRange(afterSequence, "afterSequence", 0);
+}
+
+export function assertThroughSequence(throughSequence: number | undefined): void {
+  if (throughSequence !== undefined) {
+    assertSafeIntegerInRange(throughSequence, "throughSequence", 0);
+  }
+}
+
+export function assertQueryPageSize(limit: number): void {
+  assertSafeIntegerInRange(limit, "limit", 1, MAX_STREAM_MESSAGES_QUERY_PAGE_SIZE);
 }
 
 export function getChannelStreamId(channelId: string): string {
@@ -147,4 +172,23 @@ export function throwSequenceGap(
 
 function toIsoDateTime(value: unknown): string | unknown {
   return value instanceof Date ? value.toISOString() : value;
+}
+
+function assertNonBlankIdentifier(value: string, fieldName: string): void {
+  if (typeof value !== "string" || value.trim().length === 0 || value.trim() !== value) {
+    throw new TypeError(`${fieldName}는 앞뒤 공백이 없는 문자열이어야 합니다.`);
+  }
+}
+
+function assertSafeIntegerInRange(
+  value: number,
+  fieldName: string,
+  minimum: number,
+  maximum = Number.MAX_SAFE_INTEGER,
+): void {
+  if (!Number.isSafeInteger(value) || value < minimum || value > maximum) {
+    throw new TypeError(
+      `${fieldName}는 ${minimum} 이상 ${maximum} 이하의 safe integer여야 합니다.`,
+    );
+  }
 }

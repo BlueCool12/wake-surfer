@@ -6,7 +6,9 @@ import { sql } from "kysely";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 import {
-  createStreamMessagesModule,
+  createLoadLatestMessages,
+  createLoadOlderMessages,
+  createSyncAfterMessages,
   StreamMessagesDataIntegrityError,
   StreamMessagesDomainError,
   type ChannelReadAuthorizer,
@@ -25,9 +27,9 @@ describe("Stream Messages PostgreSQL queries", () => {
 
   it("returns an authorized empty channel without creating a stream row", async () => {
     const authorizeRead = vi.fn<ChannelReadAuthorizer>(() => ({ status: "allowed" }));
-    const module = createModule(authorizeRead);
+    const useCases = createUseCases(authorizeRead);
 
-    const result = await module.loadLatest(
+    const result = await useCases.loadLatest(
       { channelId: "empty-channel" },
       { actorId: "actor-empty-channel" },
     );
@@ -55,10 +57,10 @@ describe("Stream Messages PostgreSQL queries", () => {
   it("loads latest and older pages in ascending order", async () => {
     const channelId = "history-channel";
     await insertMessages(channelId, 1, 120);
-    const module = createModule(() => ({ status: "allowed" }));
+    const useCases = createUseCases(() => ({ status: "allowed" }));
 
-    const latest = await module.loadLatest({ channelId }, { actorId: "actor-history" });
-    const older = await module.loadOlder(
+    const latest = await useCases.loadLatest({ channelId }, { actorId: "actor-history" });
+    const older = await useCases.loadOlder(
       {
         channelId,
         beforeSequence: latest.nextBeforeSequence!,
@@ -86,9 +88,9 @@ describe("Stream Messages PostgreSQL queries", () => {
   it("keeps the first sync watermark stable across concurrent append", async () => {
     const channelId = "sync-watermark-channel";
     await insertMessages(channelId, 1, 120);
-    const module = createModule(() => ({ status: "allowed" }));
+    const useCases = createUseCases(() => ({ status: "allowed" }));
 
-    const first = await module.syncAfter(
+    const first = await useCases.syncAfter(
       {
         channelId,
         afterSequence: 117,
@@ -97,7 +99,7 @@ describe("Stream Messages PostgreSQL queries", () => {
       { actorId: "actor-sync" },
     );
     await insertMessages(channelId, 121, 121);
-    const second = await module.syncAfter(
+    const second = await useCases.syncAfter(
       {
         channelId,
         afterSequence: first.nextAfterSequence,
@@ -122,17 +124,17 @@ describe("Stream Messages PostgreSQL queries", () => {
   });
 
   it("rejects unauthorized and invalid-cursor requests with distinct domain errors", async () => {
-    const deniedModule = createModule(() => ({ status: "denied" }));
+    const deniedUseCases = createUseCases(() => ({ status: "denied" }));
 
     await expect(
-      deniedModule.loadLatest({ channelId: "private-channel" }, { actorId: "actor-denied" }),
+      deniedUseCases.loadLatest({ channelId: "private-channel" }, { actorId: "actor-denied" }),
     ).rejects.toMatchObject({
       code: "stream_unavailable",
     } satisfies Partial<StreamMessagesDomainError>);
 
-    const allowedModule = createModule(() => ({ status: "allowed" }));
+    const allowedUseCases = createUseCases(() => ({ status: "allowed" }));
     await expect(
-      allowedModule.syncAfter(
+      allowedUseCases.syncAfter(
         {
           channelId: "missing-channel",
           afterSequence: 1,
@@ -154,9 +156,9 @@ describe("Stream Messages PostgreSQL queries", () => {
       VALUES (${streamId}, ${"channel"}, ${channelId}, 2, now())
     `.execute(getDatabase().db);
     await insertMessageRow(channelId, 2, sensitiveContent);
-    const module = createModule(() => ({ status: "allowed" }));
+    const useCases = createUseCases(() => ({ status: "allowed" }));
 
-    const error = await module.loadLatest({ channelId }, { actorId: "actor-gap" }).then(
+    const error = await useCases.loadLatest({ channelId }, { actorId: "actor-gap" }).then(
       () => undefined,
       (reason: unknown) => reason,
     );
@@ -166,11 +168,17 @@ describe("Stream Messages PostgreSQL queries", () => {
     expect((error as Error).message).not.toContain(sensitiveContent);
   });
 
-  function createModule(authorizeRead: ChannelReadAuthorizer) {
-    return createStreamMessagesModule({
+  function createUseCases(authorizeRead: ChannelReadAuthorizer) {
+    const dependencies = {
       db: getDatabase().db,
       authorizeRead,
-    });
+    };
+
+    return {
+      loadLatest: createLoadLatestMessages(dependencies),
+      loadOlder: createLoadOlderMessages(dependencies),
+      syncAfter: createSyncAfterMessages(dependencies),
+    };
   }
 
   function getDatabase(): RealtimeChatIntegrationTestDatabase {

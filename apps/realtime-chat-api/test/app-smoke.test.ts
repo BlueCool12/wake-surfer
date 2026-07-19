@@ -244,7 +244,7 @@ describe("realtime chat api app", () => {
     expect(logger.error).toHaveBeenCalled();
   });
 
-  it("mounts package-owned Stream Messages routes only when a module is provided", async () => {
+  it("mounts each app-owned Stream Messages route only when its usecase is provided", async () => {
     const streamResponse = {
       streamId: "channel:channel-api",
       throughSequence: 0,
@@ -255,11 +255,7 @@ describe("realtime chat api app", () => {
     const loadLatest = vi.fn(async () => streamResponse);
     const enabled = createRealtimeChatApiApp(
       createDeps({
-        streamMessages: {
-          loadLatest,
-          loadOlder: vi.fn(),
-          syncAfter: vi.fn(),
-        },
+        loadLatestMessages: loadLatest,
       }),
     );
     const disabled = createRealtimeChatApiApp(createDeps());
@@ -277,11 +273,16 @@ describe("realtime chat api app", () => {
       "/realtime-chat/channels/channel-api/messages/latest",
       { headers: { "x-actor-id": "actor-api" } },
     );
+    const unprovidedOlderResponse = await enabled.request(
+      "/realtime-chat/channels/channel-api/messages/older?beforeSequence=1",
+      { headers: { "x-actor-id": "actor-api" } },
+    );
 
     expect(enabledResponse.status).toBe(200);
     expect(enabledResponse.headers.get("x-request-id")).toBe("request-api-stream");
     expect(loadLatest).toHaveBeenCalled();
     expect(disabledResponse.status).toBe(404);
+    expect(unprovidedOlderResponse.status).toBe(404);
   });
 
   it("maps feature-neutral boundary failures to internal_error", async () => {
@@ -345,12 +346,9 @@ describe("realtime chat api app", () => {
     );
     const streamApp = createRealtimeChatApiApp(
       createDeps({
+        loadLatestMessages: vi.fn(delayed),
+        loadOlderMessages: vi.fn(delayed),
         requestTimeoutMilliseconds: 5,
-        streamMessages: {
-          loadLatest: vi.fn(delayed),
-          loadOlder: vi.fn(delayed),
-          syncAfter: vi.fn(delayed),
-        },
       }),
     );
 
@@ -417,7 +415,15 @@ function createDeps(
     ...(overrides.getAssertedActor === undefined
       ? {}
       : { getAssertedActor: overrides.getAssertedActor }),
-    ...(overrides.streamMessages === undefined ? {} : { streamMessages: overrides.streamMessages }),
+    ...(overrides.loadLatestMessages === undefined
+      ? {}
+      : { loadLatestMessages: overrides.loadLatestMessages }),
+    ...(overrides.loadOlderMessages === undefined
+      ? {}
+      : { loadOlderMessages: overrides.loadOlderMessages }),
+    ...(overrides.syncAfterMessages === undefined
+      ? {}
+      : { syncAfterMessages: overrides.syncAfterMessages }),
   };
 }
 

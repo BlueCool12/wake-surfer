@@ -2,6 +2,10 @@ import type { PublicMessage } from "@wake-surfer/realtime-chat-message-contracts
 import type { Kysely } from "kysely";
 
 import {
+  assertAfterSequence,
+  assertChannelId,
+  assertQueryPageSize,
+  assertThroughSequence,
   authorizeChannelRead,
   getChannelStreamId,
   type ChannelReadAuthorizer,
@@ -31,11 +35,31 @@ export type SyncAfterMessagesDeps<DB extends StreamMessagesDatabase = StreamMess
   authorizeRead: ChannelReadAuthorizer;
 };
 
+export type SyncAfterMessages = (
+  query: SyncAfterMessagesQuery,
+  context: StreamMessagesQueryContext,
+) => Promise<SyncAfterMessagesPage>;
+
+export function createSyncAfterMessages<DB extends StreamMessagesDatabase>(
+  deps: SyncAfterMessagesDeps<DB>,
+): SyncAfterMessages {
+  return (query, context) => syncAfterMessages(query, context, deps);
+}
+
 export async function syncAfterMessages<DB extends StreamMessagesDatabase>(
   query: SyncAfterMessagesQuery,
   context: StreamMessagesQueryContext,
   deps: SyncAfterMessagesDeps<DB>,
 ): Promise<SyncAfterMessagesPage> {
+  assertChannelId(query.channelId);
+  assertAfterSequence(query.afterSequence);
+  assertThroughSequence(query.throughSequence);
+  assertQueryPageSize(query.limit);
+
+  if (query.throughSequence !== undefined && query.afterSequence > query.throughSequence) {
+    throw new TypeError("afterSequence는 throughSequence보다 클 수 없습니다.");
+  }
+
   await authorizeChannelRead(deps.authorizeRead, context.actorId, query.channelId);
   const streamId = getChannelStreamId(query.channelId);
   const snapshot = await readMessagesAfter(deps.db, {
