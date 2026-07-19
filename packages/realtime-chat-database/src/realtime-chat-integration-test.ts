@@ -1,4 +1,6 @@
+import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
+import { resolve } from "node:path";
 import { Pool } from "pg";
 import { createRealtimeChatDatabase } from "./realtime-chat-database";
 import type { RealtimeChatDatabaseHandle } from "./realtime-chat-database";
@@ -10,11 +12,12 @@ export type RealtimeChatIntegrationTestDatabase = {
 };
 
 /**
- * `TEST_DATABASE_URL`로 지정한 PostgreSQL 안에 독립 schema를 만들고 공통 realtime-chat bootstrap을 적용한다.
+ * `TEST_DATABASE_URL`로 지정한 PostgreSQL 안에 독립 schema를 만들고 Atlas migration을 적용한다.
  * 각 테스트 suite는 이 함수를 한 번 호출하고 `afterAll`에서 반환값의 `close()`를 호출해야 한다.
  */
 export async function createRealtimeChatIntegrationTestDatabase(): Promise<RealtimeChatIntegrationTestDatabase> {
   const databaseUrl = getTestDatabaseUrl();
+  const atlasDatabaseUrl = getTestAtlasDatabaseUrl();
   const schemaName = createSchemaName();
   const adminPool = new Pool({
     connectionString: databaseUrl,
@@ -27,10 +30,11 @@ export async function createRealtimeChatIntegrationTestDatabase(): Promise<Realt
     await adminPool.query(`CREATE SCHEMA ${quoteIdentifier(schemaName)}`);
     schemaCreated = true;
 
+    await applyAtlasMigrations(createAtlasSchemaScopedDatabaseUrl(atlasDatabaseUrl, schemaName));
+
     database = createRealtimeChatDatabase({
       databaseUrl: createSchemaScopedDatabaseUrl(databaseUrl, schemaName),
     });
-    await database.migrate();
 
     return {
       db: database.db,
@@ -41,6 +45,18 @@ export async function createRealtimeChatIntegrationTestDatabase(): Promise<Realt
     await cleanupAfterBootstrapFailure(database, adminPool, schemaName, schemaCreated, error);
     throw error;
   }
+}
+
+function getTestAtlasDatabaseUrl(): string {
+  const databaseUrl = process.env.TEST_ATLAS_DATABASE_URL;
+
+  if (databaseUrl === undefined || databaseUrl.trim().length === 0) {
+    throw new Error(
+      "PostgreSQL 통합 테스트에는 Atlas 컨테이너가 사용할 TEST_ATLAS_DATABASE_URL 환경 변수가 필요합니다.",
+    );
+  }
+
+  return databaseUrl;
 }
 
 function getTestDatabaseUrl(): string {
@@ -77,6 +93,64 @@ function createSchemaScopedDatabaseUrl(databaseUrl: string, schemaName: string):
   );
 
   return parsed.toString();
+}
+
+function createAtlasSchemaScopedDatabaseUrl(databaseUrl: string, schemaName: string): string {
+  let parsed: URL;
+
+  try {
+    parsed = new URL(databaseUrl);
+  } catch {
+    throw new Error("TEST_ATLAS_DATABASE_URL은 유효한 PostgreSQL 연결 URL이어야 합니다.");
+  }
+
+  parsed.searchParams.set("search_path", schemaName);
+  return parsed.toString();
+}
+
+async function applyAtlasMigrations(databaseUrl: string): Promise<void> {
+  const repositoryRoot = resolve(__dirname, "../../..");
+  const args = [
+    "compose",
+    "run",
+    "--rm",
+    "--build",
+    "--no-deps",
+    "-e",
+    `ATLAS_DATABASE_URL=${databaseUrl}`,
+    "realtime-chat-migrate",
+  ];
+
+  await new Promise<void>((resolvePromise, reject) => {
+    const child = spawn("docker", args, {
+      cwd: repositoryRoot,
+      windowsHide: true,
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    const stdout: Buffer[] = [];
+    const stderr: Buffer[] = [];
+
+    child.stdout.on("data", (chunk: Buffer) => stdout.push(chunk));
+    child.stderr.on("data", (chunk: Buffer) => stderr.push(chunk));
+    child.on("error", reject);
+    child.on("close", (exitCode) => {
+      if (exitCode === 0) {
+        resolvePromise();
+        return;
+      }
+
+      const detail =
+        Buffer.concat(stderr).toString("utf8").trim() ||
+        Buffer.concat(stdout).toString("utf8").trim();
+      reject(
+        new Error(
+          `Atlas realtime-chat migration 컨테이너가 실패했습니다 (exitCode=${String(exitCode)}).${
+            detail.length === 0 ? "" : `\n${detail}`
+          }`,
+        ),
+      );
+    });
+  });
 }
 
 function createCleanup(

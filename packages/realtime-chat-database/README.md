@@ -2,15 +2,15 @@
 
 실시간 채팅 기능군이 공유하는 PostgreSQL 런타임 리소스 패키지다.
 
-이 패키지는 feature 유스케이스를 구현하지 않는다. 책임은 `pg Pool`, Kysely 인스턴스, 전체 DB 타입
-합성, 공통 마이그레이션 진입점으로 제한한다.
+이 패키지는 feature 유스케이스를 구현하지 않는다. runtime 책임은 `pg Pool`, Kysely 인스턴스, 전체 DB
+타입 합성으로 제한한다. 같은 module directory가 realtime-chat Atlas migration 자산과 전용 Docker
+container를 소유한다.
 
 ## 책임
 
 - PostgreSQL 연결 풀을 생성한다.
 - `Kysely<RealtimeChatDatabase>` 인스턴스를 생성한다.
 - feature 패키지들이 제공하는 테이블 타입을 `RealtimeChatDatabase`로 합성한다.
-- versioned migration을 공통 `migrate()`에서 순서와 checksum 이력에 따라 실행한다.
 - 앱 종료 시 호출할 `close()`를 제공한다.
 
 ## 책임이 아닌 것
@@ -49,8 +49,6 @@ const gatewayTicket = createGatewayTicketModule({
   rawTicketBytes: 32,
 });
 
-await database.migrate();
-
 await gatewayTicket.issue({
   actorId: "actor-1",
 });
@@ -62,14 +60,17 @@ await database.close();
 
 ## Schema migration
 
-`database.migrate()`는 PostgreSQL advisory lock 아래에서 migration을 직렬화하고,
-`realtime_chat_schema_migrations`에 version, name, checksum, 적용 시각을 기록한다. 이미 적용된
-migration의 name 또는 checksum이 달라지면 startup을 실패시킨다.
+스키마의 단일 원본은 `./migrations`의 Atlas versioned migration이다. `atlas.sum`은 migration 파일의
+순서와 내용 무결성을 보호한다. 애플리케이션은 시작할 때 migration을 실행하지 않으며, root Compose의
+일회성 `realtime-chat-migrate` service가 애플리케이션보다 먼저 적용해야 한다.
 
-기존 `CREATE TABLE IF NOT EXISTS` bootstrap으로 만들어진 DB는 현재 gateway ticket/message schema의
-table, column, key/FK/check constraint와 query에 필요한 secondary index 의미를 검증한 경우에만 명시적
-legacy version `001`을 baseline으로 기록한다. 그 뒤의 migration은 순서대로 실제 실행한다. 정의가 다르거나
-일부 table만 존재하면 migration 이력을 기록하지 않고 실패한다.
+```bash
+pnpm db:validate:realtime-chat
+pnpm db:migrate:realtime-chat
+```
+
+새 migration은 기존 파일을 수정하지 않고 새 SQL 파일로 추가한 뒤 `atlas.sum`을 갱신한다. 아직 인수할
+운영 database가 없으므로 legacy baseline은 제공하지 않는다.
 
 ## 테이블 타입 합성
 
@@ -95,7 +96,8 @@ export type RealtimeChatDatabase =
 ## PostgreSQL 통합 테스트
 
 실제 PostgreSQL을 사용하는 통합 테스트는 이 패키지의 `./integration-test` 서브패스를 사용한다.
-테스트 suite마다 `TEST_DATABASE_URL`로 연결한 DB에 고유한 임시 schema를 만들고, 공통 `migrate()`를
+테스트 suite마다 `TEST_DATABASE_URL`로 연결한 DB에 고유한 임시 schema를 만들고,
+`TEST_ATLAS_DATABASE_URL`로 root Compose의 Atlas container가 같은 schema에 versioned migration을
 적용한다. `close()`는 테스트 성공·실패와 관계없이 해당 schema를 삭제한다.
 
 ```ts
@@ -116,6 +118,7 @@ afterAll(async () => {
 });
 ```
 
-`TEST_DATABASE_URL`은 필수이며 다른 runtime database URL로 대체하지 않는다. bootstrap migration이
-실패하면 helper는 성공한 database handle을 반환하지 않고, 생성한 임시 schema를 정리한 뒤 실패를 다시
-전파한다. 병렬 worker와 suite는 UUID가 포함된 서로 다른 schema를 사용한다.
+두 test URL은 필수다. 첫 URL은 host test process가, 두 번째 URL은 Compose network 내부의 Atlas
+container가 사용하므로 hostname이 다를 수 있다. Atlas migration이 실패하면 helper는 성공한 database
+handle을 반환하지 않고 생성한 임시 schema를 정리한 뒤 실패를 다시 전파한다. 병렬 worker와 suite는
+UUID가 포함된 서로 다른 schema를 사용한다.

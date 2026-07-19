@@ -27,3 +27,9 @@
 - system message
 - presence / typing indicator
 - channel / DM / thread별 세부 비즈니스 정책 확정
+
+## Database contract
+
+이 패키지는 `./table-contract` 서브패스로 `MessageSendDatabase` 타입만 제공한다. `message_streams`와
+`messages`의 schema SQL 및 적용 책임은 `@wake-surfer/realtime-chat-database`가 소유한 Atlas versioned
+migration에 있다.
