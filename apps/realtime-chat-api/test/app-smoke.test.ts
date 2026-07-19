@@ -252,10 +252,7 @@ describe("realtime chat api app", () => {
       nextBeforeSequence: null,
       hasMoreBefore: false,
     };
-    const loadLatest = vi.fn(async () => ({
-      response: streamResponse,
-      envelopeUtf8ByteLength: new TextEncoder().encode(JSON.stringify(streamResponse)).byteLength,
-    }));
+    const loadLatest = vi.fn(async () => streamResponse);
     const enabled = createRealtimeChatApiApp(
       createDeps({
         streamMessages: {

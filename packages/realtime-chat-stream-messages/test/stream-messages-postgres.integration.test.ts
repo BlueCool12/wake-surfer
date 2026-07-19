@@ -1,9 +1,4 @@
 import {
-  measureLatestStreamMessagesHttpFinalEnvelope,
-  measureOlderStreamMessagesHttpFinalEnvelope,
-  measureChatStreamSyncedFinalEnvelope,
-} from "@wake-surfer/realtime-chat-stream-messages-contracts";
-import {
   createRealtimeChatIntegrationTestDatabase,
   type RealtimeChatIntegrationTestDatabase,
 } from "@wake-surfer/realtime-chat-database/integration-test";
@@ -34,13 +29,10 @@ describe("Stream Messages PostgreSQL queries", () => {
 
     const result = await module.loadLatest(
       { channelId: "empty-channel" },
-      {
-        actorId: "actor-empty-channel",
-        measureFinalEnvelope: measureLatestStreamMessagesHttpFinalEnvelope,
-      },
+      { actorId: "actor-empty-channel" },
     );
 
-    expect(result.response).toEqual({
+    expect(result).toEqual({
       streamId: "channel:empty-channel",
       throughSequence: 0,
       messages: [],
@@ -65,37 +57,26 @@ describe("Stream Messages PostgreSQL queries", () => {
     await insertMessages(channelId, 1, 120);
     const module = createModule(() => ({ status: "allowed" }));
 
-    const latest = await module.loadLatest(
-      { channelId },
-      {
-        actorId: "actor-history",
-        measureFinalEnvelope: measureLatestStreamMessagesHttpFinalEnvelope,
-      },
-    );
+    const latest = await module.loadLatest({ channelId }, { actorId: "actor-history" });
     const older = await module.loadOlder(
       {
         channelId,
-        beforeSequence: latest.response.nextBeforeSequence!,
+        beforeSequence: latest.nextBeforeSequence!,
         limit: 50,
       },
-      {
-        actorId: "actor-history",
-        measureFinalEnvelope: measureOlderStreamMessagesHttpFinalEnvelope,
-      },
+      { actorId: "actor-history" },
     );
 
-    expect(latest.response.messages.map((message) => message.sequence)).toEqual([
-      116, 117, 118, 119, 120,
-    ]);
-    expect(latest.response).toMatchObject({
+    expect(latest.messages.map((message) => message.sequence)).toEqual([116, 117, 118, 119, 120]);
+    expect(latest).toMatchObject({
       throughSequence: 120,
       nextBeforeSequence: 116,
       hasMoreBefore: true,
     });
-    expect(older.response.messages.map((message) => message.sequence)).toEqual(
+    expect(older.messages.map((message) => message.sequence)).toEqual(
       Array.from({ length: 50 }, (_, index) => index + 66),
     );
-    expect(older.response).toMatchObject({
+    expect(older).toMatchObject({
       beforeSequence: 116,
       nextBeforeSequence: 66,
       hasMoreBefore: true,
@@ -113,52 +94,38 @@ describe("Stream Messages PostgreSQL queries", () => {
         afterSequence: 117,
         limit: 2,
       },
-      {
-        actorId: "actor-sync",
-        measureFinalEnvelope: (response) =>
-          measureChatStreamSyncedFinalEnvelope({ requestId: "sync-first", ...response }),
-      },
+      { actorId: "actor-sync" },
     );
     await insertMessages(channelId, 121, 121);
     const second = await module.syncAfter(
       {
         channelId,
-        afterSequence: first.response.nextAfterSequence,
-        throughSequence: first.response.throughSequence,
+        afterSequence: first.nextAfterSequence,
+        throughSequence: first.throughSequence,
         limit: 2,
       },
-      {
-        actorId: "actor-sync",
-        measureFinalEnvelope: (response) =>
-          measureChatStreamSyncedFinalEnvelope({ requestId: "sync-second", ...response }),
-      },
+      { actorId: "actor-sync" },
     );
 
-    expect(first.response).toMatchObject({
+    expect(first).toMatchObject({
       throughSequence: 120,
       nextAfterSequence: 119,
       hasMoreAfter: true,
     });
-    expect(first.response.messages.map((message) => message.sequence)).toEqual([118, 119]);
-    expect(second.response).toMatchObject({
+    expect(first.messages.map((message) => message.sequence)).toEqual([118, 119]);
+    expect(second).toMatchObject({
       throughSequence: 120,
       nextAfterSequence: 120,
       hasMoreAfter: false,
     });
-    expect(second.response.messages.map((message) => message.sequence)).toEqual([120]);
+    expect(second.messages.map((message) => message.sequence)).toEqual([120]);
   });
 
   it("rejects unauthorized and invalid-cursor requests with distinct domain errors", async () => {
     const deniedModule = createModule(() => ({ status: "denied" }));
 
     await expect(
-      deniedModule.loadLatest(
-        { channelId: "private-channel" },
-        {
-          actorId: "actor-denied",
-          measureFinalEnvelope: measureLatestStreamMessagesHttpFinalEnvelope,
-        },
-      ),
+      deniedModule.loadLatest({ channelId: "private-channel" }, { actorId: "actor-denied" }),
     ).rejects.toMatchObject({
       code: "stream_unavailable",
     } satisfies Partial<StreamMessagesDomainError>);
@@ -171,11 +138,7 @@ describe("Stream Messages PostgreSQL queries", () => {
           afterSequence: 1,
           limit: 50,
         },
-        {
-          actorId: "actor-invalid-cursor",
-          measureFinalEnvelope: (response) =>
-            measureChatStreamSyncedFinalEnvelope({ requestId: "invalid-cursor", ...response }),
-        },
+        { actorId: "actor-invalid-cursor" },
       ),
     ).rejects.toMatchObject({
       code: "invalid_cursor",
@@ -193,18 +156,10 @@ describe("Stream Messages PostgreSQL queries", () => {
     await insertMessageRow(channelId, 2, sensitiveContent);
     const module = createModule(() => ({ status: "allowed" }));
 
-    const error = await module
-      .loadLatest(
-        { channelId },
-        {
-          actorId: "actor-gap",
-          measureFinalEnvelope: measureLatestStreamMessagesHttpFinalEnvelope,
-        },
-      )
-      .then(
-        () => undefined,
-        (reason: unknown) => reason,
-      );
+    const error = await module.loadLatest({ channelId }, { actorId: "actor-gap" }).then(
+      () => undefined,
+      (reason: unknown) => reason,
+    );
 
     expect(error).toBeInstanceOf(StreamMessagesDataIntegrityError);
     expect(error).toMatchObject({ reason: "sequence_gap" });

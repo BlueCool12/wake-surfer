@@ -45,9 +45,23 @@ export {
 } from "./http-adapter.js";
 export {
   createStreamMessagesModule,
-  type ChannelReadAuthorization,
-  type ChannelReadAuthorizer,
   type CreateStreamMessagesModuleConfig,
   type StreamMessagesModule,
-  type StreamMessagesQueryContext,
 } from "./stream-messages-module.js";
+export type {
+  ChannelReadAuthorization,
+  ChannelReadAuthorizer,
+  StreamMessagesQueryContext,
+} from "./stream-messages.js";
+export type {
+  LatestMessagesPage,
+  LoadLatestMessagesQuery,
+} from "./usecases/load-latest/load-latest.usecase.js";
+export type {
+  LoadOlderMessagesQuery,
+  OlderMessagesPage,
+} from "./usecases/load-older/load-older.usecase.js";
+export type {
+  SyncAfterMessagesPage,
+  SyncAfterMessagesQuery,
+} from "./usecases/sync-after/sync-after.usecase.js";

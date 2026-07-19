@@ -2,7 +2,12 @@ import type { PublicMessage } from "@wake-surfer/realtime-chat-message-contracts
 import { describe, expect, it } from "vitest";
 
 import { StreamMessagesDataIntegrityError } from "../src/errors.js";
-import { fitNewestContiguousMessages, fitOldestContiguousMessages } from "../src/page-policy.js";
+import {
+  fitLatestMessagesPage,
+  fitNewestContiguousMessages,
+  fitOldestContiguousMessages,
+  fitSyncAfterMessagesPage,
+} from "../src/page-policy.js";
 
 describe("Stream Messages final envelope page policy", () => {
   it("keeps the closest newest contiguous range for latest and older pages", () => {
@@ -31,6 +36,47 @@ describe("Stream Messages final envelope page policy", () => {
 
     expect(result.response.messages.map((message) => message.sequence)).toEqual([11, 12]);
     expect(result.envelopeUtf8ByteLength).toBe(40_000);
+  });
+
+  it("recalculates continuation cursors after the adapter page budget trims messages", () => {
+    const latest = fitLatestMessagesPage(
+      {
+        streamId: "channel:channel-page-policy",
+        throughSequence: 4,
+        messages: createMessages(1, 4),
+        nextBeforeSequence: 1,
+        hasMoreBefore: false,
+      },
+      ({ messages }) => ({
+        utf8ByteLength: messages.length * 20_000,
+        isWithinLimit: messages.length <= 2,
+      }),
+    );
+    const syncAfter = fitSyncAfterMessagesPage(
+      {
+        streamId: "channel:channel-page-policy",
+        afterSequence: 10,
+        throughSequence: 14,
+        messages: createMessages(11, 14),
+        nextAfterSequence: 14,
+        hasMoreAfter: false,
+      },
+      ({ messages }) => ({
+        utf8ByteLength: messages.length * 20_000,
+        isWithinLimit: messages.length <= 2,
+      }),
+    );
+
+    expect(latest.response).toMatchObject({
+      nextBeforeSequence: 3,
+      hasMoreBefore: true,
+    });
+    expect(latest.response.messages.map((message) => message.sequence)).toEqual([3, 4]);
+    expect(syncAfter.response).toMatchObject({
+      nextAfterSequence: 12,
+      hasMoreAfter: true,
+    });
+    expect(syncAfter.response.messages.map((message) => message.sequence)).toEqual([11, 12]);
   });
 
   it("fails without exposing content when one row cannot fit", () => {

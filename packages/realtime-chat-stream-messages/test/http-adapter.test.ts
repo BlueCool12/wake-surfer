@@ -1,7 +1,4 @@
-import {
-  getLatestStreamMessagesHttpResponseUtf8ByteLength,
-  type LatestStreamMessagesResponse,
-} from "@wake-surfer/realtime-chat-stream-messages-contracts";
+import { type LatestStreamMessagesResponse } from "@wake-surfer/realtime-chat-stream-messages-contracts";
 import { Hono } from "hono";
 import { describe, expect, it, vi } from "vitest";
 
@@ -16,10 +13,7 @@ import {
 describe("Stream Messages public HTTP adapter", () => {
   it("serializes latest with the canonical contract and preserves request correlation", async () => {
     const response = createLatestResponse();
-    const loadLatest = vi.fn(async () => ({
-      response,
-      envelopeUtf8ByteLength: getLatestStreamMessagesHttpResponseUtf8ByteLength(response),
-    }));
+    const loadLatest = vi.fn(async () => response);
     const logger = createLogger();
     const app = createApp({ loadLatest }, logger);
 
@@ -35,10 +29,7 @@ describe("Stream Messages public HTTP adapter", () => {
     await expect(result.json()).resolves.toEqual(response);
     expect(loadLatest).toHaveBeenCalledWith(
       { channelId: "channel-http" },
-      expect.objectContaining({
-        actorId: "actor-http",
-        measureFinalEnvelope: expect.any(Function),
-      }),
+      { actorId: "actor-http" },
     );
     expect(logger.info).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -198,10 +189,7 @@ describe("Stream Messages public HTTP adapter", () => {
       nextAfterSequence: 1,
       hasMoreAfter: false,
     };
-    const syncAfter = vi.fn<StreamMessagesModule["syncAfter"]>(async (_request, context) => ({
-      response,
-      envelopeUtf8ByteLength: context.measureFinalEnvelope(response).utf8ByteLength,
-    }));
+    const syncAfter = vi.fn<StreamMessagesModule["syncAfter"]>(async () => response);
     const app = new Hono();
     registerStreamMessagesInternalHttpRoutes(app, {
       authenticateGateway: () => {

@@ -2,14 +2,85 @@ import type { PublicMessage } from "@wake-surfer/realtime-chat-message-contracts
 import type {
   FinalEnvelopeMeasurement,
   FinalEnvelopeMeasurer,
+  LatestStreamMessagesResponse,
+  OlderStreamMessagesResponse,
+  SyncAfterStreamMessagesResponse,
 } from "@wake-surfer/realtime-chat-stream-messages-contracts";
 
 import { StreamMessagesDataIntegrityError } from "./errors.js";
+import type { LatestMessagesPage } from "./usecases/load-latest/load-latest.usecase.js";
+import type { OlderMessagesPage } from "./usecases/load-older/load-older.usecase.js";
+import type { SyncAfterMessagesPage } from "./usecases/sync-after/sync-after.usecase.js";
 
 export type MeasuredPage<Response> = {
   response: Response;
   envelopeUtf8ByteLength: number;
 };
+
+export function fitLatestMessagesPage(
+  page: LatestMessagesPage,
+  measureFinalEnvelope: FinalEnvelopeMeasurer<LatestStreamMessagesResponse>,
+): MeasuredPage<LatestStreamMessagesResponse> {
+  return fitNewestContiguousMessages({
+    messages: page.messages,
+    buildResponse: (messages) => {
+      const oldest = messages[0];
+
+      return {
+        streamId: page.streamId,
+        throughSequence: page.throughSequence,
+        messages,
+        nextBeforeSequence: oldest?.sequence ?? null,
+        hasMoreBefore: oldest === undefined ? false : oldest.sequence > 1,
+      };
+    },
+    measureFinalEnvelope,
+  });
+}
+
+export function fitOlderMessagesPage(
+  page: OlderMessagesPage,
+  measureFinalEnvelope: FinalEnvelopeMeasurer<OlderStreamMessagesResponse>,
+): MeasuredPage<OlderStreamMessagesResponse> {
+  return fitNewestContiguousMessages({
+    messages: page.messages,
+    buildResponse: (messages) => {
+      const oldest = messages[0];
+
+      return {
+        streamId: page.streamId,
+        beforeSequence: page.beforeSequence,
+        messages,
+        nextBeforeSequence: oldest?.sequence ?? null,
+        hasMoreBefore: oldest === undefined ? false : oldest.sequence > 1,
+      };
+    },
+    measureFinalEnvelope,
+  });
+}
+
+export function fitSyncAfterMessagesPage(
+  page: SyncAfterMessagesPage,
+  measureFinalEnvelope: FinalEnvelopeMeasurer<SyncAfterStreamMessagesResponse>,
+): MeasuredPage<SyncAfterStreamMessagesResponse> {
+  return fitOldestContiguousMessages({
+    messages: page.messages,
+    buildResponse: (messages) => {
+      const newest = messages.at(-1);
+      const nextAfterSequence = newest?.sequence ?? page.throughSequence;
+
+      return {
+        streamId: page.streamId,
+        afterSequence: page.afterSequence,
+        throughSequence: page.throughSequence,
+        messages,
+        nextAfterSequence,
+        hasMoreAfter: nextAfterSequence < page.throughSequence,
+      };
+    },
+    measureFinalEnvelope,
+  });
+}
 
 export function fitNewestContiguousMessages<Response>(input: {
   messages: readonly PublicMessage[];

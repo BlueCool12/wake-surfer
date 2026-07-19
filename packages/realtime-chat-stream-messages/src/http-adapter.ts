@@ -22,6 +22,11 @@ import { HTTPException } from "hono/http-exception";
 import { timeout } from "hono/timeout";
 
 import { StreamMessagesDataIntegrityError, StreamMessagesDomainError } from "./errors.js";
+import {
+  fitLatestMessagesPage,
+  fitOlderMessagesPage,
+  fitSyncAfterMessagesPage,
+} from "./page-policy.js";
 
 import type { StreamMessagesModule } from "./stream-messages-module.js";
 import type { StreamMessagesQueryRateLimiter } from "./distributed-rate-limiter.js";
@@ -89,10 +94,10 @@ export function registerStreamMessagesPublicHttpRoutes(
 
     try {
       await enforcePublicRateLimit(config, context.req.raw, actor.actorId, requestId);
-      const result = await config.streamMessages.loadLatest(request, {
+      const page = await config.streamMessages.loadLatest(request, {
         actorId: actor.actorId,
-        measureFinalEnvelope: measureLatestStreamMessagesHttpFinalEnvelope,
       });
+      const result = fitLatestMessagesPage(page, measureLatestStreamMessagesHttpFinalEnvelope);
       const serialized = serializeLatestStreamMessagesHttpResponse(result.response);
       assertFinalEnvelope(
         serialized,
@@ -132,10 +137,10 @@ export function registerStreamMessagesPublicHttpRoutes(
 
     try {
       await enforcePublicRateLimit(config, context.req.raw, actor.actorId, requestId);
-      const result = await config.streamMessages.loadOlder(request, {
+      const page = await config.streamMessages.loadOlder(request, {
         actorId: actor.actorId,
-        measureFinalEnvelope: measureOlderStreamMessagesHttpFinalEnvelope,
       });
+      const result = fitOlderMessagesPage(page, measureOlderStreamMessagesHttpFinalEnvelope);
       const serialized = serializeOlderStreamMessagesHttpResponse(result.response);
       assertFinalEnvelope(
         serialized,
@@ -215,11 +220,20 @@ export function registerStreamMessagesInternalHttpRoutes(
     const startedAt = performance.now();
 
     try {
-      const result = await config.streamMessages.syncAfter(request, {
-        actorId: actor.actorId,
-        measureFinalEnvelope: (response) =>
-          measureChatStreamSyncedFinalEnvelope({ requestId, ...response }),
-      });
+      const page = await config.streamMessages.syncAfter(
+        {
+          channelId: request.channelId,
+          afterSequence: request.afterSequence,
+          ...(request.throughSequence === undefined
+            ? {}
+            : { throughSequence: request.throughSequence }),
+          limit: request.limit,
+        },
+        { actorId: actor.actorId },
+      );
+      const result = fitSyncAfterMessagesPage(page, (response) =>
+        measureChatStreamSyncedFinalEnvelope({ requestId, ...response }),
+      );
       const clientEvent = { requestId, ...result.response };
       const canonicalClientEventByteLength = getChatStreamSyncedEventUtf8ByteLength(clientEvent);
 
