@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export * from "./gateway-session";
+export * from "./gateway-session.js";
 
 export type ActorId = string;
 export type GatewayTicket = string;

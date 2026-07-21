@@ -1,16 +1,16 @@
 import { getUtf8ByteLength } from "@wake-surfer/realtime-chat-message-contracts";
 import type { MessageTarget, PublicMessage } from "@wake-surfer/realtime-chat-message-contracts";
 
-import { MAX_STREAM_MESSAGES_PAGE_ENVELOPE_UTF8_BYTES } from "./common";
+import { MAX_STREAM_MESSAGES_PAGE_ENVELOPE_UTF8_BYTES } from "./common.js";
 import {
   LatestStreamMessagesHttpResponseSchema,
   type LatestStreamMessagesHttpResponse,
-} from "./latest";
+} from "./latest.js";
 import {
   OlderStreamMessagesHttpResponseSchema,
   type OlderStreamMessagesHttpResponse,
-} from "./older";
-import { ChatStreamSyncedEventSchema, type ChatStreamSyncedEvent } from "./sync-after";
+} from "./older.js";
+import { ChatStreamSyncedEventSchema, type ChatStreamSyncedEvent } from "./sync-after.js";
 
 export type FinalEnvelopeMeasurement = {
   utf8ByteLength: number;

@@ -11,7 +11,7 @@ import {
   RequestIdSchema,
   ThroughSequenceSchema,
   validatePageMessages,
-} from "./common";
+} from "./common.js";
 
 const SyncAfterCursorSchema = z
   .strictObject({

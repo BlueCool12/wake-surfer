@@ -9,7 +9,7 @@ import {
   MAX_STREAM_MESSAGES_PAGE_LIMIT,
   PageLimitSchema,
   validatePageMessages,
-} from "./common";
+} from "./common.js";
 
 export const OlderStreamMessagesHttpRequestSchema = z.strictObject({
   channelId: ChannelIdSchema,

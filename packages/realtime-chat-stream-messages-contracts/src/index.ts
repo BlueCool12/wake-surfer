@@ -11,10 +11,10 @@ export {
   PageLimitSchema,
   RequestIdSchema,
   ThroughSequenceSchema,
-} from "./common";
-export type { ChannelId, RequestId } from "./common";
-export * from "./errors";
-export * from "./latest";
-export * from "./older";
-export * from "./serialization";
-export * from "./sync-after";
+} from "./common.js";
+export type { ChannelId, RequestId } from "./common.js";
+export * from "./errors.js";
+export * from "./latest.js";
+export * from "./older.js";
+export * from "./serialization.js";
+export * from "./sync-after.js";

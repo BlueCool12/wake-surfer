@@ -8,6 +8,12 @@
 기존 `SendMessageTarget`, `SendMessageContent`, `PublicMessage` export는 consumer 호환성을 위해 공통
 계약의 alias로 유지한다.
 
+## 모듈 형식
+
+브라우저와 Node 서버가 runtime schema를 같은 계약에서 사용한다. build는 소스를 번들하지 않고 ESM과
+CommonJS로 각각 변환하며, package `exports`의 `import`와 `require` 조건이 실행 환경에 맞는 결과물을
+선택한다. 타입 선언은 두 형식이 공유한다.
+
 ## 책임
 
 - message-send 요청/응답 타입을 정의한다.

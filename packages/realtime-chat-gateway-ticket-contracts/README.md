@@ -5,6 +5,12 @@
 이 패키지는 요청/응답 타입과 그 타입에 대응하는 validation schema를 함께 제공한다. 저장소 로직,
 HTTP 라우팅, 도메인 유스케이스 구현은 이 패키지의 책임이 아니다.
 
+## 모듈 형식
+
+브라우저와 Node 서버가 runtime schema를 같은 계약에서 사용한다. build는 소스를 번들하지 않고 ESM과
+CommonJS로 각각 변환하며, package `exports`의 `import`와 `require` 조건이 실행 환경에 맞는 결과물을
+선택한다. 타입 선언은 두 형식이 공유한다.
+
 ## feature별 contracts로 나누는 이유
 
 `realtime-chat` 전체에 하나의 contracts 패키지만 둘 수도 있다. 하지만 이 저장소에서는 유스케이스와

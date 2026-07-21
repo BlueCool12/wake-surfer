@@ -15,6 +15,12 @@ Stream Messages의 latest, older, sync-after 조회 경계에서 공유하는 ve
 세 Query는 request/response schema를 공유하지 않는다. 공통 message item은 이 패키지가 아니라
 `@wake-surfer/realtime-chat-message-contracts`의 `PublicMessage`를 사용한다.
 
+## 모듈 형식
+
+브라우저와 Node 서버가 runtime schema를 같은 계약에서 사용한다. build는 소스를 번들하지 않고 ESM과
+CommonJS로 각각 변환하며, package `exports`의 `import`와 `require` 조건이 실행 환경에 맞는 결과물을
+선택한다. 타입 선언은 두 형식이 공유한다.
+
 ## 모듈과 리뷰 순서
 
 1. `common.ts`: cursor, limit, request ID, channel stream 공통 primitive

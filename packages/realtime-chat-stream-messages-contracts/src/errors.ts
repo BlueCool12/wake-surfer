@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { RequestIdSchema } from "./common";
+import { RequestIdSchema } from "./common.js";
 
 export type StreamMessagesDomainRejectionCode =
   "stream_unavailable" | "invalid_cursor" | "bad_request" | "rate_limited";
