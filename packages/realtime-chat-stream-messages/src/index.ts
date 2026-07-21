@@ -1,32 +1,33 @@
-export {
-  StreamMessagesDataIntegrityError,
-  StreamMessagesDomainError,
-  type StreamMessagesDataIntegrityReason,
-  type StreamMessagesDomainErrorCode,
-} from "./errors.js";
+export { StreamMessagesDataIntegrityError, type StreamMessagesDataIntegrityReason } from "./errors";
 export type {
   ChannelReadAuthorization,
   ChannelReadAuthorizer,
+  StreamMessage,
+  StreamMessagesFailure,
+  StreamMessagesFailureCode,
   StreamMessagesQueryContext,
-} from "./stream-messages.js";
+} from "./stream-messages";
 export {
   createLoadLatestMessages,
   type LatestMessagesPage,
   type LoadLatestMessages,
   type LoadLatestMessagesDeps,
   type LoadLatestMessagesQuery,
-} from "./usecases/load-latest/load-latest.usecase.js";
+  type LoadLatestMessagesResult,
+} from "./usecases/load-latest/load-latest.usecase";
 export {
   createLoadOlderMessages,
   type LoadOlderMessages,
   type LoadOlderMessagesDeps,
   type LoadOlderMessagesQuery,
+  type LoadOlderMessagesResult,
   type OlderMessagesPage,
-} from "./usecases/load-older/load-older.usecase.js";
+} from "./usecases/load-older/load-older.usecase";
 export {
   createSyncAfterMessages,
   type SyncAfterMessages,
   type SyncAfterMessagesDeps,
   type SyncAfterMessagesPage,
   type SyncAfterMessagesQuery,
-} from "./usecases/sync-after/sync-after.usecase.js";
+  type SyncAfterMessagesResult,
+} from "./usecases/sync-after/sync-after.usecase";

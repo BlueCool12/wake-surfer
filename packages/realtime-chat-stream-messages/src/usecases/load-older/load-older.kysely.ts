@@ -1,14 +1,23 @@
-import type { PublicMessage } from "@wake-surfer/realtime-chat-message-contracts";
 import type { Kysely } from "kysely";
 
-import { StreamMessagesDataIntegrityError, StreamMessagesDomainError } from "../../errors.js";
 import {
   assertExpectedSequenceWindow,
+  parseChannelStreamMetadata,
   parseStreamMessageRow,
   throwSequenceGap,
-  type StreamMessageRow,
-} from "../../stream-messages.js";
-import type { StreamMessagesDatabase } from "../../stream-messages-table.js";
+  type RawStreamMessageRow,
+  type RawStreamMetadataRow,
+  type StreamMessage,
+  type StreamMessagesFailure,
+} from "../../stream-messages";
+import type { StreamMessagesDatabase } from "../../stream-messages-table";
+
+export type OlderMessagesReadResult =
+  | {
+      status: "success";
+      messages: StreamMessage[];
+    }
+  | StreamMessagesFailure<"invalid_cursor">;
 
 export async function readOlderMessages<DB extends StreamMessagesDatabase>(
   db: Kysely<DB>,
@@ -18,7 +27,7 @@ export async function readOlderMessages<DB extends StreamMessagesDatabase>(
     beforeSequence: number;
     limit: number;
   },
-): Promise<PublicMessage[]> {
+): Promise<OlderMessagesReadResult> {
   const readDb = db as Kysely<StreamMessagesDatabase>;
 
   return readDb
@@ -26,7 +35,7 @@ export async function readOlderMessages<DB extends StreamMessagesDatabase>(
     .setIsolationLevel("repeatable read")
     .setAccessMode("read only")
     .execute(async (transaction) => {
-      const stream = await transaction
+      const streamRow = await transaction
         .selectFrom("message_streams")
         .select([
           "target_type as targetType",
@@ -34,16 +43,22 @@ export async function readOlderMessages<DB extends StreamMessagesDatabase>(
           "last_sequence as headSequence",
         ])
         .where("stream_id", "=", input.streamId)
-        .$castTo<{ targetType: unknown; targetId: unknown; headSequence: unknown }>()
+        .$castTo<RawStreamMetadataRow>()
         .executeTakeFirst();
-      const headSequence = parseHeadSequence(stream, input);
+      const stream = parseChannelStreamMetadata(streamRow, input);
 
-      if (input.beforeSequence > headSequence + 1) {
-        throw new StreamMessagesDomainError("invalid_cursor");
+      if (input.beforeSequence > stream.headSequence + 1) {
+        return {
+          status: "failure",
+          code: "invalid_cursor",
+        };
       }
 
-      if (stream === undefined || input.beforeSequence === 1) {
-        return [];
+      if (stream.status === "missing" || input.beforeSequence === 1) {
+        return {
+          status: "success",
+          messages: [],
+        };
       }
 
       const queryLimit = input.limit + 1;
@@ -65,9 +80,9 @@ export async function readOlderMessages<DB extends StreamMessagesDatabase>(
         .where("sequence", "<", input.beforeSequence)
         .orderBy("sequence", "desc")
         .limit(queryLimit)
-        .$castTo<StreamMessageRow>()
+        .$castTo<RawStreamMessageRow>()
         .execute();
-      const descendingMessages = rows.map(parseStreamMessageRow);
+      const descendingMessages = rows.map((row) => parseStreamMessageRow(row, input));
       const expectedCount = Math.min(input.beforeSequence - 1, queryLimit);
 
       if (descendingMessages.length !== expectedCount) {
@@ -81,34 +96,9 @@ export async function readOlderMessages<DB extends StreamMessagesDatabase>(
         streamId: input.streamId,
       });
 
-      return messages.slice(-input.limit);
+      return {
+        status: "success",
+        messages: messages.slice(-input.limit),
+      };
     });
-}
-
-function parseHeadSequence(
-  stream: { targetType: unknown; targetId: unknown; headSequence: unknown } | undefined,
-  input: { streamId: string; channelId: string },
-): number {
-  if (stream === undefined) {
-    return 0;
-  }
-
-  if (stream.targetType !== "channel" || stream.targetId !== input.channelId) {
-    throw new StreamMessagesDataIntegrityError("stream_target_mismatch", {
-      streamId: input.streamId,
-      expectedTargetType: "channel",
-      expectedTargetId: input.channelId,
-      actualTargetType: String(stream.targetType),
-      actualTargetId: String(stream.targetId),
-    });
-  }
-
-  if (!Number.isSafeInteger(stream.headSequence) || (stream.headSequence as number) < 0) {
-    throw new StreamMessagesDataIntegrityError("invalid_storage_row", {
-      streamId: input.streamId,
-      field: "last_sequence",
-    });
-  }
-
-  return stream.headSequence as number;
 }

@@ -8,7 +8,7 @@ import {
   MAX_LATEST_STREAM_MESSAGES,
   ThroughSequenceSchema,
   validatePageMessages,
-} from "./common.js";
+} from "./common";
 
 export const LatestStreamMessagesHttpRequestSchema = z.strictObject({
   channelId: ChannelIdSchema,

@@ -10,9 +10,8 @@ import {
   createLoadOlderMessages,
   createSyncAfterMessages,
   StreamMessagesDataIntegrityError,
-  StreamMessagesDomainError,
   type ChannelReadAuthorizer,
-} from "../src/index.js";
+} from "../src/index";
 
 describe("Stream Messages PostgreSQL queries", () => {
   let database: RealtimeChatIntegrationTestDatabase | undefined;
@@ -35,11 +34,13 @@ describe("Stream Messages PostgreSQL queries", () => {
     );
 
     expect(result).toEqual({
-      streamId: "channel:empty-channel",
-      throughSequence: 0,
-      messages: [],
-      nextBeforeSequence: null,
-      hasMoreBefore: false,
+      status: "success",
+      page: {
+        throughSequence: 0,
+        messages: [],
+        nextBeforeSequence: null,
+        hasMoreBefore: false,
+      },
     });
     expect(authorizeRead).toHaveBeenCalledWith({
       actorId: "actor-empty-channel",
@@ -60,25 +61,48 @@ describe("Stream Messages PostgreSQL queries", () => {
     const useCases = createUseCases(() => ({ status: "allowed" }));
 
     const latest = await useCases.loadLatest({ channelId }, { actorId: "actor-history" });
+    expect(latest.status).toBe("success");
+
+    if (latest.status !== "success") {
+      throw new Error("latest 조회가 성공해야 합니다.");
+    }
+
     const older = await useCases.loadOlder(
       {
         channelId,
-        beforeSequence: latest.nextBeforeSequence!,
+        beforeSequence: latest.page.nextBeforeSequence!,
         limit: 50,
       },
       { actorId: "actor-history" },
     );
 
-    expect(latest.messages.map((message) => message.sequence)).toEqual([116, 117, 118, 119, 120]);
-    expect(latest).toMatchObject({
+    expect(older.status).toBe("success");
+
+    if (older.status !== "success") {
+      throw new Error("older 조회가 성공해야 합니다.");
+    }
+
+    expect(latest.page.messages.map((message) => message.sequence)).toEqual([
+      116, 117, 118, 119, 120,
+    ]);
+    expect(latest.page).toMatchObject({
       throughSequence: 120,
       nextBeforeSequence: 116,
       hasMoreBefore: true,
     });
-    expect(older.messages.map((message) => message.sequence)).toEqual(
+    expect(latest.page.messages[0]).toMatchObject({
+      messageId: "message-history-channel-116",
+      senderActorId: "actor-message-author",
+      content: {
+        type: "text",
+        text: "message 116",
+      },
+    });
+    expect(latest.page.messages[0]).not.toHaveProperty("streamId");
+    expect(older.page.messages.map((message) => message.sequence)).toEqual(
       Array.from({ length: 50 }, (_, index) => index + 66),
     );
-    expect(older).toMatchObject({
+    expect(older.page).toMatchObject({
       beforeSequence: 116,
       nextBeforeSequence: 66,
       hasMoreBefore: true,
@@ -98,39 +122,53 @@ describe("Stream Messages PostgreSQL queries", () => {
       },
       { actorId: "actor-sync" },
     );
+
+    expect(first.status).toBe("success");
+
+    if (first.status !== "success") {
+      throw new Error("첫 sync-after 조회가 성공해야 합니다.");
+    }
+
     await insertMessages(channelId, 121, 121);
     const second = await useCases.syncAfter(
       {
         channelId,
-        afterSequence: first.nextAfterSequence,
-        throughSequence: first.throughSequence,
+        afterSequence: first.page.nextAfterSequence,
+        throughSequence: first.page.throughSequence,
         limit: 2,
       },
       { actorId: "actor-sync" },
     );
 
-    expect(first).toMatchObject({
+    expect(second.status).toBe("success");
+
+    if (second.status !== "success") {
+      throw new Error("두 번째 sync-after 조회가 성공해야 합니다.");
+    }
+
+    expect(first.page).toMatchObject({
       throughSequence: 120,
       nextAfterSequence: 119,
       hasMoreAfter: true,
     });
-    expect(first.messages.map((message) => message.sequence)).toEqual([118, 119]);
-    expect(second).toMatchObject({
+    expect(first.page.messages.map((message) => message.sequence)).toEqual([118, 119]);
+    expect(second.page).toMatchObject({
       throughSequence: 120,
       nextAfterSequence: 120,
       hasMoreAfter: false,
     });
-    expect(second.messages.map((message) => message.sequence)).toEqual([120]);
+    expect(second.page.messages.map((message) => message.sequence)).toEqual([120]);
   });
 
-  it("rejects unauthorized and invalid-cursor requests with distinct domain errors", async () => {
+  it("returns unauthorized and invalid-cursor failures as values", async () => {
     const deniedUseCases = createUseCases(() => ({ status: "denied" }));
 
     await expect(
       deniedUseCases.loadLatest({ channelId: "private-channel" }, { actorId: "actor-denied" }),
-    ).rejects.toMatchObject({
+    ).resolves.toEqual({
+      status: "failure",
       code: "stream_unavailable",
-    } satisfies Partial<StreamMessagesDomainError>);
+    });
 
     const allowedUseCases = createUseCases(() => ({ status: "allowed" }));
     await expect(
@@ -142,9 +180,10 @@ describe("Stream Messages PostgreSQL queries", () => {
         },
         { actorId: "actor-invalid-cursor" },
       ),
-    ).rejects.toMatchObject({
+    ).resolves.toEqual({
+      status: "failure",
       code: "invalid_cursor",
-    } satisfies Partial<StreamMessagesDomainError>);
+    });
   });
 
   it("detects sequence gaps without including message content in the error", async () => {

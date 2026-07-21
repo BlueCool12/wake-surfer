@@ -10,6 +10,8 @@ import {
 
 export const DEFAULT_GATEWAY_STREAM_MESSAGES_API_TIMEOUT_MS = 10_000;
 
+const RFC_6750_BEARER_TOKEN_PATTERN = new RegExp("^[A-Za-z0-9._~+/-]+=*$");
+
 export type GatewayStreamMessagesApiClient = {
   syncAfter: (
     request: SyncAfterStreamMessagesRequest,
@@ -154,6 +156,10 @@ function parseGatewayApiToken(value: string): string {
 
   if (/\s/.test(token)) {
     throw new TypeError("gatewayApiToken은 공백을 포함할 수 없습니다.");
+  }
+
+  if (!RFC_6750_BEARER_TOKEN_PATTERN.test(token)) {
+    throw new TypeError("gatewayApiToken은 RFC 6750 Bearer token 문자만 포함해야 합니다.");
   }
 
   return token;

@@ -1,17 +1,19 @@
 import type { Kysely } from "kysely";
 
-import { StreamMessagesDataIntegrityError } from "../../errors.js";
 import {
   assertExpectedSequenceWindow,
   MAX_LATEST_MESSAGES_QUERY_COUNT,
+  parseChannelStreamMetadata,
   parseStreamMessageRow,
-  type StreamMessageRow,
-} from "../../stream-messages.js";
-import type { StreamMessagesDatabase } from "../../stream-messages-table.js";
+  type RawStreamMessageRow,
+  type RawStreamMetadataRow,
+  type StreamMessage,
+} from "../../stream-messages";
+import type { StreamMessagesDatabase } from "../../stream-messages-table";
 
 export type LatestMessagesSnapshot = {
   headSequence: number;
-  messages: ReturnType<typeof parseStreamMessageRow>[];
+  messages: StreamMessage[];
 };
 
 const LATEST_QUERY_ROW_LIMIT = MAX_LATEST_MESSAGES_QUERY_COUNT + 1;
@@ -30,7 +32,7 @@ export async function readLatestMessagesSnapshot<DB extends StreamMessagesDataba
     .setIsolationLevel("repeatable read")
     .setAccessMode("read only")
     .execute(async (transaction) => {
-      const stream = await transaction
+      const streamRow = await transaction
         .selectFrom("message_streams")
         .select([
           "target_type as targetType",
@@ -38,17 +40,16 @@ export async function readLatestMessagesSnapshot<DB extends StreamMessagesDataba
           "last_sequence as headSequence",
         ])
         .where("stream_id", "=", input.streamId)
-        .$castTo<{ targetType: unknown; targetId: unknown; headSequence: unknown }>()
+        .$castTo<RawStreamMetadataRow>()
         .executeTakeFirst();
+      const stream = parseChannelStreamMetadata(streamRow, input);
 
-      if (stream === undefined) {
+      if (stream.status === "missing") {
         return {
           headSequence: 0,
           messages: [],
         };
       }
-
-      assertStreamMetadata(stream, input);
 
       const rows = await transaction
         .selectFrom("messages")
@@ -65,13 +66,13 @@ export async function readLatestMessagesSnapshot<DB extends StreamMessagesDataba
           "created_at as createdAt",
         ])
         .where("stream_id", "=", input.streamId)
-        .where("sequence", "<=", stream.headSequence as number)
+        .where("sequence", "<=", stream.headSequence)
         .orderBy("sequence", "desc")
         .limit(LATEST_QUERY_ROW_LIMIT)
-        .$castTo<StreamMessageRow>()
+        .$castTo<RawStreamMessageRow>()
         .execute();
-      const messages = rows.map(parseStreamMessageRow).reverse();
-      const headSequence = stream.headSequence as number;
+      const messages = rows.map((row) => parseStreamMessageRow(row, input)).reverse();
+      const headSequence = stream.headSequence;
 
       assertExpectedSequenceWindow(messages, {
         expectedFirst: Math.max(1, headSequence - LATEST_QUERY_ROW_LIMIT + 1),
@@ -84,26 +85,4 @@ export async function readLatestMessagesSnapshot<DB extends StreamMessagesDataba
         messages: messages.slice(-MAX_LATEST_MESSAGES_QUERY_COUNT),
       };
     });
-}
-
-function assertStreamMetadata(
-  stream: { targetType: unknown; targetId: unknown; headSequence: unknown },
-  input: { streamId: string; channelId: string },
-): asserts stream is { targetType: "channel"; targetId: string; headSequence: number } {
-  if (stream.targetType !== "channel" || stream.targetId !== input.channelId) {
-    throw new StreamMessagesDataIntegrityError("stream_target_mismatch", {
-      streamId: input.streamId,
-      expectedTargetType: "channel",
-      expectedTargetId: input.channelId,
-      actualTargetType: String(stream.targetType),
-      actualTargetId: String(stream.targetId),
-    });
-  }
-
-  if (!Number.isSafeInteger(stream.headSequence) || (stream.headSequence as number) < 0) {
-    throw new StreamMessagesDataIntegrityError("invalid_storage_row", {
-      streamId: input.streamId,
-      field: "last_sequence",
-    });
-  }
 }

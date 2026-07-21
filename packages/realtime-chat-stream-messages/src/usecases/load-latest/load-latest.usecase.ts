@@ -1,4 +1,3 @@
-import type { PublicMessage } from "@wake-surfer/realtime-chat-message-contracts";
 import type { Kysely } from "kysely";
 
 import {
@@ -6,22 +5,30 @@ import {
   authorizeChannelRead,
   getChannelStreamId,
   type ChannelReadAuthorizer,
+  type StreamMessage,
+  type StreamMessagesFailure,
   type StreamMessagesQueryContext,
-} from "../../stream-messages.js";
-import type { StreamMessagesDatabase } from "../../stream-messages-table.js";
-import { readLatestMessagesSnapshot } from "./load-latest.kysely.js";
+} from "../../stream-messages";
+import type { StreamMessagesDatabase } from "../../stream-messages-table";
+import { readLatestMessagesSnapshot } from "./load-latest.kysely";
 
 export type LoadLatestMessagesQuery = {
   channelId: string;
 };
 
 export type LatestMessagesPage = {
-  streamId: string;
   throughSequence: number;
-  messages: PublicMessage[];
+  messages: StreamMessage[];
   nextBeforeSequence: number | null;
   hasMoreBefore: boolean;
 };
+
+export type LoadLatestMessagesResult =
+  | {
+      status: "success";
+      page: LatestMessagesPage;
+    }
+  | StreamMessagesFailure<"stream_unavailable">;
 
 export type LoadLatestMessagesDeps<DB extends StreamMessagesDatabase = StreamMessagesDatabase> = {
   db: Kysely<DB>;
@@ -31,7 +38,7 @@ export type LoadLatestMessagesDeps<DB extends StreamMessagesDatabase = StreamMes
 export type LoadLatestMessages = (
   query: LoadLatestMessagesQuery,
   context: StreamMessagesQueryContext,
-) => Promise<LatestMessagesPage>;
+) => Promise<LoadLatestMessagesResult>;
 
 export function createLoadLatestMessages<DB extends StreamMessagesDatabase>(
   deps: LoadLatestMessagesDeps<DB>,
@@ -43,9 +50,21 @@ export async function loadLatestMessages<DB extends StreamMessagesDatabase>(
   query: LoadLatestMessagesQuery,
   context: StreamMessagesQueryContext,
   deps: LoadLatestMessagesDeps<DB>,
-): Promise<LatestMessagesPage> {
+): Promise<LoadLatestMessagesResult> {
   assertChannelId(query.channelId);
-  await authorizeChannelRead(deps.authorizeRead, context.actorId, query.channelId);
+  const authorization = await authorizeChannelRead(
+    deps.authorizeRead,
+    context.actorId,
+    query.channelId,
+  );
+
+  if (authorization.status === "denied") {
+    return {
+      status: "failure",
+      code: "stream_unavailable",
+    };
+  }
+
   const streamId = getChannelStreamId(query.channelId);
   const snapshot = await readLatestMessagesSnapshot(deps.db, {
     streamId,
@@ -54,10 +73,12 @@ export async function loadLatestMessages<DB extends StreamMessagesDatabase>(
   const oldest = snapshot.messages[0];
 
   return {
-    streamId,
-    throughSequence: snapshot.headSequence,
-    messages: snapshot.messages,
-    nextBeforeSequence: oldest?.sequence ?? null,
-    hasMoreBefore: oldest === undefined ? false : oldest.sequence > 1,
+    status: "success",
+    page: {
+      throughSequence: snapshot.headSequence,
+      messages: snapshot.messages,
+      nextBeforeSequence: oldest?.sequence ?? null,
+      hasMoreBefore: oldest === undefined ? false : oldest.sequence > 1,
+    },
   };
 }

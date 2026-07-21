@@ -1,4 +1,3 @@
-import type { PublicMessage } from "@wake-surfer/realtime-chat-message-contracts";
 import type { Kysely } from "kysely";
 
 import {
@@ -8,10 +7,12 @@ import {
   authorizeChannelRead,
   getChannelStreamId,
   type ChannelReadAuthorizer,
+  type StreamMessage,
+  type StreamMessagesFailure,
   type StreamMessagesQueryContext,
-} from "../../stream-messages.js";
-import type { StreamMessagesDatabase } from "../../stream-messages-table.js";
-import { readOlderMessages } from "./load-older.kysely.js";
+} from "../../stream-messages";
+import type { StreamMessagesDatabase } from "../../stream-messages-table";
+import { readOlderMessages } from "./load-older.kysely";
 
 export type LoadOlderMessagesQuery = {
   channelId: string;
@@ -20,12 +21,18 @@ export type LoadOlderMessagesQuery = {
 };
 
 export type OlderMessagesPage = {
-  streamId: string;
   beforeSequence: number;
-  messages: PublicMessage[];
+  messages: StreamMessage[];
   nextBeforeSequence: number | null;
   hasMoreBefore: boolean;
 };
+
+export type LoadOlderMessagesResult =
+  | {
+      status: "success";
+      page: OlderMessagesPage;
+    }
+  | StreamMessagesFailure<"stream_unavailable" | "invalid_cursor">;
 
 export type LoadOlderMessagesDeps<DB extends StreamMessagesDatabase = StreamMessagesDatabase> = {
   db: Kysely<DB>;
@@ -35,7 +42,7 @@ export type LoadOlderMessagesDeps<DB extends StreamMessagesDatabase = StreamMess
 export type LoadOlderMessages = (
   query: LoadOlderMessagesQuery,
   context: StreamMessagesQueryContext,
-) => Promise<OlderMessagesPage>;
+) => Promise<LoadOlderMessagesResult>;
 
 export function createLoadOlderMessages<DB extends StreamMessagesDatabase>(
   deps: LoadOlderMessagesDeps<DB>,
@@ -47,25 +54,44 @@ export async function loadOlderMessages<DB extends StreamMessagesDatabase>(
   query: LoadOlderMessagesQuery,
   context: StreamMessagesQueryContext,
   deps: LoadOlderMessagesDeps<DB>,
-): Promise<OlderMessagesPage> {
+): Promise<LoadOlderMessagesResult> {
   assertChannelId(query.channelId);
   assertBeforeSequence(query.beforeSequence);
   assertQueryPageSize(query.limit);
-  await authorizeChannelRead(deps.authorizeRead, context.actorId, query.channelId);
+  const authorization = await authorizeChannelRead(
+    deps.authorizeRead,
+    context.actorId,
+    query.channelId,
+  );
+
+  if (authorization.status === "denied") {
+    return {
+      status: "failure",
+      code: "stream_unavailable",
+    };
+  }
+
   const streamId = getChannelStreamId(query.channelId);
-  const messages = await readOlderMessages(deps.db, {
+  const result = await readOlderMessages(deps.db, {
     streamId,
     channelId: query.channelId,
     beforeSequence: query.beforeSequence,
     limit: query.limit,
   });
-  const oldest = messages[0];
+
+  if (result.status === "failure") {
+    return result;
+  }
+
+  const oldest = result.messages[0];
 
   return {
-    streamId,
-    beforeSequence: query.beforeSequence,
-    messages,
-    nextBeforeSequence: oldest?.sequence ?? null,
-    hasMoreBefore: oldest === undefined ? false : oldest.sequence > 1,
+    status: "success",
+    page: {
+      beforeSequence: query.beforeSequence,
+      messages: result.messages,
+      nextBeforeSequence: oldest?.sequence ?? null,
+      hasMoreBefore: oldest === undefined ? false : oldest.sequence > 1,
+    },
   };
 }

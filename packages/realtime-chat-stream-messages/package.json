@@ -27,7 +27,6 @@
     "typecheck": "tsc -p tsconfig.test.json"
   },
   "dependencies": {
-    "@wake-surfer/realtime-chat-message-contracts": "workspace:*",
     "kysely": "0.28.8"
   },
   "devDependencies": {

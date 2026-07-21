@@ -1,19 +1,28 @@
-import type { PublicMessage } from "@wake-surfer/realtime-chat-message-contracts";
 import type { Kysely } from "kysely";
 
-import { StreamMessagesDataIntegrityError, StreamMessagesDomainError } from "../../errors.js";
 import {
   assertExpectedSequenceWindow,
+  parseChannelStreamMetadata,
   parseStreamMessageRow,
   throwSequenceGap,
-  type StreamMessageRow,
-} from "../../stream-messages.js";
-import type { StreamMessagesDatabase } from "../../stream-messages-table.js";
+  type RawStreamMessageRow,
+  type RawStreamMetadataRow,
+  type StreamMessage,
+  type StreamMessagesFailure,
+} from "../../stream-messages";
+import type { StreamMessagesDatabase } from "../../stream-messages-table";
 
 export type SyncAfterMessagesSnapshot = {
-  messages: PublicMessage[];
+  messages: StreamMessage[];
   throughSequence: number;
 };
+
+export type SyncAfterMessagesReadResult =
+  | {
+      status: "success";
+      snapshot: SyncAfterMessagesSnapshot;
+    }
+  | StreamMessagesFailure<"invalid_cursor">;
 
 export async function readMessagesAfter<DB extends StreamMessagesDatabase>(
   db: Kysely<DB>,
@@ -24,7 +33,7 @@ export async function readMessagesAfter<DB extends StreamMessagesDatabase>(
     throughSequence?: number;
     limit: number;
   },
-): Promise<SyncAfterMessagesSnapshot> {
+): Promise<SyncAfterMessagesReadResult> {
   const readDb = db as Kysely<StreamMessagesDatabase>;
 
   return readDb
@@ -32,7 +41,7 @@ export async function readMessagesAfter<DB extends StreamMessagesDatabase>(
     .setIsolationLevel("repeatable read")
     .setAccessMode("read only")
     .execute(async (transaction) => {
-      const stream = await transaction
+      const streamRow = await transaction
         .selectFrom("message_streams")
         .select([
           "target_type as targetType",
@@ -40,23 +49,29 @@ export async function readMessagesAfter<DB extends StreamMessagesDatabase>(
           "last_sequence as headSequence",
         ])
         .where("stream_id", "=", input.streamId)
-        .$castTo<{ targetType: unknown; targetId: unknown; headSequence: unknown }>()
+        .$castTo<RawStreamMetadataRow>()
         .executeTakeFirst();
-      const headSequence = parseHeadSequence(stream, input);
-      const throughSequence = input.throughSequence ?? headSequence;
+      const stream = parseChannelStreamMetadata(streamRow, input);
+      const throughSequence = input.throughSequence ?? stream.headSequence;
 
       if (
-        input.afterSequence > headSequence ||
-        throughSequence > headSequence ||
+        input.afterSequence > stream.headSequence ||
+        throughSequence > stream.headSequence ||
         input.afterSequence > throughSequence
       ) {
-        throw new StreamMessagesDomainError("invalid_cursor");
+        return {
+          status: "failure",
+          code: "invalid_cursor",
+        };
       }
 
-      if (stream === undefined || input.afterSequence === throughSequence) {
+      if (stream.status === "missing" || input.afterSequence === throughSequence) {
         return {
-          messages: [],
-          throughSequence,
+          status: "success",
+          snapshot: {
+            messages: [],
+            throughSequence,
+          },
         };
       }
 
@@ -80,9 +95,9 @@ export async function readMessagesAfter<DB extends StreamMessagesDatabase>(
         .where("sequence", "<=", throughSequence)
         .orderBy("sequence", "asc")
         .limit(queryLimit)
-        .$castTo<StreamMessageRow>()
+        .$castTo<RawStreamMessageRow>()
         .execute();
-      const messages = rows.map(parseStreamMessageRow);
+      const messages = rows.map((row) => parseStreamMessageRow(row, input));
       const expectedCount = Math.min(throughSequence - input.afterSequence, queryLimit);
 
       if (messages.length !== expectedCount) {
@@ -96,36 +111,11 @@ export async function readMessagesAfter<DB extends StreamMessagesDatabase>(
       });
 
       return {
-        messages: messages.slice(0, input.limit),
-        throughSequence,
+        status: "success",
+        snapshot: {
+          messages: messages.slice(0, input.limit),
+          throughSequence,
+        },
       };
     });
-}
-
-function parseHeadSequence(
-  stream: { targetType: unknown; targetId: unknown; headSequence: unknown } | undefined,
-  input: { streamId: string; channelId: string },
-): number {
-  if (stream === undefined) {
-    return 0;
-  }
-
-  if (stream.targetType !== "channel" || stream.targetId !== input.channelId) {
-    throw new StreamMessagesDataIntegrityError("stream_target_mismatch", {
-      streamId: input.streamId,
-      expectedTargetType: "channel",
-      expectedTargetId: input.channelId,
-      actualTargetType: String(stream.targetType),
-      actualTargetId: String(stream.targetId),
-    });
-  }
-
-  if (!Number.isSafeInteger(stream.headSequence) || (stream.headSequence as number) < 0) {
-    throw new StreamMessagesDataIntegrityError("invalid_storage_row", {
-      streamId: input.streamId,
-      field: "last_sequence",
-    });
-  }
-
-  return stream.headSequence as number;
 }

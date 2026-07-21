@@ -1,10 +1,4 @@
-import {
-  getCanonicalStreamId,
-  PublicMessageSchema,
-  type PublicMessage,
-} from "@wake-surfer/realtime-chat-message-contracts";
-
-import { StreamMessagesDataIntegrityError, StreamMessagesDomainError } from "./errors.js";
+import { StreamMessagesDataIntegrityError } from "./errors";
 
 export type ChannelReadAuthorization = { status: "allowed" } | { status: "denied" };
 
@@ -17,10 +11,29 @@ export type StreamMessagesQueryContext = {
   actorId: string;
 };
 
+export type StreamMessage = {
+  messageId: string;
+  sequence: number;
+  senderActorId: string;
+  content: {
+    type: "text";
+    text: string;
+  };
+  createdAt: Date;
+  sentAtClient?: Date;
+};
+
+export type StreamMessagesFailureCode = "stream_unavailable" | "invalid_cursor";
+
+export type StreamMessagesFailure<Code extends StreamMessagesFailureCode> = {
+  status: "failure";
+  code: Code;
+};
+
 export const MAX_LATEST_MESSAGES_QUERY_COUNT = 5;
 export const MAX_STREAM_MESSAGES_QUERY_PAGE_SIZE = 100;
 
-export type StreamMessageRow = {
+export type RawStreamMessageRow = {
   messageId: unknown;
   streamId: unknown;
   sequence: unknown;
@@ -33,20 +46,32 @@ export type StreamMessageRow = {
   createdAt: unknown;
 };
 
+export type RawStreamMetadataRow = {
+  targetType: unknown;
+  targetId: unknown;
+  headSequence: unknown;
+};
+
+export type ChannelStreamMetadata =
+  | {
+      status: "missing";
+      headSequence: 0;
+    }
+  | {
+      status: "found";
+      headSequence: number;
+    };
+
 export async function authorizeChannelRead(
   authorizeRead: ChannelReadAuthorizer,
   actorId: string,
   channelId: string,
-): Promise<void> {
+): Promise<ChannelReadAuthorization> {
   if (actorId.trim().length === 0) {
     throw new TypeError("Stream Messages actorId는 비어 있을 수 없습니다.");
   }
 
-  const authorization = await authorizeRead({ actorId, channelId });
-
-  if (authorization.status === "denied") {
-    throw new StreamMessagesDomainError("stream_unavailable");
-  }
+  return authorizeRead({ actorId, channelId });
 }
 
 export function assertChannelId(channelId: string): void {
@@ -72,60 +97,109 @@ export function assertQueryPageSize(limit: number): void {
 }
 
 export function getChannelStreamId(channelId: string): string {
-  return getCanonicalStreamId({
-    type: "channel",
-    channelId,
-  });
+  return `channel:${channelId}`;
 }
 
-export function parseStreamMessageRow(row: StreamMessageRow): PublicMessage {
+export function parseChannelStreamMetadata(
+  row: RawStreamMetadataRow | undefined,
+  expected: {
+    streamId: string;
+    channelId: string;
+  },
+): ChannelStreamMetadata {
+  if (row === undefined) {
+    return {
+      status: "missing",
+      headSequence: 0,
+    };
+  }
+
+  if (row.targetType !== "channel" || row.targetId !== expected.channelId) {
+    throw new StreamMessagesDataIntegrityError("stream_target_mismatch", {
+      streamId: expected.streamId,
+      expectedTargetType: "channel",
+      expectedTargetId: expected.channelId,
+      actualTargetType: String(row.targetType),
+      actualTargetId: String(row.targetId),
+    });
+  }
+
+  if (!Number.isSafeInteger(row.headSequence) || (row.headSequence as number) < 0) {
+    throw new StreamMessagesDataIntegrityError("invalid_storage_row", {
+      streamId: expected.streamId,
+      field: "last_sequence",
+    });
+  }
+
+  return {
+    status: "found",
+    headSequence: row.headSequence as number,
+  };
+}
+
+export function parseStreamMessageRow(
+  row: RawStreamMessageRow,
+  expected: {
+    streamId: string;
+    channelId: string;
+  },
+): StreamMessage {
   const metadata = {
     messageId: String(row.messageId),
     streamId: String(row.streamId),
     sequence: String(row.sequence),
   };
-  const parsed = PublicMessageSchema.safeParse({
-    messageId: row.messageId,
-    streamId: row.streamId,
-    sequence: row.sequence,
-    senderActorId: row.senderActorId,
-    target:
-      row.targetType === "channel"
-        ? {
-            type: "channel",
-            channelId: row.targetId,
-          }
-        : {
-            type: row.targetType,
-          },
-    content:
-      row.contentType === "text"
-        ? {
-            type: "text",
-            text: row.contentText,
-          }
-        : {
-            type: row.contentType,
-          },
-    createdAt: toIsoDateTime(row.createdAt),
-    ...(row.sentAtClient === null || row.sentAtClient === undefined
-      ? {}
-      : { sentAtClient: toIsoDateTime(row.sentAtClient) }),
-  });
 
-  if (!parsed.success) {
-    throw new StreamMessagesDataIntegrityError("invalid_storage_row", metadata);
-  }
-
-  if (parsed.data.streamId !== getCanonicalStreamId(parsed.data.target)) {
+  if (
+    row.streamId !== expected.streamId ||
+    row.targetType !== "channel" ||
+    row.targetId !== expected.channelId
+  ) {
     throw new StreamMessagesDataIntegrityError("stream_target_mismatch", metadata);
   }
 
-  return parsed.data;
+  const messageId = parseNonBlankString(row.messageId);
+  const sequence = parsePositiveSafeInteger(row.sequence);
+  const senderActorId = parseNonBlankString(row.senderActorId);
+  const contentText = parseNonBlankString(row.contentText);
+  const createdAt = parseDate(row.createdAt);
+  const sentAtClient =
+    row.sentAtClient === null || row.sentAtClient === undefined
+      ? undefined
+      : parseDate(row.sentAtClient);
+
+  if (
+    messageId === undefined ||
+    sequence === undefined ||
+    senderActorId === undefined ||
+    row.contentType !== "text" ||
+    contentText === undefined ||
+    createdAt === undefined ||
+    (row.sentAtClient !== null && row.sentAtClient !== undefined && sentAtClient === undefined)
+  ) {
+    throw new StreamMessagesDataIntegrityError("invalid_storage_row", metadata);
+  }
+
+  const message: StreamMessage = {
+    messageId,
+    sequence,
+    senderActorId,
+    content: {
+      type: "text",
+      text: contentText,
+    },
+    createdAt,
+  };
+
+  if (sentAtClient !== undefined) {
+    message.sentAtClient = sentAtClient;
+  }
+
+  return message;
 }
 
 export function assertExpectedSequenceWindow(
-  messages: readonly PublicMessage[],
+  messages: readonly { sequence: number }[],
   expected: {
     expectedFirst: number;
     expectedLast: number;
@@ -170,8 +244,28 @@ export function throwSequenceGap(
   });
 }
 
-function toIsoDateTime(value: unknown): string | unknown {
-  return value instanceof Date ? value.toISOString() : value;
+function parseNonBlankString(value: unknown): string | undefined {
+  if (typeof value !== "string" || value.trim().length === 0 || value.trim() !== value) {
+    return undefined;
+  }
+
+  return value;
+}
+
+function parsePositiveSafeInteger(value: unknown): number | undefined {
+  if (!Number.isSafeInteger(value) || (value as number) <= 0) {
+    return undefined;
+  }
+
+  return value as number;
+}
+
+function parseDate(value: unknown): Date | undefined {
+  if (!(value instanceof Date) || Number.isNaN(value.getTime())) {
+    return undefined;
+  }
+
+  return value;
 }
 
 function assertNonBlankIdentifier(value: string, fieldName: string): void {

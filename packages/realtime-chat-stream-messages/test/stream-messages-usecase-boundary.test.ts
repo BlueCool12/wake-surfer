@@ -5,9 +5,9 @@ import {
   createLoadOlderMessages,
   createSyncAfterMessages,
   type ChannelReadAuthorizer,
-} from "../src/index.js";
+} from "../src/index";
 
-import type { StreamMessagesDatabase } from "../src/table-contract.js";
+import type { StreamMessagesDatabase } from "../src/table-contract";
 import type { Kysely } from "kysely";
 
 describe("Stream Messages usecase boundary", () => {
@@ -47,5 +47,19 @@ describe("Stream Messages usecase boundary", () => {
     ).rejects.toThrow("actorId");
 
     expect(authorizeRead).not.toHaveBeenCalled();
+  });
+
+  it("returns denied authorization as a failure value before persistence", async () => {
+    const authorizeRead = vi.fn<ChannelReadAuthorizer>(() => ({ status: "denied" }));
+
+    await expect(
+      createLoadLatestMessages({ db: unreachableDb, authorizeRead })(
+        { channelId: "private-channel" },
+        { actorId: "actor-denied" },
+      ),
+    ).resolves.toEqual({
+      status: "failure",
+      code: "stream_unavailable",
+    });
   });
 });

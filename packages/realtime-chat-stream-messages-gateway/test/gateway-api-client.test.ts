@@ -9,6 +9,9 @@ afterEach(() => {
 describe("Gateway Stream Messages internal API client", () => {
   it("requires a strong credential and an explicit production TLS proof", () => {
     expect(() => createClient({ gatewayApiToken: "short" })).toThrow(/32 UTF-8 byte/);
+    expect(() => createClient({ gatewayApiToken: `${"a".repeat(31)}:` })).toThrow(
+      /RFC 6750 Bearer token/,
+    );
     expect(() =>
       createClient({ nodeEnvironment: "production", transportSecurity: "development" }),
     ).toThrow(/TLS 증명/);
