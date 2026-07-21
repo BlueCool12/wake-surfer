@@ -7,6 +7,8 @@ import { createRealtimeChatApiApp } from "../src/app.js";
 
 import type { RealtimeChatApiAppDeps } from "../src/app.js";
 
+const GATEWAY_API_TOKEN = "gateway-service-token-with-32-bytes";
+
 describe("realtime chat api app", () => {
   it("issues a gateway ticket from authenticated actor context", async () => {
     const issue = vi.fn(async () => ({
@@ -138,6 +140,7 @@ describe("realtime chat api app", () => {
         ticket: "ticket-1",
       }),
       headers: {
+        authorization: `Bearer ${GATEWAY_API_TOKEN}`,
         "content-type": "application/json",
         "x-gateway-id": "gateway-1",
       },
@@ -176,6 +179,7 @@ describe("realtime chat api app", () => {
         ticket: "ticket-1",
       }),
       headers: {
+        authorization: `Bearer ${GATEWAY_API_TOKEN}`,
         "content-type": "application/json",
         "x-gateway-id": "gateway-1",
       },
@@ -205,6 +209,7 @@ describe("realtime chat api app", () => {
         ticket: "ticket-1",
       }),
       headers: {
+        authorization: `Bearer ${GATEWAY_API_TOKEN}`,
         "content-type": "application/json",
         "x-gateway-id": "gateway-1",
       },
@@ -244,13 +249,60 @@ describe("realtime chat api app", () => {
     expect(logger.error).toHaveBeenCalled();
   });
 
+  it("uses Hono Bearer authentication policy for internal routes", async () => {
+    const consume = vi.fn(async () => ({
+      status: "consumed" as const,
+      ticket: {
+        actorId: "actor-1",
+        consumedAt: "2026-07-09T00:00:10.000Z",
+      },
+    }));
+    const app = createRealtimeChatApiApp(createDeps({ consume }));
+    const request = (authorization?: string) =>
+      app.request("/internal/realtime-chat/gateway-tickets/consume", {
+        body: JSON.stringify({ ticket: "ticket-1" }),
+        headers: {
+          ...(authorization === undefined ? {} : { authorization }),
+          "content-type": "application/json",
+          "x-gateway-id": "gateway-1",
+        },
+        method: "POST",
+      });
+
+    const missing = await request();
+    const malformed = await request(`Basic ${GATEWAY_API_TOKEN}`);
+    const invalidTokenCharacters = await request(`Bearer ${"a".repeat(31)}:`);
+    const wrongToken = await request(`Bearer ${"b".repeat(32)}`);
+    const acceptedLowercasePrefix = await request(`bearer ${GATEWAY_API_TOKEN}`);
+
+    expect(missing.status).toBe(401);
+    await expect(missing.json()).resolves.toMatchObject({
+      code: "unauthenticated",
+      status: "error",
+    });
+    expect(missing.headers.get("www-authenticate")).toContain("Bearer");
+    expect(malformed.status).toBe(400);
+    await expect(malformed.json()).resolves.toMatchObject({
+      code: "bad_request",
+      status: "error",
+    });
+    expect(malformed.headers.get("www-authenticate")).toContain('error="invalid_request"');
+    expect(invalidTokenCharacters.status).toBe(400);
+    expect(wrongToken.status).toBe(401);
+    expect(wrongToken.headers.get("www-authenticate")).toContain('error="invalid_token"');
+    expect(acceptedLowercasePrefix.status).toBe(200);
+    expect(consume).toHaveBeenCalledOnce();
+  });
+
   it("mounts each app-owned Stream Messages route only when its usecase is provided", async () => {
     const streamResponse = {
-      streamId: "channel:channel-api",
-      throughSequence: 0,
-      messages: [],
-      nextBeforeSequence: null,
-      hasMoreBefore: false,
+      status: "success" as const,
+      page: {
+        throughSequence: 0,
+        messages: [],
+        nextBeforeSequence: null,
+        hasMoreBefore: false,
+      },
     };
     const loadLatest = vi.fn(async () => streamResponse);
     const enabled = createRealtimeChatApiApp(
@@ -408,6 +460,7 @@ function createDeps(
           ticket: "ticket-1",
         })),
     },
+    gatewayApiToken: overrides.gatewayApiToken ?? GATEWAY_API_TOKEN,
     logger: overrides.logger ?? createLogger(),
     ...(overrides.requestTimeoutMilliseconds === undefined
       ? {}

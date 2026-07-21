@@ -1,10 +1,13 @@
-import { type LatestStreamMessagesResponse } from "@wake-surfer/realtime-chat-stream-messages-contracts";
+import {
+  RequestIdSchema,
+  type LatestStreamMessagesResponse,
+} from "@wake-surfer/realtime-chat-stream-messages-contracts";
 import { Hono } from "hono";
 import { describe, expect, it, vi } from "vitest";
 
 import {
-  StreamMessagesDomainError,
   type LoadLatestMessages,
+  type LoadLatestMessagesResult,
   type LoadOlderMessages,
   type SyncAfterMessages,
 } from "@wake-surfer/realtime-chat-stream-messages";
@@ -24,7 +27,7 @@ type StreamMessagesHandlers = {
 describe("Stream Messages public HTTP adapter", () => {
   it("serializes latest with the canonical contract and preserves request correlation", async () => {
     const response = createLatestResponse();
-    const loadLatest = vi.fn(async () => response);
+    const loadLatest = vi.fn<LoadLatestMessages>(async () => createLatestResult());
     const logger = createLogger();
     const app = createApp({ loadLatest }, logger);
 
@@ -55,6 +58,31 @@ describe("Stream Messages public HTTP adapter", () => {
     expect(JSON.stringify(logger.info.mock.calls)).not.toContain("hello");
   });
 
+  it("generates a missing request ID and rejects an invalid supplied ID before the handler", async () => {
+    const loadLatest = vi.fn<LoadLatestMessages>(async () => createLatestResult());
+    const app = createApp({ loadLatest });
+
+    const generated = await app.request("/realtime-chat/channels/channel-http/messages/latest", {
+      headers: { "x-actor-id": "actor-http" },
+    });
+    const rejected = await app.request("/realtime-chat/channels/channel-http/messages/latest", {
+      headers: {
+        "x-actor-id": "actor-http",
+        "x-request-id": " ",
+      },
+    });
+
+    expect(generated.status).toBe(200);
+    expect(RequestIdSchema.safeParse(generated.headers.get("x-request-id")).success).toBe(true);
+    expect(rejected.status).toBe(400);
+    expect(rejected.headers.get("x-request-id")).toBeNull();
+    await expect(rejected.json()).resolves.toMatchObject({
+      code: "bad_request",
+      status: "error",
+    });
+    expect(loadLatest).toHaveBeenCalledOnce();
+  });
+
   it("rejects unknown, duplicate, and out-of-range query fields before calling a handler", async () => {
     const loadLatest = vi.fn();
     const loadOlder = vi.fn();
@@ -80,16 +108,23 @@ describe("Stream Messages public HTTP adapter", () => {
     expect(loadOlder).not.toHaveBeenCalled();
   });
 
-  it("keeps domain rejection distinct from retryable infrastructure failure", async () => {
+  it("keeps domain rejection values distinct from retryable infrastructure failure", async () => {
     const logger = createLogger();
     const unavailableApp = createApp(
       {
-        loadLatest: vi.fn(async () => {
-          throw new StreamMessagesDomainError("stream_unavailable");
-        }),
+        loadLatest: vi.fn<LoadLatestMessages>(async () => ({
+          status: "failure",
+          code: "stream_unavailable",
+        })),
       },
       logger,
     );
+    const invalidCursorApp = createApp({
+      loadOlder: vi.fn<LoadOlderMessages>(async () => ({
+        status: "failure",
+        code: "invalid_cursor",
+      })),
+    });
     const failureApp = createApp(
       {
         loadLatest: vi.fn(async () => {
@@ -107,6 +142,10 @@ describe("Stream Messages public HTTP adapter", () => {
       "/realtime-chat/channels/channel-http/messages/latest",
       { headers: { "x-actor-id": "actor-http", "x-request-id": "request-failure" } },
     );
+    const invalidCursor = await invalidCursorApp.request(
+      "/realtime-chat/channels/channel-http/messages/older?beforeSequence=2",
+      { headers: { "x-actor-id": "actor-http", "x-request-id": "request-cursor" } },
+    );
 
     expect(unavailable.status).toBe(404);
     await expect(unavailable.json()).resolves.toMatchObject({
@@ -114,6 +153,12 @@ describe("Stream Messages public HTTP adapter", () => {
       status: "error",
     });
     expect(unavailable.headers.get("x-request-id")).toBe("request-domain");
+    expect(invalidCursor.status).toBe(409);
+    await expect(invalidCursor.json()).resolves.toMatchObject({
+      code: "invalid_cursor",
+      status: "error",
+    });
+    expect(invalidCursor.headers.get("x-request-id")).toBe("request-cursor");
     expect(failure.status).toBe(503);
     await expect(failure.json()).resolves.toMatchObject({
       code: "stream_messages_unavailable",
@@ -183,22 +228,16 @@ describe("Stream Messages public HTTP adapter", () => {
 
   it("authenticates Gateway before reading the asserted actor for internal sync", async () => {
     const callOrder: string[] = [];
-    const sourceMessage = createLatestResponse().messages[0]!;
-    const response = {
-      streamId: "channel:channel-sync",
-      afterSequence: 0,
-      throughSequence: 1,
-      messages: [
-        {
-          ...sourceMessage,
-          streamId: "channel:channel-sync",
-          target: { type: "channel" as const, channelId: "channel-sync" },
-        },
-      ],
-      nextAfterSequence: 1,
-      hasMoreAfter: false,
-    };
-    const syncAfter = vi.fn<SyncAfterMessages>(async () => response);
+    const syncAfter = vi.fn<SyncAfterMessages>(async () => ({
+      status: "success",
+      page: {
+        afterSequence: 0,
+        throughSequence: 1,
+        messages: [createStreamMessage(1)],
+        nextAfterSequence: 1,
+        hasMoreAfter: false,
+      },
+    }));
     const app = new Hono();
     registerStreamMessagesInternalHttpRoutes(app, {
       authenticateGateway: () => {
@@ -333,6 +372,31 @@ function createLatestResponse(): LatestStreamMessagesResponse {
     ],
     nextBeforeSequence: 1,
     hasMoreBefore: false,
+  };
+}
+
+function createLatestResult(): LoadLatestMessagesResult {
+  return {
+    status: "success",
+    page: {
+      throughSequence: 1,
+      messages: [createStreamMessage(1)],
+      nextBeforeSequence: 1,
+      hasMoreBefore: false,
+    },
+  };
+}
+
+function createStreamMessage(sequence: number) {
+  return {
+    messageId: `message-http-${sequence}`,
+    sequence,
+    senderActorId: "actor-message-author",
+    content: {
+      type: "text" as const,
+      text: "hello",
+    },
+    createdAt: new Date("2026-07-18T00:00:00.000Z"),
   };
 }
 

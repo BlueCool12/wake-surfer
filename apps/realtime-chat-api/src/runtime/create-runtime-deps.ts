@@ -62,6 +62,7 @@ export async function createRuntimeDeps(
           allowedOrigins: config.corsAllowedOrigins,
         },
         gatewayTicket,
+        gatewayApiToken: config.gatewayApiToken,
         logger,
         requestTimeoutMilliseconds: config.requestTimeoutMilliseconds,
       },

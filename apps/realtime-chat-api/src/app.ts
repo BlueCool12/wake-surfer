@@ -16,6 +16,7 @@ import type {
   LoadOlderMessages,
   SyncAfterMessages,
 } from "@wake-surfer/realtime-chat-stream-messages";
+import { bearerAuth } from "hono/bearer-auth";
 import { cors } from "hono/cors";
 import { HTTPException } from "hono/http-exception";
 import { timeout } from "hono/timeout";
@@ -57,6 +58,7 @@ export type RealtimeChatApiAppDeps = {
   };
   gatewayTicket: GatewayTicketService;
   getAssertedActor?: (request: Request) => Promise<AuthenticatedActor> | AuthenticatedActor;
+  gatewayApiToken: string;
   loadLatestMessages?: LoadLatestMessages;
   loadOlderMessages?: LoadOlderMessages;
   logger: AppLogger;
@@ -86,6 +88,34 @@ export class AppHttpError extends Error {
 export function createRealtimeChatApiApp(deps: RealtimeChatApiAppDeps): Hono {
   const { authenticateActor, authenticateGateway, gatewayTicket, logger } = deps;
   const app = new Hono();
+
+  app.use(
+    "/internal/realtime-chat/*",
+    bearerAuth({
+      token: deps.gatewayApiToken,
+      noAuthenticationHeader: {
+        message: {
+          status: "error",
+          code: "unauthenticated",
+          message: "authenticated gateway credential is required",
+        } satisfies RealtimeChatApiErrorResponse,
+      },
+      invalidAuthenticationHeader: {
+        message: {
+          status: "error",
+          code: "bad_request",
+          message: "gateway Authorization header is invalid",
+        } satisfies RealtimeChatApiErrorResponse,
+      },
+      invalidToken: {
+        message: {
+          status: "error",
+          code: "unauthenticated",
+          message: "authenticated gateway credential is required",
+        } satisfies RealtimeChatApiErrorResponse,
+      },
+    }),
+  );
 
   if (deps.cors !== undefined) {
     app.use(

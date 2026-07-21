@@ -1,4 +1,5 @@
 import type { PublicMessage } from "@wake-surfer/realtime-chat-message-contracts";
+import type { StreamMessage } from "@wake-surfer/realtime-chat-stream-messages";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -12,7 +13,7 @@ import {
 describe("Stream Messages final envelope page policy", () => {
   it("keeps the closest newest contiguous range for latest and older pages", () => {
     const result = fitNewestContiguousMessages({
-      messages: createMessages(1, 4),
+      messages: createPublicMessages(1, 4),
       buildResponse: (messages) => ({ messages }),
       measureFinalEnvelope: ({ messages }) => ({
         utf8ByteLength: messages.length * 20_000,
@@ -26,7 +27,7 @@ describe("Stream Messages final envelope page policy", () => {
 
   it("keeps the closest oldest contiguous range for sync-after pages", () => {
     const result = fitOldestContiguousMessages({
-      messages: createMessages(11, 14),
+      messages: createPublicMessages(11, 14),
       buildResponse: (messages) => ({ messages }),
       measureFinalEnvelope: ({ messages }) => ({
         utf8ByteLength: messages.length * 20_000,
@@ -40,10 +41,10 @@ describe("Stream Messages final envelope page policy", () => {
 
   it("recalculates continuation cursors after the adapter page budget trims messages", () => {
     const latest = fitLatestMessagesPage(
+      "channel-page-policy",
       {
-        streamId: "channel:channel-page-policy",
         throughSequence: 4,
-        messages: createMessages(1, 4),
+        messages: createStreamMessages(1, 4),
         nextBeforeSequence: 1,
         hasMoreBefore: false,
       },
@@ -53,11 +54,11 @@ describe("Stream Messages final envelope page policy", () => {
       }),
     );
     const syncAfter = fitSyncAfterMessagesPage(
+      "channel-page-policy",
       {
-        streamId: "channel:channel-page-policy",
         afterSequence: 10,
         throughSequence: 14,
-        messages: createMessages(11, 14),
+        messages: createStreamMessages(11, 14),
         nextAfterSequence: 14,
         hasMoreAfter: false,
       },
@@ -72,6 +73,14 @@ describe("Stream Messages final envelope page policy", () => {
       hasMoreBefore: true,
     });
     expect(latest.response.messages.map((message) => message.sequence)).toEqual([3, 4]);
+    expect(latest.response.messages[0]).toMatchObject({
+      streamId: "channel:channel-page-policy",
+      target: {
+        type: "channel",
+        channelId: "channel-page-policy",
+      },
+      createdAt: "2026-07-18T00:00:00.000Z",
+    });
     expect(syncAfter.response).toMatchObject({
       nextAfterSequence: 12,
       hasMoreAfter: true,
@@ -133,10 +142,23 @@ describe("Stream Messages final envelope page policy", () => {
   });
 });
 
-function createMessages(firstSequence: number, lastSequence: number): PublicMessage[] {
+function createPublicMessages(firstSequence: number, lastSequence: number): PublicMessage[] {
   return Array.from({ length: lastSequence - firstSequence + 1 }, (_, index) =>
     createMessage(firstSequence + index, `message ${firstSequence + index}`),
   );
+}
+
+function createStreamMessages(firstSequence: number, lastSequence: number): StreamMessage[] {
+  return Array.from({ length: lastSequence - firstSequence + 1 }, (_, index) => ({
+    messageId: `message-${firstSequence + index}`,
+    sequence: firstSequence + index,
+    senderActorId: "actor-page-policy",
+    content: {
+      type: "text",
+      text: `message ${firstSequence + index}`,
+    },
+    createdAt: new Date("2026-07-18T00:00:00.000Z"),
+  }));
 }
 
 function createMessage(sequence: number, text: string): PublicMessage {

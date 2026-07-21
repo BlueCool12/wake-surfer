@@ -3,6 +3,8 @@ import {
   MIN_GATEWAY_TICKET_RAW_BYTES,
 } from "@wake-surfer/realtime-chat-gateway-ticket";
 
+const RFC_6750_BEARER_TOKEN_PATTERN = new RegExp("^[A-Za-z0-9._~+/-]+=*$");
+
 export type RealtimeChatApiConfig = {
   actorAuthSecurity: "development" | "trusted-edge";
   actorIdHeader: string;
@@ -37,6 +39,10 @@ export function loadEnv(env: NodeJS.ProcessEnv = process.env): RealtimeChatApiCo
 
   if (new TextEncoder().encode(gatewayApiToken).byteLength < 32) {
     throw new Error("REALTIME_CHAT_GATEWAY_API_TOKEN must contain at least 32 UTF-8 bytes");
+  }
+
+  if (!RFC_6750_BEARER_TOKEN_PATTERN.test(gatewayApiToken)) {
+    throw new Error("REALTIME_CHAT_GATEWAY_API_TOKEN must use RFC 6750 Bearer token characters");
   }
 
   if (nodeEnvironment === "production" && internalTransportSecurity === "development") {

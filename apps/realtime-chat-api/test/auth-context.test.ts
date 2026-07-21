@@ -2,39 +2,27 @@ import { describe, expect, it } from "vitest";
 
 import { createHeaderAuthContext } from "../src/runtime/auth-context.js";
 
-const SERVICE_TOKEN = "gateway-service-token-with-32-bytes";
-
 describe("realtime chat API trusted auth context", () => {
   const auth = createHeaderAuthContext({
     actorIdHeader: "x-actor-id",
-    gatewayApiToken: SERVICE_TOKEN,
     gatewayAssertedActorHeader: "x-realtime-chat-actor-id",
     gatewayId: "gateway-1",
     gatewayIdHeader: "x-gateway-id",
   });
 
-  it("authenticates a Gateway only with both bearer credential and configured identity", () => {
+  it("accepts only the configured Gateway identity after service credential authentication", () => {
     expect(
       auth.authenticateGateway(
         createRequest({
-          authorization: `Bearer ${SERVICE_TOKEN}`,
           "x-gateway-id": "gateway-1",
         }),
       ),
     ).toEqual({ gatewayId: "gateway-1" });
 
+    expect(() => auth.authenticateGateway(createRequest({}))).toThrow(/gateway context/);
     expect(() =>
       auth.authenticateGateway(
         createRequest({
-          authorization: "Bearer wrong-service-token-with-32-bytes",
-          "x-gateway-id": "gateway-1",
-        }),
-      ),
-    ).toThrow(/credential/);
-    expect(() =>
-      auth.authenticateGateway(
-        createRequest({
-          authorization: `Bearer ${SERVICE_TOKEN}`,
           "x-gateway-id": "gateway-2",
         }),
       ),

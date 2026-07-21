@@ -37,6 +37,15 @@ describe("realtime chat API runtime configuration", () => {
     ).toThrow(/32 UTF-8 bytes/);
   });
 
+  it("requires the Hono Bearer token character policy", () => {
+    expect(() =>
+      loadEnv({
+        ...requiredEnv(),
+        REALTIME_CHAT_GATEWAY_API_TOKEN: `${"a".repeat(31)}:`,
+      }),
+    ).toThrow(/RFC 6750 Bearer token characters/);
+  });
+
   it("requires an explicit TLS proof in production", () => {
     expect(() =>
       loadEnv({

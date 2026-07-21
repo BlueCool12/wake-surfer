@@ -1,12 +1,9 @@
-import { randomUUID } from "node:crypto";
-
 import {
   LatestStreamMessagesHttpRequestSchema,
   InternalSyncAfterStreamMessagesHttpRequestSchema,
   InternalSyncAfterStreamMessagesHttpResponseSchema,
   MAX_STREAM_MESSAGES_PAGE_ENVELOPE_UTF8_BYTES,
   OlderStreamMessagesHttpRequestSchema,
-  RequestIdSchema,
   getLatestStreamMessagesHttpResponseUtf8ByteLength,
   getOlderStreamMessagesHttpResponseUtf8ByteLength,
   getChatStreamSyncedEventUtf8ByteLength,
@@ -23,9 +20,9 @@ import { timeout } from "hono/timeout";
 
 import {
   StreamMessagesDataIntegrityError,
-  StreamMessagesDomainError,
   type LoadLatestMessages,
   type LoadOlderMessages,
+  type StreamMessagesFailureCode,
   type SyncAfterMessages,
 } from "@wake-surfer/realtime-chat-stream-messages";
 import {
@@ -34,6 +31,7 @@ import {
   fitSyncAfterMessagesPage,
   StreamMessagesEnvelopeIntegrityError,
 } from "./page-policy.js";
+import { streamMessagesRequestId } from "./request-id-middleware.js";
 
 import type { StreamMessagesPublicRateLimiter } from "./distributed-rate-limiter.js";
 
@@ -89,23 +87,33 @@ export function registerLoadLatestMessagesHttpRoute(
 ): void {
   assertPublicRateLimitConfig(config);
 
+  app.use("/realtime-chat/channels/:channelId/messages/latest", streamMessagesRequestId);
   registerStreamMessagesTimeouts(app, config.timeoutMilliseconds, [
     "/realtime-chat/channels/:channelId/messages/latest",
   ]);
 
   app.get("/realtime-chat/channels/:channelId/messages/latest", async (context) => {
-    const requestId = getRequestId(context.req.raw);
+    const requestId = context.get("requestId");
     assertAllowedQueryParameters(context.req.url, []);
     const actor = await config.authenticateActor(context.req.raw);
     const request = parseLatestRequest(context.req.param("channelId"));
     const startedAt = performance.now();
 
     try {
-      await enforcePublicRateLimit(config, context.req.raw, actor.actorId, requestId);
-      const page = await config.loadLatest(request, {
+      await enforcePublicRateLimit(config, context.req.raw, actor.actorId);
+      const usecaseResult = await config.loadLatest(request, {
         actorId: actor.actorId,
       });
-      const result = fitLatestMessagesPage(page, measureLatestStreamMessagesHttpFinalEnvelope);
+
+      if (usecaseResult.status === "failure") {
+        return createStreamMessagesFailureResponse(usecaseResult.code);
+      }
+
+      const result = fitLatestMessagesPage(
+        request.channelId,
+        usecaseResult.page,
+        measureLatestStreamMessagesHttpFinalEnvelope,
+      );
       const serialized = serializeLatestStreamMessagesHttpResponse(result.response);
       assertFinalEnvelope(
         serialized,
@@ -125,7 +133,7 @@ export function registerLoadLatestMessagesHttpRoute(
         "stream messages query completed",
       );
 
-      return createJsonResponse(serialized, 200, requestId);
+      return createJsonResponse(serialized, 200);
     } catch (error) {
       throw mapStreamMessagesHttpError(error, {
         channelId: request.channelId,
@@ -143,23 +151,33 @@ export function registerLoadOlderMessagesHttpRoute(
 ): void {
   assertPublicRateLimitConfig(config);
 
+  app.use("/realtime-chat/channels/:channelId/messages/older", streamMessagesRequestId);
   registerStreamMessagesTimeouts(app, config.timeoutMilliseconds, [
     "/realtime-chat/channels/:channelId/messages/older",
   ]);
 
   app.get("/realtime-chat/channels/:channelId/messages/older", async (context) => {
-    const requestId = getRequestId(context.req.raw);
+    const requestId = context.get("requestId");
     assertAllowedQueryParameters(context.req.url, ["beforeSequence", "limit"]);
     const actor = await config.authenticateActor(context.req.raw);
     const request = parseOlderRequest(context.req.param("channelId"), context.req.url);
     const startedAt = performance.now();
 
     try {
-      await enforcePublicRateLimit(config, context.req.raw, actor.actorId, requestId);
-      const page = await config.loadOlder(request, {
+      await enforcePublicRateLimit(config, context.req.raw, actor.actorId);
+      const usecaseResult = await config.loadOlder(request, {
         actorId: actor.actorId,
       });
-      const result = fitOlderMessagesPage(page, measureOlderStreamMessagesHttpFinalEnvelope);
+
+      if (usecaseResult.status === "failure") {
+        return createStreamMessagesFailureResponse(usecaseResult.code);
+      }
+
+      const result = fitOlderMessagesPage(
+        request.channelId,
+        usecaseResult.page,
+        measureOlderStreamMessagesHttpFinalEnvelope,
+      );
       const serialized = serializeOlderStreamMessagesHttpResponse(result.response);
       assertFinalEnvelope(
         serialized,
@@ -179,7 +197,7 @@ export function registerLoadOlderMessagesHttpRoute(
         "stream messages query completed",
       );
 
-      return createJsonResponse(serialized, 200, requestId);
+      return createJsonResponse(serialized, 200);
     } catch (error) {
       throw mapStreamMessagesHttpError(error, {
         channelId: request.channelId,
@@ -195,7 +213,6 @@ async function enforcePublicRateLimit(
   config: StreamMessagesPublicHttpRouteConfig,
   request: Request,
   actorId: string,
-  requestId: string,
 ): Promise<void> {
   if (config.rateLimiter === undefined || config.getTrustedSourceIp === undefined) {
     return;
@@ -213,7 +230,6 @@ async function enforcePublicRateLimit(
         message: "Stream Messages query rate limit exceeded",
         retryAfterMs: decision.retryAfterMs,
       },
-      requestId,
       { "retry-after": String(Math.ceil(decision.retryAfterMs / 1_000)) },
     );
   }
@@ -231,23 +247,23 @@ export function registerStreamMessagesInternalHttpRoutes(
   app: Hono,
   config: RegisterStreamMessagesInternalHttpRoutesConfig,
 ): void {
+  app.use(
+    "/internal/realtime-chat/channels/:channelId/messages/sync-after",
+    streamMessagesRequestId,
+  );
   registerStreamMessagesTimeouts(app, config.timeoutMilliseconds, [
     "/internal/realtime-chat/channels/:channelId/messages/sync-after",
   ]);
 
   app.post("/internal/realtime-chat/channels/:channelId/messages/sync-after", async (context) => {
-    const requestId = getRequestId(context.req.raw);
+    const requestId = context.get("requestId");
     await config.authenticateGateway(context.req.raw);
     const actor = await config.getAssertedActor(context.req.raw);
-    const request = await parseInternalSyncRequest(
-      context.req.param("channelId"),
-      context.req.raw,
-      requestId,
-    );
+    const request = await parseInternalSyncRequest(context.req.param("channelId"), context.req.raw);
     const startedAt = performance.now();
 
     try {
-      const page = await config.syncAfter(
+      const usecaseResult = await config.syncAfter(
         {
           channelId: request.channelId,
           afterSequence: request.afterSequence,
@@ -258,7 +274,12 @@ export function registerStreamMessagesInternalHttpRoutes(
         },
         { actorId: actor.actorId },
       );
-      const result = fitSyncAfterMessagesPage(page, (response) =>
+
+      if (usecaseResult.status === "failure") {
+        return createStreamMessagesFailureResponse(usecaseResult.code);
+      }
+
+      const result = fitSyncAfterMessagesPage(request.channelId, usecaseResult.page, (response) =>
         measureChatStreamSyncedFinalEnvelope({ requestId, ...response }),
       );
       const clientEvent = { requestId, ...result.response };
@@ -287,7 +308,7 @@ export function registerStreamMessagesInternalHttpRoutes(
         },
         "stream messages query completed",
       );
-      return createJsonResponse(JSON.stringify(response), 200, requestId);
+      return createJsonResponse(JSON.stringify(response), 200);
     } catch (error) {
       throw mapStreamMessagesHttpError(error, {
         channelId: request.channelId,
@@ -315,17 +336,13 @@ function registerStreamMessagesTimeouts(
   for (const path of paths) {
     app.use(
       path,
-      timeout(timeoutMilliseconds, (context) =>
-        createHttpError(
-          503,
-          {
-            status: "error",
-            code: "stream_messages_unavailable",
-            message: "Stream Messages service unavailable",
-            retryable: true,
-          },
-          getRequestId(context.req.raw),
-        ),
+      timeout(timeoutMilliseconds, () =>
+        createHttpError(503, {
+          status: "error",
+          code: "stream_messages_unavailable",
+          message: "Stream Messages service unavailable",
+          retryable: true,
+        }),
       ),
     );
   }
@@ -366,19 +383,15 @@ function parseOlderRequest(channelId: string, requestUrl: string) {
   return parsed.data;
 }
 
-async function parseInternalSyncRequest(channelId: string, request: Request, requestId: string) {
+async function parseInternalSyncRequest(channelId: string, request: Request) {
   const rawBody = await request.text();
 
   if (new TextEncoder().encode(rawBody).byteLength > MAX_INTERNAL_SYNC_REQUEST_UTF8_BYTES) {
-    throw createHttpError(
-      400,
-      {
-        status: "error",
-        code: "bad_request",
-        message: "sync-after 요청 본문이 너무 큽니다.",
-      },
-      requestId,
-    );
+    throw createHttpError(400, {
+      status: "error",
+      code: "bad_request",
+      message: "sync-after 요청 본문이 너무 큽니다.",
+    });
   }
 
   let body: unknown;
@@ -386,30 +399,22 @@ async function parseInternalSyncRequest(channelId: string, request: Request, req
   try {
     body = JSON.parse(rawBody) as unknown;
   } catch {
-    throw createHttpError(
-      400,
-      {
-        status: "error",
-        code: "bad_request",
-        message: "sync-after 요청 본문은 올바른 JSON이어야 합니다.",
-      },
-      requestId,
-    );
+    throw createHttpError(400, {
+      status: "error",
+      code: "bad_request",
+      message: "sync-after 요청 본문은 올바른 JSON이어야 합니다.",
+    });
   }
 
   if (
     isRecord(body) &&
     ["actorId", "channelId", "streamId"].some((name) => Object.hasOwn(body, name))
   ) {
-    throw createHttpError(
-      400,
-      {
-        status: "error",
-        code: "bad_request",
-        message: "sync-after 요청 본문에 server-owned field를 포함할 수 없습니다.",
-      },
-      requestId,
-    );
+    throw createHttpError(400, {
+      status: "error",
+      code: "bad_request",
+      message: "sync-after 요청 본문에 server-owned field를 포함할 수 없습니다.",
+    });
   }
 
   const parsed = InternalSyncAfterStreamMessagesHttpRequestSchema.safeParse(
@@ -417,15 +422,11 @@ async function parseInternalSyncRequest(channelId: string, request: Request, req
   );
 
   if (!parsed.success) {
-    throw createHttpError(
-      400,
-      {
-        status: "error",
-        code: "bad_request",
-        message: "sync-after Stream Messages 요청이 올바르지 않습니다.",
-      },
-      requestId,
-    );
+    throw createHttpError(400, {
+      status: "error",
+      code: "bad_request",
+      message: "sync-after Stream Messages 요청이 올바르지 않습니다.",
+    });
   }
 
   return parsed.data;
@@ -467,26 +468,6 @@ function assertAllowedQueryParameters(requestUrl: string, allowedNames: readonly
   }
 }
 
-function getRequestId(request: Request): string {
-  const supplied = request.headers.get("x-request-id");
-
-  if (supplied === null) {
-    return randomUUID();
-  }
-
-  const parsed = RequestIdSchema.safeParse(supplied);
-
-  if (!parsed.success) {
-    throw createHttpError(400, {
-      status: "error",
-      code: "bad_request",
-      message: "x-request-id가 올바르지 않습니다.",
-    });
-  }
-
-  return parsed.data;
-}
-
 function assertFinalEnvelope(
   serialized: string,
   measuredByteLength: number,
@@ -517,30 +498,6 @@ function mapStreamMessagesHttpError(
     return error;
   }
 
-  if (error instanceof StreamMessagesDomainError) {
-    if (error.code === "stream_unavailable") {
-      return createHttpError(
-        404,
-        {
-          status: "error",
-          code: "stream_unavailable",
-          message: "메시지 stream을 조회할 수 없습니다.",
-        },
-        context.requestId,
-      );
-    }
-
-    return createHttpError(
-      409,
-      {
-        status: "error",
-        code: "invalid_cursor",
-        message: "Stream Messages cursor가 현재 stream 상태와 맞지 않습니다.",
-      },
-      context.requestId,
-    );
-  }
-
   context.logger.error(
     {
       channelId: context.channelId,
@@ -561,16 +518,32 @@ function mapStreamMessagesHttpError(
     "stream messages query failed",
   );
 
-  return createHttpError(
-    503,
-    {
-      status: "error",
-      code: "stream_messages_unavailable",
-      message: "Stream Messages service unavailable",
-      retryable: true,
-    },
-    context.requestId,
-  );
+  return createHttpError(503, {
+    status: "error",
+    code: "stream_messages_unavailable",
+    message: "Stream Messages service unavailable",
+    retryable: true,
+  });
+}
+
+function createStreamMessagesFailureResponse(code: StreamMessagesFailureCode): Response {
+  return code === "stream_unavailable"
+    ? createJsonResponse(
+        JSON.stringify({
+          status: "error",
+          code,
+          message: "메시지 stream을 조회할 수 없습니다.",
+        } satisfies StreamMessagesHttpErrorResponse),
+        404,
+      )
+    : createJsonResponse(
+        JSON.stringify({
+          status: "error",
+          code,
+          message: "Stream Messages cursor가 현재 stream 상태와 맞지 않습니다.",
+        } satisfies StreamMessagesHttpErrorResponse),
+        409,
+      );
 }
 
 function elapsedMilliseconds(startedAt: number): number {
@@ -584,26 +557,20 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 function createHttpError(
   status: 400 | 404 | 409 | 429 | 503,
   body: StreamMessagesHttpErrorResponse,
-  requestId?: string,
   responseHeaders?: HeadersInit,
 ): HTTPException {
   return new HTTPException(status, {
-    res: createJsonResponse(JSON.stringify(body), status, requestId, responseHeaders),
+    res: createJsonResponse(JSON.stringify(body), status, responseHeaders),
   });
 }
 
 function createJsonResponse(
   serialized: string,
   status: number,
-  requestId?: string,
   responseHeaders?: HeadersInit,
 ): Response {
   const headers = new Headers(responseHeaders);
   headers.set("content-type", "application/json; charset=UTF-8");
-
-  if (requestId !== undefined) {
-    headers.set("x-request-id", requestId);
-  }
 
   return new Response(serialized, {
     status,
