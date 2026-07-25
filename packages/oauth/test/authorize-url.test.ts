@@ -34,12 +34,6 @@ describe("createAuthorizeUrl", () => {
     expect(url.searchParams.get("scope")).toBe("user:email read:user");
   });
 
-  it("authorizeBaseUrl로 엔드포인트를 오버라이드할 수 있다 (GitHub Enterprise 등)", () => {
-    const enterprise = "https://github.acme.com/login/oauth/authorize";
-    const url = new URL(createAuthorizeUrl({ ...baseConfig, authorizeBaseUrl: enterprise }, "s"));
-    expect(`${url.origin}${url.pathname}`).toBe(enterprise);
-  });
-
   it("config가 유효하지 않으면 던진다", () => {
     expect(() => createAuthorizeUrl({ ...baseConfig, redirectUri: "  " }, "s")).toThrow(
       /redirectUri/,

@@ -4,11 +4,6 @@ export type OAuthConfig = {
   readonly clientSecret: string;
   readonly redirectUri: string;
   readonly scopes: readonly string[];
-  /**
-   * authorize 엔드포인트 오버라이드.
-   * 테스트나 GitHub Enterprise 대응용. 미지정 시 github.com을 사용한다.
-   */
-  readonly authorizeBaseUrl?: string;
 };
 
 /** 설정값이 유효하지 않을 때 던지는 도메인 에러. */
