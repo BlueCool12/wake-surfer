@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import process from "node:process";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, URL } from "node:url";
 
 const workspaceRoot = fileURLToPath(new URL("..", import.meta.url));
 const appServices = ["realtime-chat-api", "realtime-chat-gateway", "web"];
@@ -10,11 +10,12 @@ if (
   process.argv.length > 3 ||
   (requestedTarget !== "all" && !appServices.includes(requestedTarget))
 ) {
-  console.error(`사용법: npm run deploy -- [${appServices.join("|")}|all]`);
+  process.stderr.write(`사용법: npm run deploy -- [${appServices.join("|")}|all]\n`);
   process.exitCode = 1;
 } else {
   void deploy(requestedTarget).catch((error) => {
-    console.error("[deploy] 실패", error);
+    const detail = error instanceof Error ? (error.stack ?? error.message) : String(error);
+    process.stderr.write(`[deploy] 실패 ${detail}\n`);
     process.exitCode = 1;
   });
 }
