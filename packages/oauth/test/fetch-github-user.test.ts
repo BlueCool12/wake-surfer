@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  DEFAULT_GITHUB_USER_EMAILS_URL,
-  DEFAULT_GITHUB_USER_URL,
+  GITHUB_USER_EMAILS_URL,
+  GITHUB_USER_URL,
   fetchGithubUser,
 } from "../src/infrastructure/github/fetch-github-user";
 
@@ -27,7 +27,7 @@ function fakeFetch(routes: Record<string, Route>) {
 describe("fetchGithubUser", () => {
   it("프로필 email이 있으면 그대로 사용하고 emails는 호출하지 않는다", async () => {
     const { fetchLike, requests } = fakeFetch({
-      [DEFAULT_GITHUB_USER_URL]: {
+      [GITHUB_USER_URL]: {
         status: 200,
         body: { id: 42, login: "octocat", email: "octo@github.com" },
       },
@@ -42,7 +42,7 @@ describe("fetchGithubUser", () => {
 
   it("Authorization·User-Agent 헤더를 싣는다 (User-Agent 없으면 GitHub이 403)", async () => {
     const { fetchLike, requests } = fakeFetch({
-      [DEFAULT_GITHUB_USER_URL]: {
+      [GITHUB_USER_URL]: {
         status: 200,
         body: { id: 1, login: "a", email: "a@b.com" },
       },
@@ -56,8 +56,8 @@ describe("fetchGithubUser", () => {
 
   it("프로필 email이 null이면 /user/emails에서 primary·verified를 선택한다", async () => {
     const { fetchLike } = fakeFetch({
-      [DEFAULT_GITHUB_USER_URL]: { status: 200, body: { id: 1, login: "a", email: null } },
-      [DEFAULT_GITHUB_USER_EMAILS_URL]: {
+      [GITHUB_USER_URL]: { status: 200, body: { id: 1, login: "a", email: null } },
+      [GITHUB_USER_EMAILS_URL]: {
         status: 200,
         body: [
           { email: "old@b.com", primary: false, verified: true },
@@ -71,8 +71,8 @@ describe("fetchGithubUser", () => {
 
   it("primary가 unverified면 EMAIL_UNAVAILABLE로 거부한다", async () => {
     const { fetchLike } = fakeFetch({
-      [DEFAULT_GITHUB_USER_URL]: { status: 200, body: { id: 1, login: "a", email: null } },
-      [DEFAULT_GITHUB_USER_EMAILS_URL]: {
+      [GITHUB_USER_URL]: { status: 200, body: { id: 1, login: "a", email: null } },
+      [GITHUB_USER_EMAILS_URL]: {
         status: 200,
         body: [{ email: "main@b.com", primary: true, verified: false }],
       },
@@ -83,7 +83,7 @@ describe("fetchGithubUser", () => {
 
   it("/user가 401이면 USER_FETCH_FAILED로 거부한다", async () => {
     const { fetchLike } = fakeFetch({
-      [DEFAULT_GITHUB_USER_URL]: { status: 401, body: { message: "Bad credentials" } },
+      [GITHUB_USER_URL]: { status: 401, body: { message: "Bad credentials" } },
     });
     const result = await fetchGithubUser({ accessToken: "revoked", fetch: fetchLike });
     expect(result).toEqual({ ok: false, reason: "USER_FETCH_FAILED" });
@@ -91,7 +91,7 @@ describe("fetchGithubUser", () => {
 
   it("응답 형태가 어긋나면(id 비숫자) USER_FETCH_FAILED로 거부한다", async () => {
     const { fetchLike } = fakeFetch({
-      [DEFAULT_GITHUB_USER_URL]: { status: 200, body: { id: "42", login: "a" } },
+      [GITHUB_USER_URL]: { status: 200, body: { id: "42", login: "a" } },
     });
     const result = await fetchGithubUser({ accessToken: "t", fetch: fetchLike });
     expect(result).toEqual({ ok: false, reason: "USER_FETCH_FAILED" });
@@ -99,8 +99,8 @@ describe("fetchGithubUser", () => {
 
   it("/user/emails가 실패하면 USER_FETCH_FAILED로 거부한다", async () => {
     const { fetchLike } = fakeFetch({
-      [DEFAULT_GITHUB_USER_URL]: { status: 200, body: { id: 1, login: "a", email: null } },
-      [DEFAULT_GITHUB_USER_EMAILS_URL]: { status: 403, body: { message: "forbidden" } },
+      [GITHUB_USER_URL]: { status: 200, body: { id: 1, login: "a", email: null } },
+      [GITHUB_USER_EMAILS_URL]: { status: 403, body: { message: "forbidden" } },
     });
     const result = await fetchGithubUser({ accessToken: "t", fetch: fetchLike });
     expect(result).toEqual({ ok: false, reason: "USER_FETCH_FAILED" });

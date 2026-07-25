@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { OAuthConfig } from "../src/domain/oauth-config";
-import { DEFAULT_GITHUB_TOKEN_URL, exchangeCode } from "../src/infrastructure/github/exchange-code";
+import { GITHUB_TOKEN_URL, exchangeCode } from "../src/infrastructure/github/exchange-code";
 
 const config: OAuthConfig = {
   clientId: "client-123",
@@ -35,7 +35,7 @@ describe("exchangeCode", () => {
     await exchangeCode({ config, code: "code-1", fetch: fetchLike });
 
     const request = requests[0]!;
-    expect(request.url).toBe(DEFAULT_GITHUB_TOKEN_URL);
+    expect(request.url).toBe(GITHUB_TOKEN_URL);
     expect(request.init?.method).toBe("POST");
     expect(new Headers(request.init?.headers).get("Accept")).toBe("application/json");
     const params = new URLSearchParams(String(request.init?.body));

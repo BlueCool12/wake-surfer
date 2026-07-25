@@ -7,8 +7,8 @@ import {
 
 import { DEFAULT_GITHUB_TIMEOUT_MS } from "./http-defaults";
 
-/** GitHub.com 기본 토큰 엔드포인트. */
-export const DEFAULT_GITHUB_TOKEN_URL = "https://github.com/login/oauth/access_token";
+/** GitHub 토큰 엔드포인트. */
+export const GITHUB_TOKEN_URL = "https://github.com/login/oauth/access_token";
 
 export type ExchangeCodeInput = {
   readonly config: OAuthConfig;
@@ -36,7 +36,7 @@ export async function exchangeCode(input: ExchangeCodeInput): Promise<ExchangeCo
   }
 
   const doFetch = input.fetch ?? globalThis.fetch;
-  const response = await doFetch(DEFAULT_GITHUB_TOKEN_URL, {
+  const response = await doFetch(GITHUB_TOKEN_URL, {
     method: "POST",
     headers: {
       Accept: "application/json",

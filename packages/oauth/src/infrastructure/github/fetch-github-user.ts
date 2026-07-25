@@ -1,8 +1,8 @@
 import { DEFAULT_GITHUB_TIMEOUT_MS, GITHUB_USER_AGENT } from "./http-defaults";
 
 /** GitHub API 사용자 엔드포인트. */
-export const DEFAULT_GITHUB_USER_URL = "https://api.github.com/user";
-export const DEFAULT_GITHUB_USER_EMAILS_URL = "https://api.github.com/user/emails";
+export const GITHUB_USER_URL = "https://api.github.com/user";
+export const GITHUB_USER_EMAILS_URL = "https://api.github.com/user/emails";
 
 export type GithubUser = {
   readonly id: number;
@@ -40,7 +40,7 @@ export async function fetchGithubUser(input: FetchGithubUserInput): Promise<Fetc
   const doFetch = input.fetch ?? globalThis.fetch;
   const timeoutMs = input.timeoutMs ?? DEFAULT_GITHUB_TIMEOUT_MS;
 
-  const userResponse = await doFetch(DEFAULT_GITHUB_USER_URL, {
+  const userResponse = await doFetch(GITHUB_USER_URL, {
     headers: githubHeaders(input.accessToken),
     signal: AbortSignal.timeout(timeoutMs),
   });
@@ -80,7 +80,7 @@ async function fetchPrimaryVerifiedEmail(
   accessToken: string,
   timeoutMs: number,
 ): Promise<string | undefined | "USER_FETCH_FAILED"> {
-  const response = await doFetch(DEFAULT_GITHUB_USER_EMAILS_URL, {
+  const response = await doFetch(GITHUB_USER_EMAILS_URL, {
     headers: githubHeaders(accessToken),
     signal: AbortSignal.timeout(timeoutMs),
   });

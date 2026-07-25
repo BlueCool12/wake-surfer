@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { OAuthConfig } from "../src/domain/oauth-config";
 import {
   createAuthorizeUrl,
-  DEFAULT_GITHUB_AUTHORIZE_URL,
+  GITHUB_AUTHORIZE_URL,
 } from "../src/infrastructure/github/authorize-url";
 
 const baseConfig: OAuthConfig = {
@@ -16,7 +16,7 @@ const baseConfig: OAuthConfig = {
 describe("createAuthorizeUrl", () => {
   it("기본값은 github.com authorize 엔드포인트를 가리킨다", () => {
     const url = new URL(createAuthorizeUrl(baseConfig, "state-abc"));
-    expect(`${url.origin}${url.pathname}`).toBe(DEFAULT_GITHUB_AUTHORIZE_URL);
+    expect(`${url.origin}${url.pathname}`).toBe(GITHUB_AUTHORIZE_URL);
   });
 
   it("client_id/redirect_uri/scope/state를 쿼리로 싣는다", () => {

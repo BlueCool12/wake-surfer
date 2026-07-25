@@ -3,10 +3,10 @@ import { describe, expect, it } from "vitest";
 import { createOAuthUsecases } from "../src/application/create-usecases";
 import { fetchGithubUserByCode } from "../src/application/fetch-github-user-by-code.usecase";
 import type { OAuthConfig } from "../src/domain/oauth-config";
-import { DEFAULT_GITHUB_TOKEN_URL } from "../src/infrastructure/github/exchange-code";
+import { GITHUB_TOKEN_URL } from "../src/infrastructure/github/exchange-code";
 import {
-  DEFAULT_GITHUB_USER_EMAILS_URL,
-  DEFAULT_GITHUB_USER_URL,
+  GITHUB_USER_EMAILS_URL,
+  GITHUB_USER_URL,
 } from "../src/infrastructure/github/fetch-github-user";
 
 const config: OAuthConfig = {
@@ -37,8 +37,8 @@ function fakeFetch(routes: Record<string, Route>) {
 describe("fetchGithubUserByCode", () => {
   it("해피패스: code → 토큰 교환 → 사용자 조회 → user 반환", async () => {
     const { fetchLike, requests } = fakeFetch({
-      [DEFAULT_GITHUB_TOKEN_URL]: { status: 200, body: { access_token: "gho_token" } },
-      [DEFAULT_GITHUB_USER_URL]: {
+      [GITHUB_TOKEN_URL]: { status: 200, body: { access_token: "gho_token" } },
+      [GITHUB_USER_URL]: {
         status: 200,
         body: { id: 42, login: "octocat", email: "octo@github.com" },
       },
@@ -48,13 +48,13 @@ describe("fetchGithubUserByCode", () => {
       status: "ok",
       user: { id: 42, login: "octocat", email: "octo@github.com" },
     });
-    expect(requests).toEqual([DEFAULT_GITHUB_TOKEN_URL, DEFAULT_GITHUB_USER_URL]);
+    expect(requests).toEqual([GITHUB_TOKEN_URL, GITHUB_USER_URL]);
   });
 
   it("결과에 access token이 포함되지 않는다 (비노출 원칙)", async () => {
     const { fetchLike } = fakeFetch({
-      [DEFAULT_GITHUB_TOKEN_URL]: { status: 200, body: { access_token: "gho_secret_token" } },
-      [DEFAULT_GITHUB_USER_URL]: { status: 200, body: { id: 1, login: "a", email: "a@b.com" } },
+      [GITHUB_TOKEN_URL]: { status: 200, body: { access_token: "gho_secret_token" } },
+      [GITHUB_USER_URL]: { status: 200, body: { id: 1, login: "a", email: "a@b.com" } },
     });
     const result = await fetchGithubUserByCode({ config, code: "c", fetch: fetchLike });
     expect(JSON.stringify(result)).not.toContain("gho_secret_token");
@@ -62,7 +62,7 @@ describe("fetchGithubUserByCode", () => {
 
   it("토큰 교환 실패는 TOKEN_EXCHANGE_FAILED로, 원본을 보존해 반환한다", async () => {
     const { fetchLike, requests } = fakeFetch({
-      [DEFAULT_GITHUB_TOKEN_URL]: {
+      [GITHUB_TOKEN_URL]: {
         status: 200,
         body: { error: "bad_verification_code" },
       },
@@ -73,13 +73,13 @@ describe("fetchGithubUserByCode", () => {
       reason: "TOKEN_EXCHANGE_FAILED",
       providerError: { error: "bad_verification_code" },
     });
-    expect(requests).toEqual([DEFAULT_GITHUB_TOKEN_URL]); // 사용자 조회로 안 넘어감
+    expect(requests).toEqual([GITHUB_TOKEN_URL]); // 사용자 조회로 안 넘어감
   });
 
   it("사용자 조회 실패는 USER_FETCH_FAILED로 반환한다", async () => {
     const { fetchLike } = fakeFetch({
-      [DEFAULT_GITHUB_TOKEN_URL]: { status: 200, body: { access_token: "t" } },
-      [DEFAULT_GITHUB_USER_URL]: { status: 401, body: { message: "Bad credentials" } },
+      [GITHUB_TOKEN_URL]: { status: 200, body: { access_token: "t" } },
+      [GITHUB_USER_URL]: { status: 401, body: { message: "Bad credentials" } },
     });
     const result = await fetchGithubUserByCode({ config, code: "c", fetch: fetchLike });
     expect(result).toEqual({ status: "rejected", reason: "USER_FETCH_FAILED" });
@@ -87,9 +87,9 @@ describe("fetchGithubUserByCode", () => {
 
   it("검증된 이메일이 없으면 EMAIL_UNAVAILABLE로 반환한다", async () => {
     const { fetchLike } = fakeFetch({
-      [DEFAULT_GITHUB_TOKEN_URL]: { status: 200, body: { access_token: "t" } },
-      [DEFAULT_GITHUB_USER_URL]: { status: 200, body: { id: 1, login: "a", email: null } },
-      [DEFAULT_GITHUB_USER_EMAILS_URL]: { status: 200, body: [] },
+      [GITHUB_TOKEN_URL]: { status: 200, body: { access_token: "t" } },
+      [GITHUB_USER_URL]: { status: 200, body: { id: 1, login: "a", email: null } },
+      [GITHUB_USER_EMAILS_URL]: { status: 200, body: [] },
     });
     const result = await fetchGithubUserByCode({ config, code: "c", fetch: fetchLike });
     expect(result).toEqual({ status: "rejected", reason: "EMAIL_UNAVAILABLE" });

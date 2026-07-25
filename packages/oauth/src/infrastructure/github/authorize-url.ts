@@ -1,7 +1,7 @@
 import { assertValidOAuthConfig, type OAuthConfig } from "../../domain/oauth-config";
 
 /** GitHub authorize 엔드포인트. */
-export const DEFAULT_GITHUB_AUTHORIZE_URL = "https://github.com/login/oauth/authorize";
+export const GITHUB_AUTHORIZE_URL = "https://github.com/login/oauth/authorize";
 
 /** GitHub OAuth authorize URL을 만든다. (순수 함수) */
 export function createAuthorizeUrl(config: OAuthConfig, state: string): string {
@@ -10,7 +10,7 @@ export function createAuthorizeUrl(config: OAuthConfig, state: string): string {
     throw new Error("state must not be empty");
   }
 
-  const url = new URL(DEFAULT_GITHUB_AUTHORIZE_URL);
+  const url = new URL(GITHUB_AUTHORIZE_URL);
   url.searchParams.set("client_id", config.clientId);
   url.searchParams.set("redirect_uri", config.redirectUri);
   url.searchParams.set("scope", config.scopes.join(" "));
