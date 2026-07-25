@@ -77,10 +77,11 @@ docker-compose.yml
 - `apps/*`: 앱별 runtime image와 독립 배포 계약
 
 Compose `include`는 포함된 파일을 독립 application model로 읽고 상대 경로를 각 파일 기준으로
-해석합니다. pnpm `deploy`는 작업공간 패키지와 production 의존성을 휴대 가능한 디렉터리로 만듭니다.
+해석합니다. 배포 스크립트는 대상 앱이 실제로 사용하는 작업공간 패키지의 `dist`만 모은 뒤 pnpm
+offline production install로 휴대 가능한 runtime workspace를 만듭니다.
 
 - [Docker Compose include](https://docs.docker.com/reference/compose-file/include/)
-- [pnpm deploy](https://pnpm.io/cli/deploy)
+- [pnpm install](https://pnpm.io/cli/install)
 
 ### Docker 개발 인프라
 

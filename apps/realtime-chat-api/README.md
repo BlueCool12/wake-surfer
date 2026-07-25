@@ -91,7 +91,7 @@ not come from the client request body.
 - `docker/volumes/`: API가 향후 소유할 volume mount content 경계
 
 Dockerfile은 TypeScript compile이나 dependency install을 실행하지 않는다. 루트 배포 스크립트가
-로컬 `build`와 `pnpm deploy --prod`를 끝낸 뒤 API image를 교체한다.
+로컬 `build`와 filtered offline production install을 끝낸 뒤 API image를 교체한다.
 
 ```bash
 npm run deploy -- realtime-chat-api

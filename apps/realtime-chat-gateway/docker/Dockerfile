@@ -1,10 +1,10 @@
 FROM node:24-alpine
 
-WORKDIR /app
+WORKDIR /app/apps/realtime-chat-gateway
 
 ENV NODE_ENV=development
 
-COPY --chown=node:node artifact/ ./
+COPY --chown=node:node artifact/ /app/
 
 USER node
 

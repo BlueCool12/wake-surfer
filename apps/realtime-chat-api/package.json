@@ -3,9 +3,6 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
-  "files": [
-    "dist"
-  ],
   "scripts": {
     "build": "pnpm run build:deps && tsc -p tsconfig.json",
     "build:deps": "pnpm --filter @wake-surfer/api-contracts build && pnpm --filter @wake-surfer/realtime-chat-message-send-contracts build && pnpm --filter @wake-surfer/realtime-chat-message-send build && pnpm --filter @wake-surfer/realtime-chat-database build && pnpm --filter @wake-surfer/realtime-chat-stream-messages-contracts build && pnpm --filter @wake-surfer/realtime-chat-stream-messages build",
