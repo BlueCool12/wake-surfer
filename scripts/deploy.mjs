@@ -99,10 +99,10 @@ async function prepareRuntimeArtifact(serviceName, service) {
     await runPnpm([
       "--filter",
       service.packageName,
-      "--prod",
       "deploy",
-      "--legacy",
       stagingDirectory,
+      "--prod",
+      "--legacy",
     ]);
   } else {
     await cp(resolve(appRoot, "dist"), stagingDirectory, { recursive: true });
@@ -122,16 +122,18 @@ function assertOwnedPath(ownerRoot, candidate, label) {
 }
 
 function runPnpm(args) {
-  const command = process.platform === "win32" ? "pnpm.cmd" : "pnpm";
-  return run(command, args, { shell: process.platform === "win32" });
+  if (process.platform === "win32") {
+    return run(process.env.ComSpec ?? "cmd.exe", ["/d", "/s", "/c", "pnpm.cmd", ...args]);
+  }
+
+  return run("pnpm", args);
 }
 
-function run(command, args, options = {}) {
+function run(command, args) {
   return new Promise((resolvePromise, rejectPromise) => {
     const child = spawn(command, args, {
       cwd: workspaceRoot,
       env: process.env,
-      shell: options.shell ?? false,
       stdio: "inherit",
       windowsHide: true,
     });
