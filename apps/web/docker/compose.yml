@@ -3,8 +3,10 @@ services:
     image: wake-surfer/web:local
     pull_policy: build
     build:
-      context: .
-      dockerfile: Dockerfile
+      context: ../../..
+      dockerfile: apps/web/docker/Dockerfile
+      args:
+        VITE_API_BASE_URL: "${VITE_API_BASE_URL:-http://localhost:3000}"
     restart: unless-stopped
     env_file:
       - ./runtime.dev.env

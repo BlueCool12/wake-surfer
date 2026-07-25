@@ -46,5 +46,5 @@ wake-surfer의 프론트엔드. React 19 + Vite + TypeScript 기반 SPA.
 - `tsconfig.app.json` / `tsconfig.node.json`은 루트 `tsconfig.base.json`을 extends한다. 별도로 깨지 않는다.
 - 린트/포맷은 루트 설정을 그대로 쓴다 (`pnpm lint`, `pnpm format:check`). oxlint 등 앱 전용 린터를 추가로 들이지 않는다.
 - 개발/빌드는 루트에서 `pnpm --filter web dev`, `pnpm --filter web build`로 실행한다.
-- container 계약과 Nginx 설정은 `docker/`가 소유한다. Dockerfile은 사전 생성된 정적 artifact만
-  복사하고 Vite build를 실행하지 않는다.
+- container 계약과 Nginx 설정은 `docker/`가 소유한다. 다단계 Dockerfile의 builder stage가 Vite
+  build를 실행하고 runtime stage는 정적 artifact만 Nginx에 복사한다.

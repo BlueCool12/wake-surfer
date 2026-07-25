@@ -69,8 +69,9 @@ pnpm --filter @wake-surfer/realtime-chat-gateway test
 
 ## Docker 배포
 
-이 앱의 `docker/`가 Gateway Compose·환경 파일·Dockerfile을 소유한다. Dockerfile은 프로젝트를
-빌드하지 않고 루트 배포 스크립트가 로컬에서 만든 production runtime artifact만 복사한다.
+이 앱의 `docker/`가 Gateway Compose·환경 파일·Dockerfile을 소유한다. 다단계 Dockerfile의 builder
+stage가 workspace 의존성을 설치하고 TypeScript 검사와 esbuild 실행 번들을 생성한다. runtime
+stage에는 `dist/main.mjs`만 복사한다.
 
 ```bash
 npm run deploy -- realtime-chat-gateway
