@@ -33,8 +33,8 @@ export type RealtimeEventName =
 export type RealtimeEventSocket = {
   close: () => void;
   connect: () => void;
-  emit: (eventName: RealtimeEventName, rawPayload: string) => void;
-  on: (eventName: RealtimeEventName, listener: (rawPayload: string) => void) => () => void;
+  emit: (eventName: string, rawPayload: string) => void;
+  on: (eventName: string, listener: (rawPayload: string) => void) => () => void;
   onClose: (listener: () => void) => () => void;
 };
 
@@ -73,6 +73,8 @@ export class AuthenticatedRealtimeSessionModel
       removeAbortListener: () => void;
     }
   >();
+  readonly #applicationListeners = new Map<string, Set<(rawPayload: string) => void>>();
+  readonly #applicationSocketEventNames = new Set<string>();
   #connectionAttempt = 0;
   #connectPromise: Promise<void> | undefined;
   #explicitlyClosed = false;
@@ -185,6 +187,45 @@ export class AuthenticatedRealtimeSessionModel
         reject(new StreamMessagesTransportError("socket_closed"));
       }
     });
+  }
+
+  sendApplicationEvent(eventName: string, rawPayload: string): void {
+    const parsedEventName = parseEventName(eventName);
+    const socket = this.#socket;
+
+    if (this.#state !== "ready" || socket === undefined) {
+      throw new StreamMessagesTransportError(
+        this.#state === "closed" ? "socket_closed" : "session_not_ready",
+      );
+    }
+
+    try {
+      socket.emit(parsedEventName, rawPayload);
+    } catch {
+      throw new StreamMessagesTransportError("socket_closed");
+    }
+  }
+
+  onApplicationEvent(eventName: string, listener: (rawPayload: string) => void): () => void {
+    const parsedEventName = parseEventName(eventName);
+    let listeners = this.#applicationListeners.get(parsedEventName);
+
+    if (listeners === undefined) {
+      listeners = new Set();
+      this.#applicationListeners.set(parsedEventName, listeners);
+    }
+
+    listeners.add(listener);
+    this.#ensureApplicationSocketSubscription(parsedEventName);
+
+    return () => {
+      const currentListeners = this.#applicationListeners.get(parsedEventName);
+      currentListeners?.delete(listener);
+
+      if (currentListeners?.size === 0) {
+        this.#applicationListeners.delete(parsedEventName);
+      }
+    };
   }
 
   disconnect(): void {
@@ -378,6 +419,29 @@ export class AuthenticatedRealtimeSessionModel
         });
       }),
     );
+
+    for (const eventName of this.#applicationListeners.keys()) {
+      this.#ensureApplicationSocketSubscription(eventName, socket);
+    }
+  }
+
+  #ensureApplicationSocketSubscription(eventName: string, socket = this.#socket): void {
+    if (socket === undefined || this.#applicationSocketEventNames.has(eventName)) {
+      return;
+    }
+
+    this.#applicationSocketEventNames.add(eventName);
+    this.#socketUnsubscribers.push(
+      socket.on(eventName, (rawPayload) => {
+        if (this.#socket !== socket) {
+          return;
+        }
+
+        for (const listener of this.#applicationListeners.get(eventName) ?? []) {
+          listener(rawPayload);
+        }
+      }),
+    );
   }
 
   #settlePending(requestId: string) {
@@ -400,6 +464,7 @@ export class AuthenticatedRealtimeSessionModel
   #cleanupSocket(close: boolean): void {
     const socket = this.#socket;
     this.#socket = undefined;
+    this.#applicationSocketEventNames.clear();
 
     for (const unsubscribe of this.#socketUnsubscribers.splice(0)) {
       unsubscribe();
@@ -535,6 +600,16 @@ function assertNonBlank(value: string, label: string): void {
   if (value.trim().length === 0 || value.trim() !== value) {
     throw new TypeError(`${label}은 공백 없는 문자열이어야 합니다.`);
   }
+}
+
+function parseEventName(value: string): string {
+  const parsed = value.trim();
+
+  if (parsed.length === 0 || parsed !== value) {
+    throw new TypeError("realtime application event name은 공백 없는 문자열이어야 합니다.");
+  }
+
+  return parsed;
 }
 
 function parsePositiveInteger(value: number | undefined, fallback: number, label: string): number {

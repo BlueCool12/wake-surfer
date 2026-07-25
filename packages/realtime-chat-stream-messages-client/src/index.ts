@@ -1,6 +1,7 @@
 export * from "./cursor-storage.js";
 export * from "./authenticated-realtime-session.js";
 export * from "./browser-transport.js";
+export * from "./browser-realtime-event-socket.js";
 export * from "./emitter.js";
 export * from "./errors.js";
 export * from "./recovery-model.js";

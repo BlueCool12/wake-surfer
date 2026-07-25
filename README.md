@@ -8,6 +8,23 @@ WebSocket, WebRTC, RTMP 등을 활용한 화상 회의, 실시간 협업, 페어
 pnpm install
 ```
 
+### 실제 채팅 MVP 실행
+
+Docker가 실행 중인 상태에서 다음 명령 하나로 PostgreSQL과 migration을 준비하고,
+Realtime Chat API·Gateway·웹을 빌드한 뒤 함께 실행합니다.
+
+```bash
+pnpm dev:realtime-chat
+```
+
+같은 채널에 서로 다른 actor로 접속하면 실시간 송수신과 새로고침 후 메시지 복구를 확인할 수 있습니다.
+
+- `http://localhost:5173/rooms/general?actor=alice`
+- `http://localhost:5173/rooms/general?actor=bob`
+
+현재 MVP는 로컬 개발용 actor 헤더 인증과 단일 Gateway 안의 fan-out을 사용합니다. 운영 인증,
+채널 권한, 여러 Gateway 사이의 fan-out은 후속 범위입니다.
+
 ### Docker 개발 의존성
 
 PostgreSQL, realtime-chat Atlas migration, Redis는 루트 `docker-compose.yml`로 실행합니다.

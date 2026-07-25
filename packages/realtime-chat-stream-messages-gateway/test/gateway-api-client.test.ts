@@ -55,11 +55,8 @@ describe("Gateway Stream Messages internal API client", () => {
         "x-request-id": "request-1",
       }),
     );
-    expect(JSON.parse(String(init.body))).toEqual({
-      channelId: "channel/relay",
-      afterSequence: 0,
-      limit: 50,
-    });
+    expect(JSON.parse(String(init.body))).toEqual({ afterSequence: 0, limit: 50 });
+    expect(String(init.body)).not.toContain("channel/relay");
     expect(String(init.body)).not.toContain("actor-relay");
   });
 

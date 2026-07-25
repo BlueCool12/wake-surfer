@@ -24,7 +24,7 @@ describe("realtime chat API runtime dependencies", () => {
     expect(close).not.toHaveBeenCalled();
   });
 
-  it("leaves schema migration outside the app startup and exposes database cleanup", async () => {
+  it("assembles the MVP message vertical slice without running migrations and exposes cleanup", async () => {
     const close = vi.fn(async () => undefined);
     const database = createDatabaseHandle(close);
 
@@ -32,6 +32,11 @@ describe("realtime chat API runtime dependencies", () => {
       createDatabase: () => database,
     });
 
+    expect(runtime.appDeps.messageSend?.send).toEqual(expect.any(Function));
+    expect(runtime.appDeps.loadLatestMessages).toEqual(expect.any(Function));
+    expect(runtime.appDeps.loadOlderMessages).toEqual(expect.any(Function));
+    expect(runtime.appDeps.syncAfterMessages).toEqual(expect.any(Function));
+    expect(runtime.appDeps.cors?.allowedHeaders).toContain("x-actor-id");
     expect(close).not.toHaveBeenCalled();
     await runtime.close();
     expect(close).toHaveBeenCalledOnce();

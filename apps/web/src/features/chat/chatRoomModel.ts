@@ -46,8 +46,13 @@ export class ChatRoomModel extends Emitter {
   readonly #runtime: ChatRoomRuntime;
   readonly #createClientMessageId: () => string;
   readonly #now: () => string;
+  readonly #processedOwnMessageIds = new Set<string>();
   readonly #subscriptions: Array<() => void> = [];
   readonly streamSession;
+  #connectionRecoveryAttemptVersion = 0;
+  #connectionRecoveryPromise: Promise<void> | undefined;
+  #lastRequestedConnectionGeneration: string | undefined;
+  #pendingConnectionGeneration: string | undefined;
   #startPromise: Promise<void> | undefined;
   #messageSubscriptionsAttached = false;
   #loadingOlder = false;
@@ -109,6 +114,7 @@ export class ChatRoomModel extends Emitter {
   }
 
   readonly emitViewChange = (): void => {
+    this.#reconcileOptimisticMessages();
     this.emit();
   };
 
@@ -119,7 +125,7 @@ export class ChatRoomModel extends Emitter {
 
     this.#attachMessageSubscriptions();
     const active = this.#runStart().finally(() => {
-      if (this.#startPromise === active && this.recoveryPhase !== "ready") {
+      if (this.#startPromise === active) {
         this.#startPromise = undefined;
       }
     });
@@ -154,17 +160,28 @@ export class ChatRoomModel extends Emitter {
     }
 
     const clientMessageId = this.#createClientMessageId();
+    const sentAtClient = this.#now();
     this.#optimistic.set(clientMessageId, {
       clientMessageId,
       text: trimmed,
-      createdAt: this.#now(),
+      createdAt: sentAtClient,
       status: "pending",
     });
     this.emit();
-    this.#runtime.messageTransport.sendChannelMessage({
-      clientMessageId,
-      content: { type: "text", text: trimmed },
-    });
+    try {
+      this.#runtime.messageTransport.sendChannelMessage({
+        clientMessageId,
+        content: { type: "text", text: trimmed },
+        sentAtClient,
+      });
+    } catch {
+      const optimistic = this.#optimistic.get(clientMessageId);
+
+      if (optimistic !== undefined) {
+        optimistic.status = "failed";
+        this.emit();
+      }
+    }
   }
 
   retryMessage(message: ChatMessageView): void {
@@ -180,10 +197,16 @@ export class ChatRoomModel extends Emitter {
 
     optimistic.status = "pending";
     this.emit();
-    this.#runtime.messageTransport.sendChannelMessage({
-      clientMessageId: optimistic.clientMessageId,
-      content: { type: "text", text: optimistic.text },
-    });
+    try {
+      this.#runtime.messageTransport.sendChannelMessage({
+        clientMessageId: optimistic.clientMessageId,
+        content: { type: "text", text: optimistic.text },
+        sentAtClient: optimistic.createdAt,
+      });
+    } catch {
+      optimistic.status = "failed";
+      this.emit();
+    }
   }
 
   dispose(options: { clearCursor: boolean }): void {
@@ -200,9 +223,23 @@ export class ChatRoomModel extends Emitter {
   }
 
   async #runStart(): Promise<void> {
+    const recoveryAttemptVersionBeforeConnect = this.#connectionRecoveryAttemptVersion;
+
     try {
       await this.#runtime.messageTransport.connect();
-      await this.streamSession.bootstrap(this.#runtime.streamMessagesTransport);
+
+      if (
+        this.#connectionRecoveryAttemptVersion === recoveryAttemptVersionBeforeConnect &&
+        this.recoveryPhase !== "ready"
+      ) {
+        await this.streamSession.bootstrap(this.#runtime.streamMessagesTransport);
+      } else if (this.#connectionRecoveryAttemptVersion !== recoveryAttemptVersionBeforeConnect) {
+        await this.#connectionRecoveryPromise;
+      }
+
+      if (!this.#runtime.messageTransport.isReady()) {
+        this.streamSession.recovery.setPhase("retryable_failure");
+      }
     } catch (error) {
       this.streamSession.recovery.setPhase(
         error instanceof StreamMessagesTransportError && error.code === "ticket_rejected"
@@ -222,6 +259,8 @@ export class ChatRoomModel extends Emitter {
 
     this.#messageSubscriptionsAttached = true;
     this.#subscriptions.push(
+      this.#runtime.messageTransport.onConnectionGenerationChanged(this.#queueConnectionRecovery),
+      this.#runtime.messageTransport.onDisconnected(this.#handleDisconnected),
       this.#runtime.messageTransport.onMessageCreated((message) => {
         this.streamSession.timeline.applyLive(message);
       }),
@@ -239,6 +278,89 @@ export class ChatRoomModel extends Emitter {
         }
       }),
     );
+  }
+
+  readonly #handleDisconnected = (): void => {
+    this.streamSession.recovery.setPhase("retryable_failure");
+    this.#markPendingMessagesFailed();
+  };
+
+  readonly #markPendingMessagesFailed = (): void => {
+    let changed = false;
+
+    for (const optimistic of this.#optimistic.values()) {
+      if (optimistic.status === "pending") {
+        optimistic.status = "failed";
+        changed = true;
+      }
+    }
+
+    if (changed) {
+      this.emit();
+    }
+  };
+
+  readonly #queueConnectionRecovery = (connectionGeneration: string): void => {
+    if (connectionGeneration === this.#lastRequestedConnectionGeneration) {
+      return;
+    }
+
+    this.#lastRequestedConnectionGeneration = connectionGeneration;
+    this.#pendingConnectionGeneration = connectionGeneration;
+    this.#connectionRecoveryAttemptVersion += 1;
+
+    if (this.#connectionRecoveryPromise !== undefined) {
+      return;
+    }
+
+    const active = this.#drainConnectionRecoveryQueue().finally(() => {
+      if (this.#connectionRecoveryPromise === active) {
+        this.#connectionRecoveryPromise = undefined;
+      }
+    });
+    this.#connectionRecoveryPromise = active;
+    void active.catch(() => undefined);
+  };
+
+  async #drainConnectionRecoveryQueue(): Promise<void> {
+    while (this.#pendingConnectionGeneration !== undefined) {
+      this.#pendingConnectionGeneration = undefined;
+
+      try {
+        await this.streamSession.bootstrap(this.#runtime.streamMessagesTransport);
+      } catch (error) {
+        if (this.#pendingConnectionGeneration === undefined) {
+          throw error;
+        }
+      }
+    }
+  }
+
+  #reconcileOptimisticMessages(): void {
+    for (const message of this.streamSession.timeline.messages) {
+      if (
+        message.senderActorId !== this.options.actorId ||
+        this.#processedOwnMessageIds.has(message.messageId)
+      ) {
+        continue;
+      }
+
+      this.#processedOwnMessageIds.add(message.messageId);
+
+      if (message.sentAtClient === undefined) {
+        continue;
+      }
+
+      for (const [clientMessageId, optimistic] of this.#optimistic) {
+        if (
+          optimistic.createdAt === message.sentAtClient &&
+          optimistic.text === message.content.text
+        ) {
+          this.#optimistic.delete(clientMessageId);
+          break;
+        }
+      }
+    }
   }
 
   #toView(message: PublicMessage): ChatMessageView {
