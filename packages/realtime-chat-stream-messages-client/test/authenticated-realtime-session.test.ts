@@ -116,6 +116,43 @@ describe("authenticated realtime session", () => {
     expect(session.connectionGeneration).toBe("server-generation-2");
   });
 
+  it("keeps application event subscriptions and sends through the current reconnect generation", async () => {
+    const sockets: FakeSocket[] = [];
+    const session = createSession(() => {
+      const socket = new FakeSocket();
+      sockets.push(socket);
+      return socket;
+    });
+    const created = vi.fn();
+    const unsubscribe = session.onApplicationEvent("chat.message.created", created);
+    const firstConnect = session.connect();
+    await vi.waitFor(() => expect(sockets).toHaveLength(1));
+    sockets[0]!.serverEmit("gateway.connected", connectedEvent("server-generation-1"));
+    await firstConnect;
+
+    session.sendApplicationEvent(
+      "chat.channel.join",
+      JSON.stringify({ channelId: "channel-session" }),
+    );
+    expect(sockets[0]!.clientEmits.at(-1)).toEqual({
+      eventName: "chat.channel.join",
+      rawPayload: JSON.stringify({ channelId: "channel-session" }),
+    });
+    sockets[0]!.serverEmit("chat.message.created", JSON.stringify({ messageId: "message-1" }));
+    expect(created).toHaveBeenCalledWith(JSON.stringify({ messageId: "message-1" }));
+
+    sockets[0]!.serverClose();
+    await vi.waitFor(() => expect(sockets).toHaveLength(2));
+    sockets[1]!.serverEmit("gateway.connected", connectedEvent("server-generation-2"));
+    await vi.waitFor(() => expect(session.state).toBe("ready"));
+    sockets[1]!.serverEmit("chat.message.created", JSON.stringify({ messageId: "message-2" }));
+    expect(created).toHaveBeenLastCalledWith(JSON.stringify({ messageId: "message-2" }));
+
+    unsubscribe();
+    sockets[1]!.serverEmit("chat.message.created", JSON.stringify({ messageId: "message-3" }));
+    expect(created).toHaveBeenCalledTimes(2);
+  });
+
   it("retries connection with exponential backoff and aborts pending requests on logout", async () => {
     const socket = new FakeSocket();
     const delay = vi.fn(async () => undefined);
@@ -185,17 +222,17 @@ function createSession(
 }
 
 class FakeSocket implements RealtimeEventSocket {
-  readonly clientEmits: Array<{ eventName: RealtimeEventName; rawPayload: string }> = [];
+  readonly clientEmits: Array<{ eventName: string; rawPayload: string }> = [];
   readonly close = vi.fn();
   readonly connect = vi.fn();
-  readonly #listeners = new Map<RealtimeEventName, Set<(rawPayload: string) => void>>();
+  readonly #listeners = new Map<string, Set<(rawPayload: string) => void>>();
   readonly #closeListeners = new Set<() => void>();
 
-  emit = (eventName: RealtimeEventName, rawPayload: string): void => {
+  emit = (eventName: string, rawPayload: string): void => {
     this.clientEmits.push({ eventName, rawPayload });
   };
 
-  on = (eventName: RealtimeEventName, listener: (rawPayload: string) => void): (() => void) => {
+  on = (eventName: string, listener: (rawPayload: string) => void): (() => void) => {
     let listeners = this.#listeners.get(eventName);
     if (listeners === undefined) {
       listeners = new Set();
@@ -210,7 +247,7 @@ class FakeSocket implements RealtimeEventSocket {
     return () => this.#closeListeners.delete(listener);
   };
 
-  serverEmit(eventName: RealtimeEventName, rawPayload: string): void {
+  serverEmit(eventName: RealtimeEventName | "chat.message.created", rawPayload: string): void {
     for (const listener of this.#listeners.get(eventName) ?? []) listener(rawPayload);
   }
 

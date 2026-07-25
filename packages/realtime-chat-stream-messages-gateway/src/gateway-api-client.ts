@@ -80,20 +80,19 @@ export function createGatewayStreamMessagesApiClient(
   return {
     async syncAfter(request, context) {
       const parsedRequest = InternalSyncAfterStreamMessagesHttpRequestSchema.parse(request);
+      const { channelId, ...requestBody } = parsedRequest;
       const requestId = RequestIdSchema.parse(context.requestId);
       const actorId = parseNonBlank(context.actorId, "actorId");
       const timeout = createTimeoutSignal(context.signal, timeoutMilliseconds);
       const url = new URL(
-        `internal/realtime-chat/channels/${encodeURIComponent(
-          parsedRequest.channelId,
-        )}/messages/sync-after`,
+        `internal/realtime-chat/channels/${encodeURIComponent(channelId)}/messages/sync-after`,
         apiBaseUrl,
       );
 
       try {
         const response = await raceWithAbort(
           fetchImplementation(url, {
-            body: JSON.stringify(parsedRequest),
+            body: JSON.stringify(requestBody),
             headers: {
               accept: "application/json",
               authorization: `Bearer ${gatewayApiToken}`,

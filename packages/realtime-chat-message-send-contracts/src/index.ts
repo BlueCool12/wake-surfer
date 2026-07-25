@@ -1,5 +1,6 @@
 import {
   MessageTargetSchema,
+  PublicMessageSchema,
   TextMessageContentSchema,
 } from "@wake-surfer/realtime-chat-message-contracts";
 import type {
@@ -117,6 +118,21 @@ export type SendMessageResponse =
       clientMessageId: ClientMessageId;
       reason: SendMessageRejectedReason;
     };
+
+export const SendMessageResponseSchema = z.discriminatedUnion("status", [
+  z.strictObject({
+    status: z.literal("accepted"),
+    commandId: NonBlankStringSchema.optional(),
+    clientMessageId: NonBlankStringSchema,
+    message: PublicMessageSchema,
+  }),
+  z.strictObject({
+    status: z.literal("rejected"),
+    commandId: NonBlankStringSchema.optional(),
+    clientMessageId: NonBlankStringSchema,
+    reason: z.enum(["invalid_content", "target_not_found", "write_forbidden"]),
+  }),
+]);
 
 export type OutboundMessageDeliveryRequested = {
   eventId: string;

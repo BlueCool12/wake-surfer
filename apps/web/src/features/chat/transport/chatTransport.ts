@@ -11,7 +11,14 @@ export type MessageRejectedResponse = Extract<SendMessageResponse, { status: "re
 export interface ChatMessageTransport {
   connect(): Promise<void>;
   disconnect(): void;
-  sendChannelMessage(params: { clientMessageId: string; content: TextMessageContent }): void;
+  isReady(): boolean;
+  sendChannelMessage(params: {
+    clientMessageId: string;
+    content: TextMessageContent;
+    sentAtClient: string;
+  }): void;
+  onConnectionGenerationChanged(listener: (connectionGeneration: string) => void): () => void;
+  onDisconnected(listener: () => void): () => void;
   onMessageCreated(listener: (message: PublicMessage) => void): () => void;
   onMessageAccepted(listener: (response: MessageAcceptedResponse) => void): () => void;
   onMessageRejected(listener: (response: MessageRejectedResponse) => void): () => void;

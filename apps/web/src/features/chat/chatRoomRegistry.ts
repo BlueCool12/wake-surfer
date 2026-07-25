@@ -1,5 +1,4 @@
 import { ChatRoomModel } from "./chatRoomModel";
-import { createMockChatRoomRuntime, MOCK_ME } from "./transport/mockChatTransport";
 
 import type { KeyValueStorage } from "@wake-surfer/realtime-chat-stream-messages-client";
 import type { ChatRoomRuntimeFactory } from "./transport/chatTransport";
@@ -45,9 +44,5 @@ function getRuntimeFactory(actorId: string): ChatRoomRuntimeFactory {
     return configuredRuntimeFactory;
   }
 
-  if (import.meta.env.DEV && actorId === MOCK_ME) {
-    return createMockChatRoomRuntime;
-  }
-
-  throw new Error("인증된 Realtime Chat runtime이 설정되지 않았습니다.");
+  throw new Error(`${actorId} actor의 인증된 Realtime Chat runtime이 설정되지 않았습니다.`);
 }

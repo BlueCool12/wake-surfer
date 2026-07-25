@@ -102,6 +102,10 @@ API 타입이다.
 ## 소비 응답
 
 ```ts
+export const ConsumeGatewayTicketResponseSchema = z.discriminatedUnion("status", [
+  // consumed 또는 rejected strict response
+]);
+
 export type ConsumeGatewayTicketResponse =
   | {
       status: "consumed";
@@ -117,6 +121,7 @@ export type ConsumeGatewayTicketResponse =
 ```
 
 성공하면 게이트웨이가 세션을 열 수 있도록 `actorId`와 소비 시각을 반환한다.
+Gateway는 `ConsumeGatewayTicketResponseSchema`로 내부 API 응답을 런타임에서 검증한다.
 
 실패하면 세부 원인을 외부에 노출하지 않고 `invalid_or_expired` 하나로 접는다. 티켓 부재, 만료, 재사용,
 게이트웨이 불일치는 모두 같은 외부 응답이다.

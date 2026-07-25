@@ -1,9 +1,18 @@
 import { useEffect, useMemo, useSyncExternalStore } from "react";
 
+import type { KeyValueStorage } from "@wake-surfer/realtime-chat-stream-messages-client";
+
 import { getChatRoomModel } from "./chatRoomRegistry";
-import { MOCK_ME } from "./transport/mockChatTransport";
+import { getConfiguredChatActorId } from "./transport/browserChatRuntime";
 
 import type { ChatMessageView } from "./chatRoomModel";
+
+const cursorValues = new Map<string, string>();
+const pageLifetimeCursorStorage: KeyValueStorage = {
+  getItem: (key) => cursorValues.get(key) ?? null,
+  removeItem: (key) => cursorValues.delete(key),
+  setItem: (key, value) => cursorValues.set(key, value),
+};
 
 export type { ChatMessageStatus, ChatMessageView } from "./chatRoomModel";
 
@@ -20,13 +29,17 @@ export type UseChatRoomResult = {
   retryMessage: (message: ChatMessageView) => void;
 };
 
-export function useChatRoom(channelId: string, actorId = MOCK_ME): UseChatRoomResult {
+export function useChatRoom(
+  channelId: string,
+  actorId = getConfiguredChatActorId(),
+): UseChatRoomResult {
   const model = useMemo(
     () =>
       getChatRoomModel({
         actorId,
         channelId,
-        storage: window.sessionStorage,
+        // Cursor만 영속화하고 message snapshot은 영속화하지 않으므로 새 문서에서는 latest를 다시 읽는다.
+        storage: pageLifetimeCursorStorage,
       }),
     [actorId, channelId],
   );

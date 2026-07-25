@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseSendMessageRequestBody } from "../src/index";
+import { parseSendMessageRequestBody, SendMessageResponseSchema } from "../src/index";
 
 describe("send message request body parser", () => {
   it("accepts a channel target request body", () => {
@@ -206,5 +206,44 @@ describe("send message request body parser", () => {
       ok: false,
       message: "메시지 전송 요청 본문이 올바르지 않습니다.",
     });
+  });
+});
+
+describe("send message response schema", () => {
+  it("validates an accepted public message", () => {
+    expect(
+      SendMessageResponseSchema.parse({
+        status: "accepted",
+        clientMessageId: "client-message-1",
+        message: {
+          messageId: "message-1",
+          streamId: "channel:channel-1",
+          sequence: 1,
+          senderActorId: "actor-1",
+          target: {
+            type: "channel",
+            channelId: "channel-1",
+          },
+          content: {
+            type: "text",
+            text: "hello",
+          },
+          createdAt: "2026-07-25T06:00:00.000Z",
+        },
+      }),
+    ).toMatchObject({
+      status: "accepted",
+      clientMessageId: "client-message-1",
+    });
+  });
+
+  it("rejects an unknown rejection reason", () => {
+    expect(
+      SendMessageResponseSchema.safeParse({
+        status: "rejected",
+        clientMessageId: "client-message-1",
+        reason: "temporary_failure",
+      }).success,
+    ).toBe(false);
   });
 });

@@ -11,6 +11,11 @@ import type {
   IssueGatewayTicketResponse,
   RealtimeChatErrorCode,
 } from "@wake-surfer/realtime-chat-gateway-ticket-contracts";
+import type { MessageSendModule } from "@wake-surfer/realtime-chat-message-send";
+import {
+  parseSendMessageRequestBody,
+  type SendMessageResponse,
+} from "@wake-surfer/realtime-chat-message-send-contracts";
 import type {
   LoadLatestMessages,
   LoadOlderMessages,
@@ -62,6 +67,7 @@ export type RealtimeChatApiAppDeps = {
   loadLatestMessages?: LoadLatestMessages;
   loadOlderMessages?: LoadOlderMessages;
   logger: AppLogger;
+  messageSend?: MessageSendModule;
   requestTimeoutMilliseconds?: number;
   syncAfterMessages?: SyncAfterMessages;
 };
@@ -86,7 +92,14 @@ export class AppHttpError extends Error {
 }
 
 export function createRealtimeChatApiApp(deps: RealtimeChatApiAppDeps): Hono {
-  const { authenticateActor, authenticateGateway, gatewayTicket, logger } = deps;
+  const {
+    authenticateActor,
+    authenticateGateway,
+    gatewayTicket,
+    getAssertedActor,
+    logger,
+    messageSend,
+  } = deps;
   const app = new Hono();
 
   app.use(
@@ -207,6 +220,33 @@ export function createRealtimeChatApiApp(deps: RealtimeChatApiAppDeps): Hono {
 
     return context.json(result);
   });
+
+  if (messageSend !== undefined && getAssertedActor !== undefined) {
+    app.post("/internal/realtime-chat/messages", async (context) => {
+      await authenticateGateway(context.req.raw);
+      const actor = await getAssertedActor(context.req.raw);
+      const body = await readRequiredJsonBody(context.req.raw);
+      const parsed = parseSendMessageRequestBody(body);
+
+      if (!parsed.ok) {
+        throw new AppHttpError(400, "bad_request", parsed.message);
+      }
+
+      let result: SendMessageResponse;
+
+      try {
+        result = await messageSend.send(parsed.value, {
+          actorId: actor.actorId,
+        });
+      } catch (error) {
+        throw new AppHttpError(503, "internal_error", "message send service unavailable", {
+          cause: error,
+        });
+      }
+
+      return context.json(result);
+    });
+  }
 
   if (deps.loadLatestMessages !== undefined) {
     registerLoadLatestMessagesHttpRoute(app, {

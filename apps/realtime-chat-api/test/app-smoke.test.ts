@@ -194,6 +194,175 @@ describe("realtime chat api app", () => {
     expect(consume).not.toHaveBeenCalled();
   });
 
+  it("sends a message using the authenticated Gateway and asserted actor contexts", async () => {
+    const authenticationOrder: string[] = [];
+    const send = vi.fn(async () => ({
+      status: "accepted" as const,
+      commandId: "command-1",
+      clientMessageId: "client-message-1",
+      message: {
+        messageId: "message-1",
+        streamId: "channel:channel-1",
+        sequence: 1,
+        senderActorId: "asserted-actor",
+        target: {
+          type: "channel" as const,
+          channelId: "channel-1",
+        },
+        content: {
+          type: "text" as const,
+          text: "hello",
+        },
+        createdAt: "2026-07-25T00:00:00.000Z",
+      },
+    }));
+    const app = createRealtimeChatApiApp(
+      createDeps({
+        authenticateGateway: () => {
+          authenticationOrder.push("gateway");
+          return { gatewayId: "gateway-1" };
+        },
+        getAssertedActor: () => {
+          authenticationOrder.push("actor");
+          return { actorId: "asserted-actor" };
+        },
+        messageSend: { send },
+      }),
+    );
+
+    const response = await app.request("/internal/realtime-chat/messages", {
+      body: JSON.stringify({
+        commandId: "command-1",
+        clientMessageId: "client-message-1",
+        target: {
+          type: "channel",
+          channelId: "channel-1",
+        },
+        content: {
+          type: "text",
+          text: "hello",
+        },
+      }),
+      headers: {
+        authorization: `Bearer ${GATEWAY_API_TOKEN}`,
+        "content-type": "application/json",
+        "x-gateway-id": "gateway-1",
+        "x-realtime-chat-actor-id": "asserted-actor",
+      },
+      method: "POST",
+    });
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      status: "accepted",
+      clientMessageId: "client-message-1",
+      message: {
+        messageId: "message-1",
+        senderActorId: "asserted-actor",
+      },
+    });
+    expect(authenticationOrder).toEqual(["gateway", "actor"]);
+    expect(send).toHaveBeenCalledWith(
+      {
+        commandId: "command-1",
+        clientMessageId: "client-message-1",
+        target: {
+          type: "channel",
+          channelId: "channel-1",
+        },
+        content: {
+          type: "text",
+          text: "hello",
+        },
+      },
+      {
+        actorId: "asserted-actor",
+      },
+    );
+  });
+
+  it("rejects server-owned message fields before persistence", async () => {
+    const send = vi.fn();
+    const app = createRealtimeChatApiApp(
+      createDeps({
+        getAssertedActor: () => ({ actorId: "asserted-actor" }),
+        messageSend: { send },
+      }),
+    );
+
+    const response = await app.request("/internal/realtime-chat/messages", {
+      body: JSON.stringify({
+        actorId: "body-actor",
+        clientMessageId: "client-message-1",
+        target: {
+          type: "channel",
+          channelId: "channel-1",
+        },
+        content: {
+          type: "text",
+          text: "hello",
+        },
+      }),
+      headers: {
+        authorization: `Bearer ${GATEWAY_API_TOKEN}`,
+        "content-type": "application/json",
+        "x-gateway-id": "gateway-1",
+        "x-realtime-chat-actor-id": "asserted-actor",
+      },
+      method: "POST",
+    });
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toMatchObject({
+      code: "bad_request",
+      status: "error",
+    });
+    expect(send).not.toHaveBeenCalled();
+  });
+
+  it("maps message persistence failures to an HTTP 503 boundary", async () => {
+    const logger = createLogger();
+    const app = createRealtimeChatApiApp(
+      createDeps({
+        getAssertedActor: () => ({ actorId: "asserted-actor" }),
+        logger,
+        messageSend: {
+          send: vi.fn(async () => {
+            throw new Error("database unavailable");
+          }),
+        },
+      }),
+    );
+
+    const response = await app.request("/internal/realtime-chat/messages", {
+      body: JSON.stringify({
+        clientMessageId: "client-message-1",
+        target: {
+          type: "channel",
+          channelId: "channel-1",
+        },
+        content: {
+          type: "text",
+          text: "hello",
+        },
+      }),
+      headers: {
+        authorization: `Bearer ${GATEWAY_API_TOKEN}`,
+        "content-type": "application/json",
+        "x-gateway-id": "gateway-1",
+        "x-realtime-chat-actor-id": "asserted-actor",
+      },
+      method: "POST",
+    });
+
+    expect(response.status).toBe(503);
+    await expect(response.json()).resolves.toMatchObject({
+      code: "internal_error",
+      status: "error",
+    });
+    expect(logger.error).toHaveBeenCalled();
+  });
+
   it("maps domain ticket rejection to a successful rejected result", async () => {
     const app = createRealtimeChatApiApp(
       createDeps({
@@ -474,6 +643,7 @@ function createDeps(
     ...(overrides.loadOlderMessages === undefined
       ? {}
       : { loadOlderMessages: overrides.loadOlderMessages }),
+    ...(overrides.messageSend === undefined ? {} : { messageSend: overrides.messageSend }),
     ...(overrides.syncAfterMessages === undefined
       ? {}
       : { syncAfterMessages: overrides.syncAfterMessages }),
