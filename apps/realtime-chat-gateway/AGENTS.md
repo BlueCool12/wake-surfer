@@ -9,3 +9,4 @@
 - 클라이언트가 보낸 actor, gateway identity는 신뢰하지 않는다.
 - 세션 actor는 소비된 일회성 게이트웨이 티켓에서만 확정한다.
 - 새 이벤트를 추가할 때는 README의 wire 계약과 app smoke test를 함께 갱신한다.
+- container 계약과 환경 파일은 `docker/`가 소유하며 Dockerfile 안에서 project를 빌드하지 않는다.

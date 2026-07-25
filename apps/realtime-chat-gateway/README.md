@@ -66,3 +66,16 @@ pnpm --filter @wake-surfer/realtime-chat-gateway start
 pnpm --filter @wake-surfer/realtime-chat-gateway typecheck
 pnpm --filter @wake-surfer/realtime-chat-gateway test
 ```
+
+## Docker 배포
+
+이 앱의 `docker/`가 Gateway Compose·환경 파일·Dockerfile을 소유한다. Dockerfile은 프로젝트를
+빌드하지 않고 루트 배포 스크립트가 로컬에서 만든 production runtime artifact만 복사한다.
+
+```bash
+npm run deploy -- realtime-chat-gateway
+docker compose logs -f realtime-chat-gateway
+```
+
+서비스 단독 배포는 API나 공용 인프라를 다시 만들지 않는다. Gateway의 내부 API 주소는
+`http://realtime-chat-api:3000`, 브라우저 origin은 기본 `http://localhost:5173`이다.

@@ -1,9 +1,11 @@
 node_modules/
 .pnpm-store/
+.deploy/
 
 dist/
 build/
 coverage/
+apps/*/docker/artifact/
 
 .idea/
 .obsidian/
@@ -11,7 +13,6 @@ coverage/
 .env
 .env.*
 !.env.example
-!apps/realtime-chat-api/docker/postgres.dev.env
 
 *.log
 AGENTS.override.md

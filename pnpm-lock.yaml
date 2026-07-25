@@ -161,6 +161,8 @@ importers:
         specifier: ^4.1.9
         version: 4.1.9(@types/node@24.13.2)(vite@8.1.3(@types/node@24.13.2)(yaml@2.9.0))
 
+  packages/runtime-infra: {}
+
   packages/realtime-chat-database:
     dependencies:
       '@wake-surfer/realtime-chat-gateway-ticket':

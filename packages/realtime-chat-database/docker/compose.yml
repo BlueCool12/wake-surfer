@@ -1,0 +1,14 @@
+services:
+  realtime-chat-migrate:
+    image: wake-surfer/realtime-chat-migrate:local
+    pull_policy: build
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    restart: "no"
+    env_file:
+      - ./atlas.dev.env
+    command: ["migrate", "apply", "--env", "runtime", "--config", "file:///workspace/atlas.hcl"]
+    depends_on:
+      realtime-chat-postgres:
+        condition: service_healthy

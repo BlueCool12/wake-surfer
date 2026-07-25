@@ -1,0 +1,31 @@
+services:
+  web:
+    image: wake-surfer/web:local
+    pull_policy: build
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    env_file:
+      - ./runtime.dev.env
+    ports:
+      - "127.0.0.1:${WAKE_SURFER_WEB_PORT:-5173}:80"
+    depends_on:
+      realtime-chat-api:
+        condition: service_healthy
+      realtime-chat-gateway:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+    networks:
+      - default
+      - web-host-access
+    stop_grace_period: 10s
+
+networks:
+  web-host-access:
+    driver: bridge
