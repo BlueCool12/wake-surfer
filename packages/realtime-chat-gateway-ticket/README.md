@@ -137,8 +137,6 @@ const gatewayTicket = createGatewayTicketModule({
   rawTicketBytes: 32,
 });
 
-await database.migrate();
-
 const issued = await gatewayTicket.issue({
   actorId: "actor-1",
 });
@@ -176,7 +174,7 @@ API 서버가 여러 대 떠도 모든 인스턴스가 같은 PostgreSQL의 `gat
 
 ## 테이블
 
-`@wake-surfer/realtime-chat-database`의 `database.migrate()`는 다음 테이블을 만든다.
+`@wake-surfer/realtime-chat-database`가 소유한 Atlas versioned migration은 다음 테이블을 만든다.
 
 ```sql
 CREATE TABLE IF NOT EXISTS gateway_tickets (
@@ -190,8 +188,8 @@ CREATE TABLE IF NOT EXISTS gateway_tickets (
 ```
 
 이 패키지는 공통 DB 패키지가 전체 DB 타입을 합성할 수 있도록 `./table-contract` 서브패스로
-`GatewayTicketDatabase`와 `createGatewayTicketsTable`을 제공한다. 일반 앱 코드는 이 서브패스를 직접
-사용하지 않는다.
+`GatewayTicketDatabase` 타입을 제공한다. schema 생성 SQL과 적용 책임은 제공하지 않으며 일반 앱 코드는
+이 서브패스를 직접 사용하지 않는다.
 
 ## 계약 패키지와의 관계
 

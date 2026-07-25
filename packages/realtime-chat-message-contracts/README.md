@@ -16,6 +16,12 @@ history item에는 `clientMessageId`를 포함하지 않는다. 현재 variant�
 canonical stream ID는 `channel:{channelId}`다. send와 query는 각자의 resolver 규칙을 복제하지 않고 이
 함수를 사용한다.
 
+## 모듈 형식
+
+브라우저와 Node 서버가 runtime schema를 같은 계약에서 사용한다. build는 소스를 번들하지 않고 ESM과
+CommonJS로 각각 변환하며, package `exports`의 `import`와 `require` 조건이 실행 환경에 맞는 결과물을
+선택한다. 타입 선언은 두 형식이 공유한다.
+
 ## 비공개 내부 모델
 
 이 패키지는 다음을 소유하지 않는다.

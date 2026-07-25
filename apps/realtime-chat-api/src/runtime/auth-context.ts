@@ -5,12 +5,13 @@ import type { RealtimeChatApiConfig } from "../config/env.js";
 
 export type HeaderAuthContextConfig = Pick<
   RealtimeChatApiConfig,
-  "actorIdHeader" | "gatewayId" | "gatewayIdHeader"
+  "actorIdHeader" | "gatewayAssertedActorHeader" | "gatewayId" | "gatewayIdHeader"
 >;
 
 export function createHeaderAuthContext(config: HeaderAuthContextConfig): {
   authenticateActor: (request: Request) => AuthenticatedActor;
   authenticateGateway: (request: Request) => AuthenticatedGateway;
+  getAssertedActor: (request: Request) => AuthenticatedActor;
 } {
   return {
     authenticateActor: (request) => {
@@ -38,6 +39,19 @@ export function createHeaderAuthContext(config: HeaderAuthContextConfig): {
       return {
         gatewayId: config.gatewayId,
       };
+    },
+    getAssertedActor: (request) => {
+      const actorId = readTrustedHeader(request, config.gatewayAssertedActorHeader);
+
+      if (!actorId) {
+        throw new AppHttpError(
+          401,
+          "unauthenticated",
+          "asserted gateway actor context is required",
+        );
+      }
+
+      return { actorId };
     },
   };
 }

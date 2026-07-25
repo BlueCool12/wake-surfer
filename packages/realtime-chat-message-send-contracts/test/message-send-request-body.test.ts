@@ -155,6 +155,22 @@ describe("send message request body parser", () => {
     });
   });
 
+  it("accepts text at the UTF-8 byte limit", () => {
+    expect(
+      parseSendMessageRequestBody({
+        clientMessageId: "client-message-1",
+        target: {
+          type: "channel",
+          channelId: "channel-1",
+        },
+        content: {
+          type: "text",
+          text: `${"가".repeat(2_729)}😀a`,
+        },
+      }).ok,
+    ).toBe(true);
+  });
+
   it("accepts an ISO datetime with an explicit timezone offset", () => {
     expect(
       parseSendMessageRequestBody({

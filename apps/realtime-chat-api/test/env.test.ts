@@ -27,11 +27,86 @@ describe("realtime chat API runtime configuration", () => {
       }),
     ).toThrow(/REALTIME_CHAT_GATEWAY_TICKET_RAW_BYTES/);
   });
+
+  it("requires a Gateway service token with at least 32 UTF-8 bytes", () => {
+    expect(() =>
+      loadEnv({
+        ...requiredEnv(),
+        REALTIME_CHAT_GATEWAY_API_TOKEN: "short-token",
+      }),
+    ).toThrow(/32 UTF-8 bytes/);
+  });
+
+  it("requires the Hono Bearer token character policy", () => {
+    expect(() =>
+      loadEnv({
+        ...requiredEnv(),
+        REALTIME_CHAT_GATEWAY_API_TOKEN: `${"a".repeat(31)}:`,
+      }),
+    ).toThrow(/RFC 6750 Bearer token characters/);
+  });
+
+  it("requires an explicit TLS proof in production", () => {
+    expect(() =>
+      loadEnv({
+        ...requiredEnv(),
+        NODE_ENV: "production",
+      }),
+    ).toThrow(/TLS/);
+
+    expect(
+      loadEnv({
+        ...requiredEnv(),
+        NODE_ENV: "production",
+        REALTIME_CHAT_ACTOR_AUTH_SECURITY: "trusted-edge",
+        REALTIME_CHAT_INTERNAL_TRANSPORT_SECURITY: "service-mesh-tls",
+        REALTIME_CHAT_GATEWAY_URL: "wss://gateway.example.test/realtime-chat",
+      }).internalTransportSecurity,
+    ).toBe("service-mesh-tls");
+  });
+
+  it("requires an explicit trusted actor edge and WSS Gateway URL in production", () => {
+    expect(() =>
+      loadEnv({
+        ...requiredEnv(),
+        NODE_ENV: "production",
+        REALTIME_CHAT_INTERNAL_TRANSPORT_SECURITY: "direct-tls",
+        REALTIME_CHAT_GATEWAY_URL: "wss://gateway.example.test/realtime-chat",
+      }),
+    ).toThrow(/ACTOR_AUTH_SECURITY/);
+
+    expect(() =>
+      loadEnv({
+        ...requiredEnv(),
+        NODE_ENV: "production",
+        REALTIME_CHAT_ACTOR_AUTH_SECURITY: "trusted-edge",
+        REALTIME_CHAT_INTERNAL_TRANSPORT_SECURITY: "direct-tls",
+      }),
+    ).toThrow(/must use wss/);
+  });
+
+  it("parses only explicit HTTP CORS origins", () => {
+    expect(
+      loadEnv({
+        ...requiredEnv(),
+        REALTIME_CHAT_CORS_ALLOWED_ORIGINS:
+          "https://web.example.test,http://localhost:5173,https://web.example.test",
+      }).corsAllowedOrigins,
+    ).toEqual(["https://web.example.test", "http://localhost:5173"]);
+
+    expect(() =>
+      loadEnv({
+        ...requiredEnv(),
+        REALTIME_CHAT_CORS_ALLOWED_ORIGINS: "https://web.example.test/path",
+      }),
+    ).toThrow(/origins/);
+  });
 });
 
 function requiredEnv(): NodeJS.ProcessEnv {
   return {
     REALTIME_CHAT_DATABASE_URL: "postgres://localhost/wake_surfer",
+    REALTIME_CHAT_GATEWAY_API_TOKEN: "a".repeat(32),
     REALTIME_CHAT_GATEWAY_ID: "gateway-1",
     REALTIME_CHAT_GATEWAY_URL: "ws://localhost:3001/realtime-chat",
   };

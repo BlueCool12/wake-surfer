@@ -48,13 +48,23 @@ export async function createRuntimeDeps(
       ticketTtlMilliseconds: config.gatewayTicketTtlMilliseconds,
     });
 
-    await database.migrate();
-
     return {
       appDeps: {
         ...createHeaderAuthContext(config),
+        cors: {
+          allowedHeaders: [
+            "authorization",
+            "content-type",
+            "x-request-id",
+            config.gatewayIdHeader,
+            config.gatewayAssertedActorHeader,
+          ],
+          allowedOrigins: config.corsAllowedOrigins,
+        },
         gatewayTicket,
+        gatewayApiToken: config.gatewayApiToken,
         logger,
+        requestTimeoutMilliseconds: config.requestTimeoutMilliseconds,
       },
       close: async () => {
         await database.close();

@@ -40,6 +40,8 @@ export type MessageAppendResult =
 type MessageRow = {
   messageId?: unknown;
   streamId?: unknown;
+  streamTargetType?: unknown;
+  streamTargetId?: unknown;
   sequence?: unknown;
   senderActorId?: unknown;
   targetType?: unknown;
@@ -56,31 +58,37 @@ export async function findAcceptedMessageByClientMessageId(
     senderActorId: ActorId;
     streamId: StreamId;
     clientMessageId: ClientMessageId;
+    target: SendMessageTarget;
   },
 ): Promise<PublicMessage | undefined> {
   const row = await db
     .selectFrom("messages")
+    .innerJoin("message_streams", "message_streams.stream_id", "messages.stream_id")
     .select([
-      "message_id as messageId",
-      "stream_id as streamId",
-      "sequence",
-      "sender_actor_id as senderActorId",
-      "target_type as targetType",
-      "target_id as targetId",
-      "content_type as contentType",
-      "content_text as contentText",
-      "sent_at_client as sentAtClient",
-      "created_at as createdAt",
+      "messages.message_id as messageId",
+      "messages.stream_id as streamId",
+      "message_streams.target_type as streamTargetType",
+      "message_streams.target_id as streamTargetId",
+      "messages.sequence",
+      "messages.sender_actor_id as senderActorId",
+      "messages.target_type as targetType",
+      "messages.target_id as targetId",
+      "messages.content_type as contentType",
+      "messages.content_text as contentText",
+      "messages.sent_at_client as sentAtClient",
+      "messages.created_at as createdAt",
     ])
-    .where("sender_actor_id", "=", input.senderActorId)
-    .where("stream_id", "=", input.streamId)
-    .where("client_message_id", "=", input.clientMessageId)
+    .where("messages.sender_actor_id", "=", input.senderActorId)
+    .where("messages.stream_id", "=", input.streamId)
+    .where("messages.client_message_id", "=", input.clientMessageId)
     .$castTo<MessageRow>()
     .executeTakeFirst();
 
   if (!row) {
     return undefined;
   }
+
+  assertStreamTargetMatchesCommand(row.streamTargetType, row.streamTargetId, input.target);
 
   return parseMessageRow(row);
 }
@@ -105,17 +113,21 @@ export async function appendMessage(
       .onConflict((oc) => oc.column("stream_id").doNothing())
       .executeTakeFirstOrThrow();
 
-    await trx
+    const stream = await trx
       .selectFrom("message_streams")
-      .select("stream_id")
+      .select(["target_type as targetType", "target_id as targetId"])
       .where("stream_id", "=", input.streamId)
       .forUpdate()
+      .$castTo<{ targetType?: unknown; targetId?: unknown }>()
       .executeTakeFirstOrThrow();
+
+    assertStreamTargetMatchesCommand(stream.targetType, stream.targetId, input.target);
 
     const existing = await findAcceptedMessageByClientMessageId(trx, {
       senderActorId: input.senderActorId,
       streamId: input.streamId,
       clientMessageId: input.clientMessageId,
+      target: input.target,
     });
 
     if (existing) {
@@ -172,6 +184,19 @@ export async function appendMessage(
       message: parseMessageRow(row),
     };
   });
+}
+
+function assertStreamTargetMatchesCommand(
+  streamTargetType: unknown,
+  streamTargetId: unknown,
+  commandTarget: SendMessageTarget,
+): void {
+  if (
+    streamTargetType !== getMessageTargetType(commandTarget) ||
+    streamTargetId !== getMessageTargetId(commandTarget)
+  ) {
+    throw new Error("기존 메시지 stream의 target이 command target과 일치하지 않습니다.");
+  }
 }
 
 function parseMessageRow(row: MessageRow): PublicMessage {

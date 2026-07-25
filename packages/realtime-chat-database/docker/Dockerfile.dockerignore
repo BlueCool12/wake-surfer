@@ -1,0 +1,4 @@
+*
+!atlas.hcl
+!migrations/
+!migrations/**

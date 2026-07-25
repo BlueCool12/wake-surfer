@@ -3,22 +3,23 @@
   "version": "0.0.0",
   "private": true,
   "type": "commonjs",
-  "main": "./dist/index.js",
-  "module": "./dist/index.js",
-  "types": "./dist/index.d.ts",
+  "main": "./dist/cjs/index.js",
+  "module": "./dist/esm/index.js",
+  "types": "./dist/types/index.d.ts",
   "exports": {
     ".": {
-      "types": "./dist/index.d.ts",
-      "default": "./dist/index.js"
+      "types": "./dist/types/index.d.ts",
+      "import": "./dist/esm/index.js",
+      "require": "./dist/cjs/index.js"
     }
   },
   "files": [
     "dist"
   ],
   "scripts": {
-    "build": "pnpm --filter @wake-surfer/realtime-chat-message-contracts build && tsc -p tsconfig.json",
-    "clean": "tsc -b tsconfig.json --clean",
-    "test": "vitest run"
+    "build": "pnpm --filter @wake-surfer/realtime-chat-message-contracts build && node ../../scripts/manage-dual-package-output.mjs clean && tsc -p tsconfig.json && tsc -p tsconfig.cjs.json && node ../../scripts/manage-dual-package-output.mjs mark",
+    "clean": "node ../../scripts/manage-dual-package-output.mjs clean",
+    "test": "pnpm --filter @wake-surfer/realtime-chat-message-contracts build && vitest run"
   },
   "dependencies": {
     "@wake-surfer/realtime-chat-message-contracts": "workspace:*",

@@ -3,6 +3,10 @@ import type {
   PublicMessage,
   SendMessageResponse,
 } from "@wake-surfer/realtime-chat-message-send-contracts";
+import {
+  getUtf8ByteLength,
+  MAX_TEXT_UTF8_BYTES,
+} from "@wake-surfer/realtime-chat-message-contracts";
 import type { Kysely } from "kysely";
 import {
   assertActorId,
@@ -38,6 +42,7 @@ export type SendMessageDeps = {
       senderActorId: string;
       streamId: string;
       clientMessageId: string;
+      target: SendMessageCommand["target"];
     },
   ) => Promise<PublicMessage | undefined>;
   appendMessage: (
@@ -55,11 +60,22 @@ export async function sendMessage(
   assertClientMessageId(command.clientMessageId);
   assertMessageTarget(command.target);
 
-  if (command.content.type !== "text" || command.content.text.trim().length === 0) {
+  if (command.content.type !== "text") {
     return createRejectedResponse(command, "invalid_content");
   }
 
-  assertMessageContent(command.content);
+  const contentText = command.content.text.trim();
+
+  if (contentText.length === 0 || getUtf8ByteLength(contentText) > MAX_TEXT_UTF8_BYTES) {
+    return createRejectedResponse(command, "invalid_content");
+  }
+
+  const content = {
+    type: "text" as const,
+    text: contentText,
+  };
+
+  assertMessageContent(content);
 
   const resolvedTarget = await deps.resolveTarget({
     actorId: context.actorId,
@@ -76,6 +92,7 @@ export async function sendMessage(
     senderActorId: context.actorId,
     streamId: resolvedTarget.streamId,
     clientMessageId: command.clientMessageId,
+    target: command.target,
   });
 
   if (existing) {
@@ -105,10 +122,7 @@ export async function sendMessage(
     senderActorId: context.actorId,
     target: command.target,
     clientMessageId: command.clientMessageId,
-    content: {
-      type: "text",
-      text: command.content.text.trim(),
-    },
+    content,
     createdAt,
   };
 

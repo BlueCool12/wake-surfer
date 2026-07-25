@@ -8,7 +8,10 @@
     "lint": "eslint .",
     "format": "prettier . --write",
     "format:check": "prettier . --check",
-    "docker:up": "docker compose up -d",
+    "db:migrate:realtime-chat": "docker compose run --rm --build realtime-chat-migrate",
+    "db:validate:realtime-chat": "docker compose run --rm --build --no-deps realtime-chat-migrate migrate validate --dir file:///workspace/migrations",
+    "test:integration:realtime-chat": "pnpm --filter @wake-surfer/realtime-chat-database test:integration && pnpm --filter @wake-surfer/realtime-chat-stream-messages test:integration",
+    "docker:up": "docker compose up -d realtime-chat-postgres realtime-chat-redis && docker compose run --rm --build realtime-chat-migrate",
     "docker:down": "docker compose down",
     "docker:logs": "docker compose logs -f",
     "docker:ps": "docker compose ps"

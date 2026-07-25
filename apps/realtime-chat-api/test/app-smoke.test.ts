@@ -7,6 +7,8 @@ import { createRealtimeChatApiApp } from "../src/app.js";
 
 import type { RealtimeChatApiAppDeps } from "../src/app.js";
 
+const GATEWAY_API_TOKEN = "gateway-service-token-with-32-bytes";
+
 describe("realtime chat api app", () => {
   it("issues a gateway ticket from authenticated actor context", async () => {
     const issue = vi.fn(async () => ({
@@ -138,6 +140,7 @@ describe("realtime chat api app", () => {
         ticket: "ticket-1",
       }),
       headers: {
+        authorization: `Bearer ${GATEWAY_API_TOKEN}`,
         "content-type": "application/json",
         "x-gateway-id": "gateway-1",
       },
@@ -176,6 +179,7 @@ describe("realtime chat api app", () => {
         ticket: "ticket-1",
       }),
       headers: {
+        authorization: `Bearer ${GATEWAY_API_TOKEN}`,
         "content-type": "application/json",
         "x-gateway-id": "gateway-1",
       },
@@ -205,6 +209,7 @@ describe("realtime chat api app", () => {
         ticket: "ticket-1",
       }),
       headers: {
+        authorization: `Bearer ${GATEWAY_API_TOKEN}`,
         "content-type": "application/json",
         "x-gateway-id": "gateway-1",
       },
@@ -240,8 +245,182 @@ describe("realtime chat api app", () => {
       code: "gateway_ticket_unavailable",
       status: "error",
     });
-    expect(response.status).toBe(500);
+    expect(response.status).toBe(503);
     expect(logger.error).toHaveBeenCalled();
+  });
+
+  it("uses Hono Bearer authentication policy for internal routes", async () => {
+    const consume = vi.fn(async () => ({
+      status: "consumed" as const,
+      ticket: {
+        actorId: "actor-1",
+        consumedAt: "2026-07-09T00:00:10.000Z",
+      },
+    }));
+    const app = createRealtimeChatApiApp(createDeps({ consume }));
+    const request = (authorization?: string) =>
+      app.request("/internal/realtime-chat/gateway-tickets/consume", {
+        body: JSON.stringify({ ticket: "ticket-1" }),
+        headers: {
+          ...(authorization === undefined ? {} : { authorization }),
+          "content-type": "application/json",
+          "x-gateway-id": "gateway-1",
+        },
+        method: "POST",
+      });
+
+    const missing = await request();
+    const malformed = await request(`Basic ${GATEWAY_API_TOKEN}`);
+    const invalidTokenCharacters = await request(`Bearer ${"a".repeat(31)}:`);
+    const wrongToken = await request(`Bearer ${"b".repeat(32)}`);
+    const acceptedLowercasePrefix = await request(`bearer ${GATEWAY_API_TOKEN}`);
+
+    expect(missing.status).toBe(401);
+    await expect(missing.json()).resolves.toMatchObject({
+      code: "unauthenticated",
+      status: "error",
+    });
+    expect(missing.headers.get("www-authenticate")).toContain("Bearer");
+    expect(malformed.status).toBe(400);
+    await expect(malformed.json()).resolves.toMatchObject({
+      code: "bad_request",
+      status: "error",
+    });
+    expect(malformed.headers.get("www-authenticate")).toContain('error="invalid_request"');
+    expect(invalidTokenCharacters.status).toBe(400);
+    expect(wrongToken.status).toBe(401);
+    expect(wrongToken.headers.get("www-authenticate")).toContain('error="invalid_token"');
+    expect(acceptedLowercasePrefix.status).toBe(200);
+    expect(consume).toHaveBeenCalledOnce();
+  });
+
+  it("mounts each app-owned Stream Messages route only when its usecase is provided", async () => {
+    const streamResponse = {
+      status: "success" as const,
+      page: {
+        throughSequence: 0,
+        messages: [],
+        nextBeforeSequence: null,
+        hasMoreBefore: false,
+      },
+    };
+    const loadLatest = vi.fn(async () => streamResponse);
+    const enabled = createRealtimeChatApiApp(
+      createDeps({
+        loadLatestMessages: loadLatest,
+      }),
+    );
+    const disabled = createRealtimeChatApiApp(createDeps());
+
+    const enabledResponse = await enabled.request(
+      "/realtime-chat/channels/channel-api/messages/latest",
+      {
+        headers: {
+          "x-actor-id": "actor-api",
+          "x-request-id": "request-api-stream",
+        },
+      },
+    );
+    const disabledResponse = await disabled.request(
+      "/realtime-chat/channels/channel-api/messages/latest",
+      { headers: { "x-actor-id": "actor-api" } },
+    );
+    const unprovidedOlderResponse = await enabled.request(
+      "/realtime-chat/channels/channel-api/messages/older?beforeSequence=1",
+      { headers: { "x-actor-id": "actor-api" } },
+    );
+
+    expect(enabledResponse.status).toBe(200);
+    expect(enabledResponse.headers.get("x-request-id")).toBe("request-api-stream");
+    expect(loadLatest).toHaveBeenCalled();
+    expect(disabledResponse.status).toBe(404);
+    expect(unprovidedOlderResponse.status).toBe(404);
+  });
+
+  it("maps feature-neutral boundary failures to internal_error", async () => {
+    const app = createRealtimeChatApiApp(
+      createDeps({
+        authenticateActor: () => {
+          throw new Error("auth provider unavailable");
+        },
+      }),
+    );
+
+    const response = await app.request("/realtime-chat/gateway-tickets", {
+      method: "POST",
+    });
+
+    expect(response.status).toBe(500);
+    await expect(response.json()).resolves.toMatchObject({
+      code: "internal_error",
+      status: "error",
+    });
+  });
+
+  it("allows browser GET preflight only for configured origins", async () => {
+    const app = createRealtimeChatApiApp(
+      createDeps({
+        cors: {
+          allowedHeaders: ["content-type", "x-actor-id", "x-request-id"],
+          allowedOrigins: ["https://web.example.test"],
+        },
+      }),
+    );
+
+    const allowed = await app.request("/realtime-chat/channels/channel-api/messages/latest", {
+      headers: {
+        origin: "https://web.example.test",
+        "access-control-request-method": "GET",
+      },
+      method: "OPTIONS",
+    });
+    const denied = await app.request("/realtime-chat/channels/channel-api/messages/latest", {
+      headers: {
+        origin: "https://attacker.example.test",
+        "access-control-request-method": "GET",
+      },
+      method: "OPTIONS",
+    });
+
+    expect(allowed.status).toBe(204);
+    expect(allowed.headers.get("access-control-allow-origin")).toBe("https://web.example.test");
+    expect(allowed.headers.get("access-control-allow-methods")).toContain("GET");
+    expect(denied.headers.get("access-control-allow-origin")).toBeNull();
+  });
+
+  it("keeps ticket and Stream Messages timeout codes feature-specific", async () => {
+    const delayed = () => new Promise<never>(() => undefined);
+    const ticketApp = createRealtimeChatApiApp(
+      createDeps({
+        issue: vi.fn(delayed),
+        requestTimeoutMilliseconds: 5,
+      }),
+    );
+    const streamApp = createRealtimeChatApiApp(
+      createDeps({
+        loadLatestMessages: vi.fn(delayed),
+        loadOlderMessages: vi.fn(delayed),
+        requestTimeoutMilliseconds: 5,
+      }),
+    );
+
+    const [ticket, stream] = await Promise.all([
+      ticketApp.request("/realtime-chat/gateway-tickets", {
+        headers: { "x-actor-id": "actor-timeout" },
+        method: "POST",
+      }),
+      streamApp.request("/realtime-chat/channels/channel-timeout/messages/latest", {
+        headers: { "x-actor-id": "actor-timeout" },
+      }),
+    ]);
+
+    await expect(ticket.json()).resolves.toMatchObject({
+      code: "gateway_ticket_unavailable",
+    });
+    await expect(stream.json()).resolves.toMatchObject({
+      code: "stream_messages_unavailable",
+      retryable: true,
+    });
   });
 });
 
@@ -262,6 +441,7 @@ function createDeps(
       ((request) => ({
         gatewayId: request.headers.get("x-gateway-id") ?? "",
       })),
+    ...(overrides.cors === undefined ? {} : { cors: overrides.cors }),
     gatewayTicket: overrides.gatewayTicket ?? {
       consume:
         overrides.consume ??
@@ -280,7 +460,23 @@ function createDeps(
           ticket: "ticket-1",
         })),
     },
+    gatewayApiToken: overrides.gatewayApiToken ?? GATEWAY_API_TOKEN,
     logger: overrides.logger ?? createLogger(),
+    ...(overrides.requestTimeoutMilliseconds === undefined
+      ? {}
+      : { requestTimeoutMilliseconds: overrides.requestTimeoutMilliseconds }),
+    ...(overrides.getAssertedActor === undefined
+      ? {}
+      : { getAssertedActor: overrides.getAssertedActor }),
+    ...(overrides.loadLatestMessages === undefined
+      ? {}
+      : { loadLatestMessages: overrides.loadLatestMessages }),
+    ...(overrides.loadOlderMessages === undefined
+      ? {}
+      : { loadOlderMessages: overrides.loadOlderMessages }),
+    ...(overrides.syncAfterMessages === undefined
+      ? {}
+      : { syncAfterMessages: overrides.syncAfterMessages }),
   };
 }
 

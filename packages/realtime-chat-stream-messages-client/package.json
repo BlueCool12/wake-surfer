@@ -1,0 +1,31 @@
+{
+  "name": "@wake-surfer/realtime-chat-stream-messages-client",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "pnpm --filter @wake-surfer/realtime-chat-gateway-ticket-contracts build && pnpm --filter @wake-surfer/realtime-chat-message-contracts build && pnpm --filter @wake-surfer/realtime-chat-stream-messages-contracts build && tsc -p tsconfig.json",
+    "clean": "tsc -b tsconfig.json --clean",
+    "test": "pnpm run build && vitest run",
+    "typecheck": "tsc -p tsconfig.test.json"
+  },
+  "dependencies": {
+    "@wake-surfer/realtime-chat-gateway-ticket-contracts": "workspace:*",
+    "@wake-surfer/realtime-chat-message-contracts": "workspace:*",
+    "@wake-surfer/realtime-chat-stream-messages-contracts": "workspace:*"
+  },
+  "devDependencies": {
+    "vitest": "4.1.6"
+  }
+}

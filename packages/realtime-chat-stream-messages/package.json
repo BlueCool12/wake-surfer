@@ -1,0 +1,37 @@
+{
+  "name": "@wake-surfer/realtime-chat-stream-messages",
+  "version": "0.0.0",
+  "private": true,
+  "type": "commonjs",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./table-contract": {
+      "types": "./dist/table-contract.d.ts",
+      "default": "./dist/table-contract.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "clean": "tsc -b tsconfig.json --clean",
+    "test": "pnpm run build && vitest run --config vitest.config.mts",
+    "test:integration": "pnpm run build && pnpm --filter @wake-surfer/realtime-chat-database build && vitest run --config vitest.integration.config.mts",
+    "typecheck": "tsc -p tsconfig.test.json"
+  },
+  "dependencies": {
+    "kysely": "0.28.8"
+  },
+  "devDependencies": {
+    "@types/node": "^24.13.2",
+    "@wake-surfer/realtime-chat-database": "workspace:*",
+    "vitest": "4.1.6"
+  }
+}

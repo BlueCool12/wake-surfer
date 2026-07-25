@@ -34,7 +34,10 @@ export default defineConfig([
   {
     name: "wake-surfer/realtime-chat-table-contract-boundary",
     files: ["apps/**/*.{ts,tsx,mts,cts}", "packages/**/src/**/*.{ts,tsx,mts,cts}"],
-    ignores: ["packages/realtime-chat-database/src/**/*.{ts,tsx,mts,cts}"],
+    ignores: [
+      "packages/realtime-chat-database/src/**/*.{ts,tsx,mts,cts}",
+      "packages/realtime-chat-stream-messages/src/**/*.{ts,tsx,mts,cts}",
+    ],
     rules: {
       "no-restricted-imports": [
         "error",
