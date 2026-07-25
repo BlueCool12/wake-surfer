@@ -1,6 +1,10 @@
 import type { OAuthConfig } from "../domain/oauth-config";
 import type { OAuthCsrfStateStorePort } from "../runtime-deps";
 import {
+  fetchGithubUserByCode,
+  type FetchGithubUserByCodeResult,
+} from "./fetch-github-user-by-code.usecase";
+import {
   handleGithubCallback,
   type HandleGithubCallbackResult,
 } from "./handle-github-callback.usecase";
@@ -14,6 +18,8 @@ export type OAuthUsecases = {
     stateStore: OAuthCsrfStateStorePort,
     query: Readonly<Record<string, unknown>>,
   ) => Promise<HandleGithubCallbackResult>;
+  /** 콜백에서 확보한 code로 GitHub 사용자 정보(id·login·email)를 가져온다. */
+  fetchGithubUserByCode: (code: string) => Promise<FetchGithubUserByCodeResult>;
 };
 
 /**
@@ -24,5 +30,6 @@ export function createOAuthUsecases(config: OAuthConfig): OAuthUsecases {
   return {
     startGithubLogin: (stateStore) => startGithubLogin({ config, stateStore }),
     handleGithubCallback: (stateStore, query) => handleGithubCallback({ query, stateStore }),
+    fetchGithubUserByCode: (code) => fetchGithubUserByCode({ config, code }),
   };
 }
