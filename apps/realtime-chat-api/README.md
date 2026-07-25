@@ -87,11 +87,12 @@ not come from the client request body.
 
 - `docker/compose.yml`: API container, 상태 확인, 공개 포트와 내부 의존성
 - `docker/runtime.dev.env`: container 내부 개발 runtime 환경
-- `docker/Dockerfile`: 의존성 설치·esbuild 번들·Node runtime image를 분리한 다단계 빌드
+- `docker/Dockerfile`: 사전 생성된 esbuild 번들만 복사하는 Node runtime image
+- `docker/Dockerfile.dockerignore`: image 입력을 `dist/main.mjs`로 제한
 - `docker/volumes/`: API가 향후 소유할 volume mount content 경계
 
-Dockerfile의 builder stage가 고정된 pnpm lockfile로 workspace 의존성을 설치하고 TypeScript 검사를
-거쳐 `dist/main.mjs` 실행 번들을 만든다. runtime stage에는 이 번들만 복사한다.
+배포 스크립트가 호스트에서 TypeScript 검사와 esbuild를 실행해 `dist/main.mjs`를 먼저 만든다.
+Dockerfile은 프로젝트를 빌드하거나 의존성을 설치하지 않고 이 번들만 runtime image에 복사한다.
 
 ```bash
 npm run deploy -- realtime-chat-api

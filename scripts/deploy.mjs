@@ -3,7 +3,15 @@ import process from "node:process";
 import { fileURLToPath, URL } from "node:url";
 
 const workspaceRoot = fileURLToPath(new URL("..", import.meta.url));
-const appServices = ["realtime-chat-api", "realtime-chat-gateway", "web"];
+const appBuilds = new Map([
+  ["realtime-chat-api", ["--filter", "@wake-surfer/realtime-chat-api", "run", "build:bundle"]],
+  [
+    "realtime-chat-gateway",
+    ["--filter", "@wake-surfer/realtime-chat-gateway", "run", "build:bundle"],
+  ],
+  ["web", ["--filter", "web", "run", "build"]],
+]);
+const appServices = [...appBuilds.keys()];
 const requestedTarget = process.argv[2] ?? "all";
 
 if (
@@ -21,6 +29,18 @@ if (
 }
 
 async function deploy(target) {
+  const targets = target === "all" ? appServices : [target];
+
+  for (const service of targets) {
+    const buildArgs = appBuilds.get(service);
+
+    if (buildArgs === undefined) {
+      throw new Error(`알 수 없는 앱 서비스: ${service}`);
+    }
+
+    await runCommand("pnpm", buildArgs);
+  }
+
   if (target === "all") {
     await runDockerCompose([
       "up",
@@ -33,8 +53,6 @@ async function deploy(target) {
     ]);
     await runDockerCompose(["run", "--rm", "--build", "realtime-chat-migrate"]);
   }
-
-  const targets = target === "all" ? appServices : [target];
 
   await runDockerCompose([
     "up",
@@ -50,8 +68,15 @@ async function deploy(target) {
 }
 
 function runDockerCompose(args) {
+  return runCommand("docker", ["compose", ...args]);
+}
+
+function runCommand(command, args) {
   return new Promise((resolvePromise, rejectPromise) => {
-    const child = spawn("docker", ["compose", ...args], {
+    const usesWindowsCommandShim = process.platform === "win32" && command === "pnpm";
+    const executable = usesWindowsCommandShim ? (process.env.ComSpec ?? "cmd.exe") : command;
+    const executableArgs = usesWindowsCommandShim ? ["/d", "/s", "/c", "pnpm.cmd", ...args] : args;
+    const child = spawn(executable, executableArgs, {
       cwd: workspaceRoot,
       env: process.env,
       stdio: "inherit",
@@ -67,7 +92,7 @@ function runDockerCompose(args) {
 
       rejectPromise(
         new Error(
-          `docker compose ${args.join(" ")} 실패 (code=${String(code)}, signal=${String(signal)})`,
+          `${command} ${args.join(" ")} 실패 (code=${String(code)}, signal=${String(signal)})`,
         ),
       );
     });

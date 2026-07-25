@@ -11,5 +11,5 @@ Stream Messages HTTP route, actor 인증 연결, final-envelope budget, 오류 m
 `src/features/stream-messages`에서 app이 소유한다. provider의 `owner-docs`, `AGENTS.md` 또는 `src/`를
 consumer context나 deep import 대상으로 사용하지 않는다.
 
-이 app의 container 계약과 환경 파일은 `docker/`가 소유한다. 다단계 Dockerfile의 builder stage가
-workspace 의존성 설치와 실행 번들 생성을 소유하고, runtime stage에는 실행 번들만 포함한다.
+이 app의 container 계약과 환경 파일은 `docker/`가 소유한다. 프로젝트 빌드와 의존성 설치는
+Docker 밖에서 완료하며, Dockerfile은 사전 생성된 로컬 실행 번들만 runtime image에 복사한다.

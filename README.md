@@ -10,9 +10,9 @@ pnpm install
 
 ### 실제 채팅 MVP Docker 실행
 
-Docker가 실행 중인 상태에서 다음 표준 명령 하나로 PostgreSQL·Redis·migration과
-Realtime Chat API·Gateway·Web 전체를 배포합니다. 각 앱의 다단계 Dockerfile이 builder stage에서
-의존성 설치와 앱 빌드를 수행하고, runtime stage에는 실행 산출물만 복사합니다.
+Docker가 실행 중인 상태에서 다음 표준 명령 하나로 앱을 로컬 빌드하고 PostgreSQL·Redis·migration과
+Realtime Chat API·Gateway·Web 전체를 배포합니다. 각 앱의 Dockerfile은 프로젝트를 빌드하지 않고
+로컬에서 미리 생성한 실행 산출물만 runtime image에 복사합니다.
 
 ```bash
 npm run deploy
@@ -38,8 +38,9 @@ npm run deploy -- realtime-chat-gateway
 npm run deploy -- web
 ```
 
-API·Gateway는 builder stage에서 esbuild 실행 번들을 만들고, Web은 Vite 정적 번들을 만듭니다.
-호스트의 `node_modules`나 별도 `.deploy` 작업공간은 이미지 입력으로 사용하지 않습니다.
+배포 스크립트는 API·Gateway의 esbuild 실행 번들과 Web의 Vite 정적 번들을 호스트에서 먼저 만듭니다.
+Docker build context는 각 앱 모듈로 제한하며 `Dockerfile.dockerignore`를 통해 `dist`와 필요한
+runtime 설정만 이미지 입력으로 전달합니다.
 
 서비스 상태와 로그는 루트 Compose에서 서비스 이름으로 확인합니다.
 
@@ -75,8 +76,8 @@ docker-compose.yml
 - `apps/*`: 앱별 runtime image와 독립 배포 계약
 
 Compose `include`는 포함된 파일을 독립 application model로 읽고 상대 경로를 각 파일 기준으로
-해석합니다. 앱 이미지 빌드는 monorepo workspace를 읽기 위해 저장소 루트를 build context로 사용하며,
-각 Dockerfile의 최종 runtime stage에는 해당 앱의 실행 산출물만 남깁니다.
+해석합니다. 앱 image build는 각 모듈을 최소 build context로 사용하며, Dockerfile은 로컬 `dist`와
+최소 runtime 설정만 복사합니다.
 
 - [Docker Compose include](https://docs.docker.com/reference/compose-file/include/)
 
