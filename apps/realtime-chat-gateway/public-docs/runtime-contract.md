@@ -17,7 +17,6 @@ draining 중 readiness는 `503 { "status": "not_ready" }`를 반환하고 새 We
 ## WebSocket 연결
 
 - 브라우저는 `?ticket=...` query parameter로 일회성 ticket을 전달한다.
-- 사용자 지정 헤더를 쓸 수 있는 클라이언트는 `REALTIME_CHAT_GATEWAY_TICKET_HEADER`도 사용할 수 있다.
 - ticket은 짧은 TTL과 일회성 소비를 전제로 한다. 프록시와 접근 로그는 ticket query를 기록하지 않거나
   가려야 한다.
 - `REALTIME_CHAT_GATEWAY_ALLOWED_ORIGINS`가 설정되면 일치하는 `Origin`이 있는 upgrade만 허용한다.
@@ -39,22 +38,23 @@ heartbeat에 응답하지 않는 연결은 정상 close handshake를 기다리�
 
 | 설정 | 기본값 | 의미 |
 | --- | ---: | --- |
-| `REALTIME_CHAT_GATEWAY_ALLOWED_ORIGINS` | 빈 값 | 쉼표로 구분한 허용 origin |
+| `REALTIME_CHAT_GATEWAY_ALLOWED_ORIGINS` | `http://localhost:5173` | 쉼표로 구분한 허용 origin |
 | `REALTIME_CHAT_GATEWAY_MAX_PAYLOAD_BYTES` | `65536` | WebSocket frame payload 상한 |
 | `REALTIME_CHAT_GATEWAY_MAX_CONNECTIONS` | `10000` | 프로세스 전체 연결 상한 |
 | `REALTIME_CHAT_GATEWAY_MAX_PENDING_AUTHENTICATIONS` | `256` | 동시 ticket 인증 대기 상한 |
 | `REALTIME_CHAT_GATEWAY_HEARTBEAT_INTERVAL_MS` | `30000` | ping 주기 |
-| `REALTIME_CHAT_API_REQUEST_TIMEOUT_MS` | `6000` | ticket consume 제한 시간 |
-| `REALTIME_CHAT_GATEWAY_SHUTDOWN_GRACE_MS` | `10000` | 종료 drain 유예 시간 |
+| `REALTIME_CHAT_API_REQUEST_TIMEOUT_MS` | `10000` | 내부 API 요청 제한 시간 |
+| `REALTIME_CHAT_GATEWAY_SHUTDOWN_GRACE_MS` | `5000` | 종료 drain 유예 시간 |
 
 Node HTTP 헤더, 요청, keep-alive 제한은 각각
 `REALTIME_CHAT_GATEWAY_HTTP_HEADERS_TIMEOUT_MS`, `REALTIME_CHAT_GATEWAY_HTTP_REQUEST_TIMEOUT_MS`,
 `REALTIME_CHAT_GATEWAY_HTTP_KEEP_ALIVE_TIMEOUT_MS`로 설정한다.
 
-Gateway의 API 요청 제한 시간은 API 서버의 handler 제한 시간보다 길게 설정해야 한다. API가 ticket 소비의
-성공 또는 실패를 확정하기 전에 Gateway가 연결을 닫지 않도록 기본값은 API handler 기본값보다 1초 길다.
+Gateway의 API 요청 제한 시간은 API 서버의 ticket operation deadline보다 길게 설정해야 한다. API가
+ticket 소비의 성공 또는 실패를 확정하기 전에 Gateway가 연결을 닫지 않도록 기본값은 operation
+deadline보다 길다.
 
 ## 현재 범위
 
-현재 공개 계약은 연결 수락과 ticket 인증까지다. 메시지 envelope, ACK, 재시도, outbound fan-out,
-presence와 재연결 의미론은 아직 이 계약에 포함하지 않는다.
+현재 인스턴스는 channel join, 메시지 전송·fan-out, Stream Messages sync를 지원한다. 다중 Gateway 간
+fan-out, durable broker, ACK·재시도, presence와 재연결 의미론은 아직 이 계약에 포함하지 않는다.

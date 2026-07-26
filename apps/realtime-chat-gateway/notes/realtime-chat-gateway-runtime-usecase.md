@@ -132,7 +132,7 @@ gateway는 `createRealtimeChatGatewayApp()` 팩터리 안에서 필요한 `Map`,
 소유합니다. 별도의 GatewayApplication 클래스나 SessionManager 상속 계층을 만들지 않습니다.
 
 * upgrade 검사, ticket 추출, API 요청, HTTP 응답, heartbeat, 종료를 작은 함수로 분리합니다.
-* 외부 의존성은 `gatewayTicketConsumer`와 `logger` 함수 계약으로 주입합니다.
+* 외부 의존성은 `gatewayApiClient`, `streamMessagesApiClient`, `logger` 함수 계약으로 주입합니다.
 * 변경 가능한 collection은 팩터리 밖으로 내보내지 않고 count 조회 함수만 제공합니다.
 * Node `Server`와 `WebSocket`은 프레임워크 경계 자원으로만 사용합니다.
 

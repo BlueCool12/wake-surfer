@@ -2,8 +2,10 @@ import type { IncomingMessage } from "node:http";
 
 export type UpgradePolicyInput = {
   allowedOrigins: string[];
+  clientCount: number;
   gatewayPath: string;
   isClosing: boolean;
+  maxConnections: number;
 };
 
 export type UpgradeRejection = {
@@ -16,6 +18,10 @@ export function evaluateUpgrade(
   input: UpgradePolicyInput,
 ): UpgradeRejection | null {
   if (input.isClosing) {
+    return { reason: "Service Unavailable", status: 503 };
+  }
+
+  if (input.clientCount >= input.maxConnections) {
     return { reason: "Service Unavailable", status: 503 };
   }
 

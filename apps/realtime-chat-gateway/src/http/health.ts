@@ -5,13 +5,25 @@ import { pathnameFromRequest } from "../connection/upgrade-policy.js";
 export function respondToHttpRequest(
   request: IncomingMessage,
   response: ServerResponse,
-  isClosing: boolean,
+  isDraining: boolean,
 ): void {
   const pathname = pathnameFromRequest(request);
 
   if (request.method === "GET" && pathname === "/health") {
-    writeJson(response, isClosing ? 503 : 200, {
-      status: isClosing ? "not_ready" : "ok",
+    writeJson(response, 200, {
+      status: "ok",
+    });
+    return;
+  }
+
+  if (request.method === "GET" && pathname === "/health/live") {
+    writeJson(response, 200, { status: "ok" });
+    return;
+  }
+
+  if (request.method === "GET" && pathname === "/health/ready") {
+    writeJson(response, isDraining ? 503 : 200, {
+      status: isDraining ? "not_ready" : "ready",
     });
     return;
   }

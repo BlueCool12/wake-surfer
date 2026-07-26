@@ -9,10 +9,16 @@ export type RealtimeChatGatewayConfig = {
   gatewayApiToken: string;
   gatewayId: string;
   gatewayPath: string;
+  heartbeatIntervalMilliseconds: number;
   host: string;
+  httpHeadersTimeoutMilliseconds: number;
+  httpKeepAliveTimeoutMilliseconds: number;
+  httpRequestTimeoutMilliseconds: number;
   internalTransportSecurity: "development" | "direct-tls" | "service-mesh-tls";
   logLevel: string;
+  maxConnections: number;
   maxPayloadBytes: number;
+  maxPendingAuthentications: number;
   nodeEnvironment: "development" | "production" | "test";
   port: number;
   shutdownGraceMilliseconds: number;
@@ -23,6 +29,27 @@ export function loadEnv(env: NodeJS.ProcessEnv = process.env): RealtimeChatGatew
   const internalTransportSecurity = readInternalTransportSecurity(env);
   const apiBaseUrl = readHttpUrl(env, "REALTIME_CHAT_API_BASE_URL");
   const gatewayApiToken = readRequiredString(env, "REALTIME_CHAT_GATEWAY_API_TOKEN");
+  const httpHeadersTimeoutMilliseconds = readInteger(
+    env,
+    "REALTIME_CHAT_GATEWAY_HTTP_HEADERS_TIMEOUT_MS",
+    5_000,
+    { min: 1 },
+  );
+  const httpRequestTimeoutMilliseconds = readInteger(
+    env,
+    "REALTIME_CHAT_GATEWAY_HTTP_REQUEST_TIMEOUT_MS",
+    10_000,
+    { min: 1 },
+  );
+  const maxConnections = readInteger(env, "REALTIME_CHAT_GATEWAY_MAX_CONNECTIONS", 10_000, {
+    min: 1,
+  });
+  const maxPendingAuthentications = readInteger(
+    env,
+    "REALTIME_CHAT_GATEWAY_MAX_PENDING_AUTHENTICATIONS",
+    256,
+    { min: 1 },
+  );
 
   if (new TextEncoder().encode(gatewayApiToken).byteLength < 32) {
     throw new Error("REALTIME_CHAT_GATEWAY_API_TOKEN must contain at least 32 UTF-8 bytes");
@@ -40,6 +67,18 @@ export function loadEnv(env: NodeJS.ProcessEnv = process.env): RealtimeChatGatew
 
   if (internalTransportSecurity === "direct-tls" && !apiBaseUrl.startsWith("https:")) {
     throw new Error("direct-tls requires an HTTPS REALTIME_CHAT_API_BASE_URL");
+  }
+
+  if (httpHeadersTimeoutMilliseconds > httpRequestTimeoutMilliseconds) {
+    throw new Error(
+      "REALTIME_CHAT_GATEWAY_HTTP_HEADERS_TIMEOUT_MS must be less than or equal to REALTIME_CHAT_GATEWAY_HTTP_REQUEST_TIMEOUT_MS",
+    );
+  }
+
+  if (maxPendingAuthentications > maxConnections) {
+    throw new Error(
+      "REALTIME_CHAT_GATEWAY_MAX_PENDING_AUTHENTICATIONS must be less than or equal to REALTIME_CHAT_GATEWAY_MAX_CONNECTIONS",
+    );
   }
 
   return {
@@ -60,12 +99,28 @@ export function loadEnv(env: NodeJS.ProcessEnv = process.env): RealtimeChatGatew
     gatewayApiToken,
     gatewayId: readRequiredString(env, "REALTIME_CHAT_GATEWAY_ID"),
     gatewayPath: readPath(env, "REALTIME_CHAT_GATEWAY_PATH", "/realtime-chat"),
+    heartbeatIntervalMilliseconds: readInteger(
+      env,
+      "REALTIME_CHAT_GATEWAY_HEARTBEAT_INTERVAL_MS",
+      30_000,
+      { min: 1 },
+    ),
     host: readOptionalString(env, "HOST", "0.0.0.0"),
+    httpHeadersTimeoutMilliseconds,
+    httpKeepAliveTimeoutMilliseconds: readInteger(
+      env,
+      "REALTIME_CHAT_GATEWAY_HTTP_KEEP_ALIVE_TIMEOUT_MS",
+      5_000,
+      { min: 1 },
+    ),
+    httpRequestTimeoutMilliseconds,
     internalTransportSecurity,
     logLevel: readOptionalString(env, "LOG_LEVEL", "info"),
+    maxConnections,
     maxPayloadBytes: readInteger(env, "REALTIME_CHAT_GATEWAY_MAX_PAYLOAD_BYTES", 65_536, {
       min: 1,
     }),
+    maxPendingAuthentications,
     nodeEnvironment,
     port: readInteger(env, "PORT", 3001, { max: 65_535, min: 1 }),
     shutdownGraceMilliseconds: readInteger(env, "REALTIME_CHAT_GATEWAY_SHUTDOWN_GRACE_MS", 5_000, {

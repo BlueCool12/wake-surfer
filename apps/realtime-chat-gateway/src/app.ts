@@ -20,6 +20,7 @@ import {
 } from "@wake-surfer/realtime-chat-stream-messages-gateway";
 import { WebSocket, WebSocketServer, type RawData } from "ws";
 
+import { createGatewayHeartbeat } from "./connection/heartbeat.js";
 import { evaluateUpgrade } from "./connection/upgrade-policy.js";
 import type { RealtimeChatGatewayConfig } from "./config/env.js";
 import { respondToHttpRequest } from "./http/health.js";
@@ -55,6 +56,7 @@ export type RealtimeChatGatewayApp = {
   address: () => AddressInfo | string | null;
   close: () => Promise<void>;
   listen: (options?: { host?: string; port?: number }) => Promise<void>;
+  pendingAuthenticationCount: () => number;
   sessionCount: () => number;
 };
 
@@ -66,6 +68,7 @@ export function createRealtimeChatGatewayApp(
   const now = deps.now ?? (() => new Date());
   const sessionsById = new Map<string, LocalGatewaySession>();
   const sessionsBySocket = new Map<WebSocket, LocalGatewaySession>();
+  const pendingAuthentications = new Set<WebSocket>();
   const streamSyncListeners = new Set<StreamSyncListener>();
   const sessionClosedListeners = new Set<SessionClosedListener>();
   const messageSendAbortController = new AbortController();
@@ -77,9 +80,21 @@ export function createRealtimeChatGatewayApp(
     noServer: true,
     perMessageDeflate: false,
   });
-  const httpServer = createServer((request, response) => {
-    respondToHttpRequest(request, response, isClosing);
-  });
+  const heartbeat = createGatewayHeartbeat(
+    websocketServer.clients,
+    config.heartbeatIntervalMilliseconds,
+    deps.logger,
+  );
+  const httpServer = createServer(
+    {
+      headersTimeout: config.httpHeadersTimeoutMilliseconds,
+      keepAliveTimeout: config.httpKeepAliveTimeoutMilliseconds,
+      requestTimeout: config.httpRequestTimeoutMilliseconds,
+    },
+    (request, response) => {
+      respondToHttpRequest(request, response, isClosing);
+    },
+  );
   const streamMessagesRuntime: GatewayStreamMessagesRuntime = {
     closeSession: (sessionId, connectionGeneration, code) => {
       const session = getCurrentSession(sessionId, connectionGeneration);
@@ -117,8 +132,10 @@ export function createRealtimeChatGatewayApp(
   httpServer.on("upgrade", (request, socket, head) => {
     const rejection = evaluateUpgrade(request, {
       allowedOrigins: config.allowedOrigins,
+      clientCount: websocketServer.clients.size,
       gatewayPath: config.gatewayPath,
       isClosing,
+      maxConnections: config.maxConnections,
     });
 
     if (rejection !== null) {
@@ -144,7 +161,12 @@ export function createRealtimeChatGatewayApp(
         closeIfOpen(websocket, 1011, "frame handling failed");
       });
     });
+    websocket.on("pong", () => {
+      heartbeat.markAlive(websocket);
+    });
     websocket.once("close", () => {
+      heartbeat.forget(websocket);
+      pendingAuthentications.delete(websocket);
       const session = sessionsBySocket.get(websocket);
 
       if (session !== undefined) {
@@ -152,10 +174,20 @@ export function createRealtimeChatGatewayApp(
       }
     });
 
-    void authenticateConnection(websocket, request.url).catch((error: unknown) => {
-      deps.logger.warn({ error: serializeError(error) }, "실시간 채팅 게이트웨이 티켓 인증 실패");
-      closeIfOpen(websocket, 1011, "ticket service unavailable");
-    });
+    if (pendingAuthentications.size >= config.maxPendingAuthentications) {
+      closeIfOpen(websocket, 1013, "too many pending authentications");
+      return;
+    }
+
+    pendingAuthentications.add(websocket);
+    void authenticateConnection(websocket, request.url)
+      .catch((error: unknown) => {
+        deps.logger.warn({ error: serializeError(error) }, "실시간 채팅 게이트웨이 티켓 인증 실패");
+        closeIfOpen(websocket, 1011, "ticket service unavailable");
+      })
+      .finally(() => {
+        pendingAuthentications.delete(websocket);
+      });
   });
 
   websocketServer.on("error", (error) => {
@@ -404,6 +436,7 @@ export function createRealtimeChatGatewayApp(
     close: () => {
       isClosing = true;
       closePromise ??= (async () => {
+        heartbeat.close();
         messageSendAbortController.abort(new Error("Gateway is shutting down"));
         unregisterStreamMessagesRelay();
         await closeServers(
@@ -420,6 +453,7 @@ export function createRealtimeChatGatewayApp(
         host: options?.host ?? config.host,
         port: options?.port ?? config.port,
       }),
+    pendingAuthenticationCount: () => pendingAuthentications.size,
     sessionCount: () => sessionsById.size,
   };
 }

@@ -3,15 +3,21 @@
 실시간 채팅의 단일 인스턴스 MVP WebSocket 게이트웨이다. API가 발급한 일회성 티켓을 소비해 actor를
 확정하고, 로컬 세션과 channel 구독을 유지한다.
 
+배포·클라이언트가 의존할 수 있는 연결 제한, heartbeat, 상태 확인과 종료 의미는
+`apps/realtime-chat-gateway/public-docs/runtime-contract.md`에 정의한다.
+
 ## 실행 경계
 
 - `GET /health`
+- `GET /health/live`
+- `GET /health/ready`
 - `WS /realtime-chat?ticket=<one-time-ticket>`
 - 기본 포트: `3001`
 - 기본 허용 Origin: `http://localhost:5173`
 
 WebSocket upgrade는 설정된 path와 Origin이 모두 일치해야 한다. 브라우저가 사용자 지정 WebSocket
-header를 보낼 수 없으므로 티켓은 query parameter로 받는다.
+header를 보낼 수 없으므로 티켓은 query parameter로 받는다. 전체 연결과 동시 ticket 인증 대기에는
+각각 별도 상한을 적용하고, ping/pong heartbeat로 응답하지 않는 연결을 정리한다.
 
 게이트웨이가 API를 호출할 때는 다음 서버 신뢰 정보를 직접 추가한다.
 

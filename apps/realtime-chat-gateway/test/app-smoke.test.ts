@@ -13,10 +13,17 @@ import type { AppLogger } from "../src/runtime/logger.js";
 describe("realtime chat gateway app", () => {
   it("serves health and rejects an invalid WebSocket origin or path", async () => {
     const fixture = await createFixture();
-    const health = await fetch(`${fixture.httpUrl}/health`);
+    const [health, liveness, readiness] = await Promise.all([
+      fetch(`${fixture.httpUrl}/health`),
+      fetch(`${fixture.httpUrl}/health/live`),
+      fetch(`${fixture.httpUrl}/health/ready`),
+    ]);
 
     expect(health.status).toBe(200);
     await expect(health.json()).resolves.toEqual({ status: "ok" });
+    expect(liveness.status).toBe(200);
+    expect(readiness.status).toBe(200);
+    await expect(readiness.json()).resolves.toEqual({ status: "ready" });
     await expect(
       rejectedUpgradeStatus(`${fixture.websocketUrl}?ticket=ticket-a`, "http://evil.example"),
     ).resolves.toBe(403);
@@ -60,6 +67,84 @@ describe("realtime chat gateway app", () => {
       reason: "gateway ticket required",
     });
     expect(fixture.gatewayApiClient.consumeGatewayTicket).not.toHaveBeenCalled();
+  });
+
+  it("rejects upgrades after reaching the total connection limit", async () => {
+    const fixture = await createFixture({
+      config: {
+        maxConnections: 1,
+      },
+    });
+    const first = await connectClient(fixture.websocketUrl, "ticket-first");
+
+    try {
+      await expect(
+        rejectedUpgradeStatus(
+          `${fixture.websocketUrl}?ticket=ticket-second`,
+          "http://localhost:5173",
+        ),
+      ).resolves.toBe(503);
+    } finally {
+      first.socket.close();
+    }
+  });
+
+  it("closes new sockets while the authentication queue is full", async () => {
+    const consumeGatewayTicket = vi.fn<GatewayApiClient["consumeGatewayTicket"]>(
+      () => new Promise<never>(() => undefined),
+    );
+    const fixture = await createFixture({
+      config: {
+        maxPendingAuthentications: 1,
+        shutdownGraceMilliseconds: 50,
+      },
+      gatewayApiClient: {
+        consumeGatewayTicket,
+      },
+    });
+    const first = new WebSocket(`${fixture.websocketUrl}?ticket=ticket-first`, {
+      origin: "http://localhost:5173",
+    });
+    await waitForOpen(first);
+    await vi.waitFor(() => {
+      expect(fixture.app.pendingAuthenticationCount()).toBe(1);
+    });
+    const second = new WebSocket(`${fixture.websocketUrl}?ticket=ticket-second`, {
+      origin: "http://localhost:5173",
+    });
+
+    try {
+      await expect(waitForClose(second)).resolves.toEqual({
+        code: 1013,
+        reason: "too many pending authentications",
+      });
+      expect(consumeGatewayTicket).toHaveBeenCalledOnce();
+    } finally {
+      first.close();
+    }
+  });
+
+  it("terminates connections that stop answering heartbeat pings", async () => {
+    const fixture = await createFixture({
+      config: {
+        heartbeatIntervalMilliseconds: 10,
+      },
+    });
+    const connection = await connectClient(fixture.websocketUrl, "ticket-heartbeat");
+    const closed = waitForClose(connection.socket);
+    connection.socket.pause();
+
+    try {
+      await vi.waitFor(() => {
+        expect(fixture.app.sessionCount()).toBe(0);
+      });
+      connection.socket.resume();
+      await expect(closed).resolves.toMatchObject({
+        code: 1006,
+      });
+    } finally {
+      connection.socket.terminate();
+    }
   });
 
   it("relays message send and fans out the created message to ready channel subscribers", async () => {
@@ -217,7 +302,12 @@ describe("realtime chat gateway app", () => {
   });
 });
 
-async function createFixture(): Promise<{
+async function createFixture(
+  options: {
+    config?: Partial<RealtimeChatGatewayConfig>;
+    gatewayApiClient?: Partial<GatewayApiClient>;
+  } = {},
+): Promise<{
   app: RealtimeChatGatewayApp;
   gatewayApiClient: GatewayApiClient;
   httpUrl: string;
@@ -245,6 +335,7 @@ async function createFixture(): Promise<{
         createdAt: "2026-07-25T00:00:01.000Z",
       },
     })),
+    ...options.gatewayApiClient,
   };
   const streamMessagesApiClient: GatewayStreamMessagesApiClient = {
     syncAfter: vi.fn<GatewayStreamMessagesApiClient["syncAfter"]>(async (request) => ({
@@ -256,11 +347,17 @@ async function createFixture(): Promise<{
       hasMoreAfter: false,
     })),
   };
-  const app = createRealtimeChatGatewayApp(testConfig(), {
-    gatewayApiClient,
-    logger: testLogger(),
-    streamMessagesApiClient,
-  });
+  const app = createRealtimeChatGatewayApp(
+    {
+      ...testConfig(),
+      ...options.config,
+    },
+    {
+      gatewayApiClient,
+      logger: testLogger(),
+      streamMessagesApiClient,
+    },
+  );
   await app.listen({ host: "127.0.0.1", port: 0 });
   const address = app.address() as AddressInfo;
   runningAppsForCurrentTest().push(app);
@@ -295,10 +392,16 @@ function testConfig(): RealtimeChatGatewayConfig {
     gatewayApiToken: "test-token-that-is-at-least-32-bytes",
     gatewayId: "gateway-1",
     gatewayPath: "/realtime-chat",
+    heartbeatIntervalMilliseconds: 30_000,
     host: "127.0.0.1",
+    httpHeadersTimeoutMilliseconds: 5_000,
+    httpKeepAliveTimeoutMilliseconds: 5_000,
+    httpRequestTimeoutMilliseconds: 10_000,
     internalTransportSecurity: "development",
     logLevel: "silent",
+    maxConnections: 10_000,
     maxPayloadBytes: 65_536,
+    maxPendingAuthentications: 256,
     nodeEnvironment: "test",
     port: 0,
     shutdownGraceMilliseconds: 1_000,
