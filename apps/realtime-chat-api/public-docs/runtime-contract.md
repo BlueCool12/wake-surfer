@@ -23,16 +23,16 @@
 - 현재 actor와 gateway identity는 신뢰 경계가 덮어쓰는 설정 가능한 헤더에서 읽는다. 이 헤더를
   인터넷 클라이언트가 직접 지정할 수 있도록 노출하면 안 된다.
 - JSON 요청 크기는 `REALTIME_CHAT_REQUEST_BODY_LIMIT_BYTES`로 제한하며 초과 시 `413`을 반환한다.
-- handler 시간 제한을 넘으면 `504`와 `gateway_ticket_unavailable` 오류 코드를 반환한다.
-- 상태 변경 SQL은 handler 제한 시간보다 짧은 PostgreSQL 연결 획득·statement timeout을 사용한다. API는
-  handler 제한 시간에서 두 DB 제한 시간을 뺀 시점부터 새로운 ticket 저장·소비 SQL을 시작하지 않는다.
+- 요청 시간 제한을 넘으면 `503`과 `gateway_ticket_unavailable` 오류 코드를 반환한다.
+- 상태 변경 SQL은 요청 제한보다 짧은 PostgreSQL 연결 획득·statement timeout을 사용한다. API는
+  `REALTIME_CHAT_OPERATION_ABORT_MS`가 지나면 새로운 ticket 저장·소비 SQL을 시작하지 않는다.
 
 ## 공통 헤더
 
-- 모든 응답은 `x-request-id`를 제공한다.
-- 유효한 `x-request-id` 요청 헤더가 있으면 같은 값을 사용하며 최대 길이는 128자다.
-- 브라우저 CORS는 `REALTIME_CHAT_CORS_ORIGINS`에 명시된 origin에만 적용한다. 값이 비어 있으면 CORS
-  헤더를 추가하지 않는다.
+- 유효한 요청에는 `x-request-id` 응답 헤더를 제공한다.
+- 유효한 `x-request-id` 요청 헤더가 있으면 같은 값을 사용하며 최대 길이는 128자다. 헤더가 없으면
+  UUID를 만든다. 잘못된 값은 새 ID로 바꾸지 않고 `400`으로 거절한다.
+- 브라우저 CORS는 `REALTIME_CHAT_CORS_ALLOWED_ORIGINS`에 명시된 origin에만 적용한다.
 - API는 기본 보안 응답 헤더를 제공한다.
 
 ## 종료 의미
@@ -44,15 +44,17 @@ drain하고, `REALTIME_CHAT_SHUTDOWN_GRACE_MS`를 넘으면 남은 연결을 강
 
 | 설정 | 기본값 | 의미 |
 | --- | ---: | --- |
-| `REALTIME_CHAT_CORS_ORIGINS` | 빈 값 | 쉼표로 구분한 브라우저 허용 origin |
+| `REALTIME_CHAT_CORS_ALLOWED_ORIGINS` | `http://localhost:5173` | 쉼표로 구분한 브라우저 허용 origin |
 | `REALTIME_CHAT_REQUEST_BODY_LIMIT_BYTES` | `16384` | JSON 본문 상한 |
-| `REALTIME_CHAT_HANDLER_TIMEOUT_MS` | `5000` | Hono handler 제한 시간 |
+| `REALTIME_CHAT_OPERATION_ABORT_MS` | `8000` | ticket 상태 변경을 새로 시작할 수 있는 제한 시간 |
+| `REALTIME_CHAT_REQUEST_TIMEOUT_MS` | `10000` | Hono 요청 제한 시간 |
 | `REALTIME_CHAT_HTTP_HEADERS_TIMEOUT_MS` | `5000` | HTTP 헤더 수신 제한 시간 |
 | `REALTIME_CHAT_HTTP_KEEP_ALIVE_TIMEOUT_MS` | `5000` | 유휴 keep-alive 제한 시간 |
-| `REALTIME_CHAT_HTTP_REQUEST_TIMEOUT_MS` | `10000` | Node HTTP 요청 제한 시간 |
+| `REALTIME_CHAT_HTTP_REQUEST_TIMEOUT_MS` | `12000` | Node HTTP 요청 제한 시간 |
 | `REALTIME_CHAT_POSTGRES_CONNECTION_TIMEOUT_MS` | `2000` | DB 연결 획득 제한 시간 |
-| `REALTIME_CHAT_POSTGRES_STATEMENT_TIMEOUT_MS` | `2000` | 상태 변경 SQL 제한 시간 |
+| `REALTIME_CHAT_POSTGRES_STATEMENT_TIMEOUT_MS` | `5000` | SQL 실행 제한 시간 |
 | `REALTIME_CHAT_SHUTDOWN_GRACE_MS` | `10000` | 종료 drain 유예 시간 |
 
-handler 제한 시간은 HTTP 요청 제한 시간보다 짧아야 하고, 헤더 제한 시간은 HTTP 요청 제한 시간을
-넘을 수 없다. PostgreSQL 연결 획득과 statement 제한 시간의 합은 handler 제한 시간보다 짧아야 한다.
+PostgreSQL 연결 획득과 statement 제한 시간의 합은 operation 제한보다 짧아야 한다. operation 제한,
+Hono 요청 제한, Node HTTP 요청 제한은 이 순서로 길어야 하며, 헤더 제한 시간은 HTTP 요청 제한 시간을
+넘을 수 없다.

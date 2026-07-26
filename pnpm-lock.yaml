@@ -29,6 +29,9 @@ importers:
       '@hono/node-server':
         specifier: ^2.0.8
         version: 2.0.8(hono@4.12.28)
+      '@hono/standard-validator':
+        specifier: ^0.3.0
+        version: 0.3.0(@standard-schema/spec@1.1.0)(hono@4.12.28)
       '@wake-surfer/api-contracts':
         specifier: workspace:*
         version: link:../../packages/api-contracts
@@ -361,6 +364,12 @@ packages:
     engines: {node: '>=20'}
     peerDependencies:
       hono: ^4
+
+  '@hono/standard-validator@0.3.0':
+    resolution: {integrity: sha512-tHLKEjKXDcHImj0XTFWW4Hr0ev+1G5GxnBZrGdpg/7NLy9s9meFPTSCOkw++ZzZKom3FjrMw2e0nFQpPPvwUVQ==}
+    peerDependencies:
+      '@standard-schema/spec': ^1.0.0
+      hono: '>=4.11.2'
 
   '@humanfs/core@0.19.2':
     resolution: {integrity: sha512-UhXNm+CFMWcbChXywFwkmhqjs3PRCmcSa/hfBgLIb7oQ5HNb1wS0icWsGtSAUNgefHeI+eBrA8I1fxmbHsGdvA==}
@@ -1440,6 +1449,11 @@ snapshots:
 
   '@hono/node-server@2.0.8(hono@4.12.28)':
     dependencies:
+      hono: 4.12.28
+
+  '@hono/standard-validator@0.3.0(@standard-schema/spec@1.1.0)(hono@4.12.28)':
+    dependencies:
+      '@standard-schema/spec': 1.1.0
       hono: 4.12.28
 
   '@humanfs/core@0.19.2':

@@ -82,6 +82,11 @@ export async function createRuntimeDeps(
         },
         gatewayTicket,
         gatewayApiToken: config.gatewayApiToken,
+        checkReadiness: async () => {
+          await database.db
+            .selectNoFrom((expressionBuilder) => expressionBuilder.val(1).as("ready"))
+            .executeTakeFirstOrThrow();
+        },
         loadLatestMessages: createLoadLatestMessages({
           authorizeRead: authorizeChannelRead,
           db: database.db,
@@ -92,6 +97,8 @@ export async function createRuntimeDeps(
         }),
         logger,
         messageSend,
+        operationAbortMilliseconds: config.operationAbortMilliseconds,
+        requestBodyLimitBytes: config.requestBodyLimitBytes,
         requestTimeoutMilliseconds: config.requestTimeoutMilliseconds,
         syncAfterMessages: createSyncAfterMessages({
           authorizeRead: authorizeChannelRead,

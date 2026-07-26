@@ -31,7 +31,7 @@ import {
   fitSyncAfterMessagesPage,
   StreamMessagesEnvelopeIntegrityError,
 } from "./page-policy.js";
-import { streamMessagesRequestId } from "./request-id-middleware.js";
+import type { RealtimeChatApiEnv } from "../../http/env.js";
 
 import type { StreamMessagesPublicRateLimiter } from "./distributed-rate-limiter.js";
 
@@ -82,12 +82,11 @@ export type RegisterStreamMessagesInternalHttpRoutesConfig = {
 const MAX_INTERNAL_SYNC_REQUEST_UTF8_BYTES = 16_384;
 
 export function registerLoadLatestMessagesHttpRoute(
-  app: Hono,
+  app: Hono<RealtimeChatApiEnv>,
   config: RegisterLoadLatestMessagesHttpRouteConfig,
 ): void {
   assertPublicRateLimitConfig(config);
 
-  app.use("/realtime-chat/channels/:channelId/messages/latest", streamMessagesRequestId);
   registerStreamMessagesTimeouts(app, config.timeoutMilliseconds, [
     "/realtime-chat/channels/:channelId/messages/latest",
   ]);
@@ -146,12 +145,11 @@ export function registerLoadLatestMessagesHttpRoute(
 }
 
 export function registerLoadOlderMessagesHttpRoute(
-  app: Hono,
+  app: Hono<RealtimeChatApiEnv>,
   config: RegisterLoadOlderMessagesHttpRouteConfig,
 ): void {
   assertPublicRateLimitConfig(config);
 
-  app.use("/realtime-chat/channels/:channelId/messages/older", streamMessagesRequestId);
   registerStreamMessagesTimeouts(app, config.timeoutMilliseconds, [
     "/realtime-chat/channels/:channelId/messages/older",
   ]);
@@ -244,13 +242,9 @@ function assertPublicRateLimitConfig(config: StreamMessagesPublicHttpRouteConfig
 }
 
 export function registerStreamMessagesInternalHttpRoutes(
-  app: Hono,
+  app: Hono<RealtimeChatApiEnv>,
   config: RegisterStreamMessagesInternalHttpRoutesConfig,
 ): void {
-  app.use(
-    "/internal/realtime-chat/channels/:channelId/messages/sync-after",
-    streamMessagesRequestId,
-  );
   registerStreamMessagesTimeouts(app, config.timeoutMilliseconds, [
     "/internal/realtime-chat/channels/:channelId/messages/sync-after",
   ]);
@@ -321,7 +315,7 @@ export function registerStreamMessagesInternalHttpRoutes(
 }
 
 function registerStreamMessagesTimeouts(
-  app: Hono,
+  app: Hono<RealtimeChatApiEnv>,
   timeoutMilliseconds: number | undefined,
   paths: readonly string[],
 ): void {

@@ -10,6 +10,134 @@ import type { RealtimeChatApiAppDeps } from "../src/app.js";
 const GATEWAY_API_TOKEN = "gateway-service-token-with-32-bytes";
 
 describe("realtime chat api app", () => {
+  it("adds request IDs, security headers, and structured access logs globally", async () => {
+    const logger = createLogger();
+    const app = createRealtimeChatApiApp(createDeps({ logger }));
+
+    const response = await app.request("/health", {
+      headers: {
+        "x-request-id": "request-health",
+      },
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("x-content-type-options")).toBe("nosniff");
+    expect(response.headers.get("x-request-id")).toBe("request-health");
+    expect(logger.info).toHaveBeenCalledWith(
+      expect.objectContaining({
+        method: "GET",
+        path: "/health",
+        requestId: "request-health",
+        status: 200,
+      }),
+      "realtime chat api request completed",
+    );
+  });
+
+  it("keeps liveness available while readiness reflects dependency and drain state", async () => {
+    const checkReadiness = vi.fn(async () => {
+      throw new Error("database unavailable");
+    });
+    const dependencyUnavailable = createRealtimeChatApiApp(
+      createDeps({
+        checkReadiness,
+      }),
+    );
+    const drainingCheckReadiness = vi.fn();
+    const draining = createRealtimeChatApiApp(
+      createDeps({
+        checkReadiness: drainingCheckReadiness,
+        isDraining: () => true,
+      }),
+    );
+
+    const [liveness, unavailable, drainingResponse] = await Promise.all([
+      dependencyUnavailable.request("/health/live"),
+      dependencyUnavailable.request("/health/ready"),
+      draining.request("/health/ready"),
+    ]);
+
+    expect(liveness.status).toBe(200);
+    expect(unavailable.status).toBe(503);
+    await expect(unavailable.json()).resolves.toEqual({ status: "not_ready" });
+    expect(drainingResponse.status).toBe(503);
+    expect(checkReadiness).toHaveBeenCalledOnce();
+    expect(drainingCheckReadiness).not.toHaveBeenCalled();
+  });
+
+  it("rejects oversized request bodies before invoking a use case", async () => {
+    const issue = vi.fn();
+    const app = createRealtimeChatApiApp(
+      createDeps({
+        issue,
+        requestBodyLimitBytes: 16,
+      }),
+    );
+
+    const response = await app.request("/realtime-chat/gateway-tickets", {
+      body: JSON.stringify({ actorId: "a".repeat(32) }),
+      headers: {
+        "content-type": "application/json",
+        "x-actor-id": "authenticated-actor",
+      },
+      method: "POST",
+    });
+
+    expect(response.status).toBe(413);
+    await expect(response.json()).resolves.toMatchObject({
+      code: "bad_request",
+      status: "error",
+    });
+    expect(issue).not.toHaveBeenCalled();
+  });
+
+  it("aborts gateway ticket operations before the outer request timeout", async () => {
+    let observedAbortReason: unknown;
+    const issue = vi.fn<RealtimeChatApiAppDeps["gatewayTicket"]["issue"]>(
+      (_command, operationContext) =>
+        new Promise<never>((_resolve, reject) => {
+          const signal = operationContext?.signal;
+
+          if (signal === undefined) {
+            reject(new Error("operation signal is required"));
+            return;
+          }
+
+          signal.addEventListener(
+            "abort",
+            () => {
+              observedAbortReason = signal.reason;
+              reject(signal.reason);
+            },
+            { once: true },
+          );
+        }),
+    );
+    const app = createRealtimeChatApiApp(
+      createDeps({
+        issue,
+        operationAbortMilliseconds: 5,
+        requestTimeoutMilliseconds: 100,
+      }),
+    );
+
+    const response = await app.request("/realtime-chat/gateway-tickets", {
+      headers: {
+        "x-actor-id": "authenticated-actor",
+      },
+      method: "POST",
+    });
+
+    expect(response.status).toBe(503);
+    await expect(response.json()).resolves.toMatchObject({
+      code: "gateway_ticket_unavailable",
+      status: "error",
+    });
+    expect(observedAbortReason).toMatchObject({
+      kind: "request_deadline_exceeded",
+    });
+  });
+
   it("issues a gateway ticket from authenticated actor context", async () => {
     const issue = vi.fn(async () => ({
       expiresAt: "2026-07-09T00:01:00.000Z",
@@ -35,9 +163,14 @@ describe("realtime chat api app", () => {
       ticket: "ticket-1",
     });
     expect(response.status).toBe(201);
-    expect(issue).toHaveBeenCalledWith({
-      actorId: "authenticated-actor",
-    });
+    expect(issue).toHaveBeenCalledWith(
+      {
+        actorId: "authenticated-actor",
+      },
+      {
+        signal: expect.any(AbortSignal),
+      },
+    );
   });
 
   it("issues a gateway ticket without a body through the Node server adapter", async () => {
@@ -76,9 +209,14 @@ describe("realtime chat api app", () => {
       );
 
       expect(response.status).toBe(201);
-      expect(issue).toHaveBeenCalledWith({
-        actorId: "authenticated-actor",
-      });
+      expect(issue).toHaveBeenCalledWith(
+        {
+          actorId: "authenticated-actor",
+        },
+        {
+          signal: expect.any(AbortSignal),
+        },
+      );
     } finally {
       await new Promise<void>((resolve, reject) => {
         server.close((error) => {
@@ -161,6 +299,9 @@ describe("realtime chat api app", () => {
       },
       {
         gatewayId: "gateway-1",
+      },
+      {
+        signal: expect.any(AbortSignal),
       },
     );
   });
@@ -631,6 +772,14 @@ function createDeps(
     },
     gatewayApiToken: overrides.gatewayApiToken ?? GATEWAY_API_TOKEN,
     logger: overrides.logger ?? createLogger(),
+    ...(overrides.checkReadiness === undefined ? {} : { checkReadiness: overrides.checkReadiness }),
+    ...(overrides.isDraining === undefined ? {} : { isDraining: overrides.isDraining }),
+    ...(overrides.operationAbortMilliseconds === undefined
+      ? {}
+      : { operationAbortMilliseconds: overrides.operationAbortMilliseconds }),
+    ...(overrides.requestBodyLimitBytes === undefined
+      ? {}
+      : { requestBodyLimitBytes: overrides.requestBodyLimitBytes }),
     ...(overrides.requestTimeoutMilliseconds === undefined
       ? {}
       : { requestTimeoutMilliseconds: overrides.requestTimeoutMilliseconds }),

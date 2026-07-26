@@ -17,6 +17,9 @@ The app owns runtime wiring only:
 
 Gateway ticket rules and SQL remain owned by packages.
 
+배포·호출자가 의존할 수 있는 상태 확인, 요청 제한, 종료 의미는
+`apps/realtime-chat-api/public-docs/runtime-contract.md`에 정의한다.
+
 Database schema migration is not part of application startup. The root Compose
 `realtime-chat-migrate` one-shot service must apply the Atlas versioned migrations before this app starts.
 
@@ -24,6 +27,8 @@ Database schema migration is not part of application startup. The root Compose
 
 ```txt
 GET  /health
+GET  /health/live
+GET  /health/ready
 POST /realtime-chat/gateway-tickets
 POST /internal/realtime-chat/gateway-tickets/consume
 POST /internal/realtime-chat/messages
@@ -47,9 +52,9 @@ provider의 `status: "failure"` 결과는 app이 `stream_unavailable` 404 또는
 app의 Stream Messages page policy가 요청 `channelId`를 사용해 외부 `PublicMessage`와 response를 조립한다.
 DB·무결성·의존 서비스 예외만 retryable 503으로 처리한다.
 
-Stream Messages 경로의 `x-request-id`는 전용 Hono middleware가 소유한다. 헤더가 없으면 UUID를 만들고,
-계약의 `RequestIdSchema`를 만족하지 않는 값은 새 값으로 바꾸지 않고 `bad_request` 400으로 거부한다.
-검증된 ID는 요청 Context와 응답 헤더에서 동일하게 사용한다.
+앱 전역의 `x-request-id` Hono middleware는 헤더가 없으면 UUID를 만들고, 계약의 `RequestIdSchema`를
+만족하지 않는 값은 새 값으로 바꾸지 않고 `bad_request` 400으로 거부한다. 검증된 ID는 typed Context,
+구조화 로그와 응답 헤더에서 동일하게 사용한다.
 
 `POST /realtime-chat/gateway-tickets` uses the authenticated actor context from
 `REALTIME_CHAT_ACTOR_ID_HEADER`. It does not trust `actorId`, `userId`, or `workspaceId` from the request body.

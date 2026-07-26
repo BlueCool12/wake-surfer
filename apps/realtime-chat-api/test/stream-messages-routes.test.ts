@@ -17,6 +17,8 @@ import {
   registerStreamMessagesInternalHttpRoutes,
   type StreamMessagesHttpLogger,
 } from "../src/features/stream-messages/routes.js";
+import type { RealtimeChatApiEnv } from "../src/http/env.js";
+import { realtimeChatApiRequestId } from "../src/http/request-id.js";
 
 type StreamMessagesHandlers = {
   loadLatest: LoadLatestMessages;
@@ -169,7 +171,7 @@ describe("Stream Messages public HTTP adapter", () => {
   });
 
   it("enforces actor and trusted source-IP rate limits with retry metadata", async () => {
-    const app = new Hono();
+    const app = createHttpApp();
     const loadLatest = vi.fn();
     const checkPublic = vi.fn(async () => ({ allowed: false as const, retryAfterMs: 1_250 }));
     registerLoadLatestMessagesHttpRoute(app, {
@@ -203,7 +205,7 @@ describe("Stream Messages public HTTP adapter", () => {
   });
 
   it("fails public queries closed when the distributed limiter is unavailable", async () => {
-    const app = new Hono();
+    const app = createHttpApp();
     const loadLatest = vi.fn();
     registerLoadLatestMessagesHttpRoute(app, {
       authenticateActor: () => ({ actorId: "actor-rate" }),
@@ -238,7 +240,7 @@ describe("Stream Messages public HTTP adapter", () => {
         hasMoreAfter: false,
       },
     }));
-    const app = new Hono();
+    const app = createHttpApp();
     registerStreamMessagesInternalHttpRoutes(app, {
       authenticateGateway: () => {
         callOrder.push("gateway");
@@ -275,7 +277,7 @@ describe("Stream Messages public HTTP adapter", () => {
 
   it("rejects client-owned actor and stream hints on internal sync", async () => {
     const syncAfter = vi.fn<SyncAfterMessages>();
-    const app = new Hono();
+    const app = createHttpApp();
     registerStreamMessagesInternalHttpRoutes(app, {
       authenticateGateway: () => ({ gatewayId: "gateway-1" }),
       getAssertedActor: () => ({ actorId: "actor-asserted" }),
@@ -305,8 +307,11 @@ describe("Stream Messages public HTTP adapter", () => {
   });
 });
 
-function createApp(overrides: Partial<StreamMessagesHandlers>, logger = createLogger()): Hono {
-  const app = new Hono();
+function createApp(
+  overrides: Partial<StreamMessagesHandlers>,
+  logger = createLogger(),
+): Hono<RealtimeChatApiEnv> {
+  const app = createHttpApp();
   const handlers = createStreamMessagesHandlers(overrides);
 
   registerLoadLatestMessagesHttpRoute(app, {
@@ -324,6 +329,12 @@ function createApp(overrides: Partial<StreamMessagesHandlers>, logger = createLo
     loadOlder: handlers.loadOlder,
   });
 
+  return app;
+}
+
+function createHttpApp(): Hono<RealtimeChatApiEnv> {
+  const app = new Hono<RealtimeChatApiEnv>();
+  app.use("*", realtimeChatApiRequestId);
   return app;
 }
 

@@ -1,18 +1,17 @@
 import { randomUUID } from "node:crypto";
 
-import {
-  RequestIdSchema,
-  type StreamMessagesHttpErrorResponse,
-} from "@wake-surfer/realtime-chat-stream-messages-contracts";
+import { RequestIdSchema } from "@wake-surfer/realtime-chat-stream-messages-contracts";
 import { createMiddleware } from "hono/factory";
 
-declare module "hono" {
-  interface ContextVariableMap {
-    requestId: string;
-  }
-}
+import type { RealtimeChatApiErrorResponse } from "./errors.js";
 
-export const streamMessagesRequestId = createMiddleware(async (context, next) => {
+export type RealtimeChatApiRequestIdVariables = {
+  requestId: string;
+};
+
+export const realtimeChatApiRequestId = createMiddleware<{
+  Variables: RealtimeChatApiRequestIdVariables;
+}>(async (context, next) => {
   const supplied = context.req.header("x-request-id");
   const parsed = supplied === undefined ? undefined : RequestIdSchema.safeParse(supplied);
 
@@ -22,7 +21,7 @@ export const streamMessagesRequestId = createMiddleware(async (context, next) =>
         status: "error",
         code: "bad_request",
         message: "x-request-id가 올바르지 않습니다.",
-      } satisfies StreamMessagesHttpErrorResponse,
+      } satisfies RealtimeChatApiErrorResponse,
       400,
     );
   }

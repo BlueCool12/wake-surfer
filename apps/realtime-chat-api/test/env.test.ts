@@ -7,6 +7,54 @@ import { describe, expect, it } from "vitest";
 import { loadEnv } from "../src/config/env.js";
 
 describe("realtime chat API runtime configuration", () => {
+  it("loads bounded runtime defaults", () => {
+    expect(loadEnv(requiredEnv())).toMatchObject({
+      httpHeadersTimeoutMilliseconds: 5_000,
+      httpKeepAliveTimeoutMilliseconds: 5_000,
+      httpRequestTimeoutMilliseconds: 12_000,
+      operationAbortMilliseconds: 8_000,
+      postgresPool: {
+        connectionTimeoutMillis: 2_000,
+        statementTimeoutMillis: 5_000,
+      },
+      requestBodyLimitBytes: 16_384,
+      requestTimeoutMilliseconds: 10_000,
+      shutdownGraceMilliseconds: 10_000,
+    });
+  });
+
+  it("requires database, operation, Hono, and HTTP budgets to remain nested", () => {
+    expect(() =>
+      loadEnv({
+        ...requiredEnv(),
+        REALTIME_CHAT_OPERATION_ABORT_MS: "10000",
+        REALTIME_CHAT_REQUEST_TIMEOUT_MS: "10000",
+      }),
+    ).toThrow(/OPERATION_ABORT_MS/);
+
+    expect(() =>
+      loadEnv({
+        ...requiredEnv(),
+        REALTIME_CHAT_POSTGRES_STATEMENT_TIMEOUT_MS: "6000",
+      }),
+    ).toThrow(/leave time/);
+
+    expect(() =>
+      loadEnv({
+        ...requiredEnv(),
+        REALTIME_CHAT_HTTP_REQUEST_TIMEOUT_MS: "10000",
+        REALTIME_CHAT_REQUEST_TIMEOUT_MS: "10000",
+      }),
+    ).toThrow(/REQUEST_TIMEOUT_MS/);
+
+    expect(() =>
+      loadEnv({
+        ...requiredEnv(),
+        REALTIME_CHAT_HTTP_HEADERS_TIMEOUT_MS: "13000",
+      }),
+    ).toThrow(/HTTP_HEADERS_TIMEOUT_MS/);
+  });
+
   it.each([MIN_GATEWAY_TICKET_RAW_BYTES, MAX_GATEWAY_TICKET_RAW_BYTES])(
     "accepts gateway ticket raw byte boundary %i",
     (gatewayTicketRawBytes) => {

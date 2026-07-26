@@ -17,16 +17,23 @@ export type RealtimeChatApiConfig = {
   gatewayTicketRawBytes: number;
   gatewayTicketTtlMilliseconds: number;
   gatewayUrl: string;
+  httpHeadersTimeoutMilliseconds: number;
+  httpKeepAliveTimeoutMilliseconds: number;
+  httpRequestTimeoutMilliseconds: number;
   logLevel: string;
   nodeEnvironment: "development" | "production" | "test";
+  operationAbortMilliseconds: number;
   port: number;
+  requestBodyLimitBytes: number;
   requestTimeoutMilliseconds: number;
+  shutdownGraceMilliseconds: number;
   internalTransportSecurity: "development" | "direct-tls" | "service-mesh-tls";
   postgresPool: {
     connectionTimeoutMillis: number;
     idleTimeoutMillis: number;
     max: number;
     maxLifetimeSeconds: number;
+    statementTimeoutMillis: number;
   };
 };
 
@@ -36,6 +43,44 @@ export function loadEnv(env: NodeJS.ProcessEnv = process.env): RealtimeChatApiCo
   const actorAuthSecurity = readActorAuthSecurity(env);
   const gatewayApiToken = readRequiredString(env, "REALTIME_CHAT_GATEWAY_API_TOKEN");
   const gatewayUrl = readRequiredString(env, "REALTIME_CHAT_GATEWAY_URL");
+  const operationAbortMilliseconds = readInteger(env, "REALTIME_CHAT_OPERATION_ABORT_MS", 8_000, {
+    min: 1,
+  });
+  const requestTimeoutMilliseconds = readInteger(env, "REALTIME_CHAT_REQUEST_TIMEOUT_MS", 10_000, {
+    min: 100,
+  });
+  const httpRequestTimeoutMilliseconds = readInteger(
+    env,
+    "REALTIME_CHAT_HTTP_REQUEST_TIMEOUT_MS",
+    12_000,
+    {
+      min: 1,
+    },
+  );
+  const httpHeadersTimeoutMilliseconds = readInteger(
+    env,
+    "REALTIME_CHAT_HTTP_HEADERS_TIMEOUT_MS",
+    5_000,
+    {
+      min: 1,
+    },
+  );
+  const postgresConnectionTimeoutMilliseconds = readInteger(
+    env,
+    "REALTIME_CHAT_POSTGRES_CONNECTION_TIMEOUT_MS",
+    2_000,
+    {
+      min: 1,
+    },
+  );
+  const postgresStatementTimeoutMilliseconds = readInteger(
+    env,
+    "REALTIME_CHAT_POSTGRES_STATEMENT_TIMEOUT_MS",
+    5_000,
+    {
+      min: 1,
+    },
+  );
 
   if (new TextEncoder().encode(gatewayApiToken).byteLength < 32) {
     throw new Error("REALTIME_CHAT_GATEWAY_API_TOKEN must contain at least 32 UTF-8 bytes");
@@ -53,6 +98,33 @@ export function loadEnv(env: NodeJS.ProcessEnv = process.env): RealtimeChatApiCo
 
   if (nodeEnvironment === "production" && actorAuthSecurity !== "trusted-edge") {
     throw new Error("production requires REALTIME_CHAT_ACTOR_AUTH_SECURITY=trusted-edge");
+  }
+
+  if (operationAbortMilliseconds >= requestTimeoutMilliseconds) {
+    throw new Error(
+      "REALTIME_CHAT_OPERATION_ABORT_MS must be less than REALTIME_CHAT_REQUEST_TIMEOUT_MS",
+    );
+  }
+
+  if (
+    postgresConnectionTimeoutMilliseconds + postgresStatementTimeoutMilliseconds >=
+    operationAbortMilliseconds
+  ) {
+    throw new Error(
+      "REALTIME_CHAT_POSTGRES_CONNECTION_TIMEOUT_MS and REALTIME_CHAT_POSTGRES_STATEMENT_TIMEOUT_MS must leave time before REALTIME_CHAT_OPERATION_ABORT_MS",
+    );
+  }
+
+  if (requestTimeoutMilliseconds >= httpRequestTimeoutMilliseconds) {
+    throw new Error(
+      "REALTIME_CHAT_REQUEST_TIMEOUT_MS must be less than REALTIME_CHAT_HTTP_REQUEST_TIMEOUT_MS",
+    );
+  }
+
+  if (httpHeadersTimeoutMilliseconds > httpRequestTimeoutMilliseconds) {
+    throw new Error(
+      "REALTIME_CHAT_HTTP_HEADERS_TIMEOUT_MS must be less than or equal to REALTIME_CHAT_HTTP_REQUEST_TIMEOUT_MS",
+    );
   }
 
   const parsedGatewayUrl = new URL(gatewayUrl);
@@ -86,25 +158,33 @@ export function loadEnv(env: NodeJS.ProcessEnv = process.env): RealtimeChatApiCo
       min: 1_000,
     }),
     gatewayUrl,
+    httpHeadersTimeoutMilliseconds,
+    httpKeepAliveTimeoutMilliseconds: readInteger(
+      env,
+      "REALTIME_CHAT_HTTP_KEEP_ALIVE_TIMEOUT_MS",
+      5_000,
+      {
+        min: 1,
+      },
+    ),
+    httpRequestTimeoutMilliseconds,
     internalTransportSecurity,
     logLevel: readOptionalString(env, "LOG_LEVEL", "info"),
     nodeEnvironment,
+    operationAbortMilliseconds,
     port: readInteger(env, "PORT", 3000, {
       max: 65_535,
       min: 1,
     }),
-    requestTimeoutMilliseconds: readInteger(env, "REALTIME_CHAT_REQUEST_TIMEOUT_MS", 10_000, {
-      min: 100,
+    requestBodyLimitBytes: readInteger(env, "REALTIME_CHAT_REQUEST_BODY_LIMIT_BYTES", 16_384, {
+      min: 1,
+    }),
+    requestTimeoutMilliseconds,
+    shutdownGraceMilliseconds: readInteger(env, "REALTIME_CHAT_SHUTDOWN_GRACE_MS", 10_000, {
+      min: 1,
     }),
     postgresPool: {
-      connectionTimeoutMillis: readInteger(
-        env,
-        "REALTIME_CHAT_POSTGRES_CONNECTION_TIMEOUT_MS",
-        2_000,
-        {
-          min: 1,
-        },
-      ),
+      connectionTimeoutMillis: postgresConnectionTimeoutMilliseconds,
       idleTimeoutMillis: readInteger(env, "REALTIME_CHAT_POSTGRES_IDLE_TIMEOUT_MS", 30_000, {
         min: 1,
       }),
@@ -114,6 +194,7 @@ export function loadEnv(env: NodeJS.ProcessEnv = process.env): RealtimeChatApiCo
       maxLifetimeSeconds: readInteger(env, "REALTIME_CHAT_POSTGRES_MAX_LIFETIME_SECONDS", 300, {
         min: 1,
       }),
+      statementTimeoutMillis: postgresStatementTimeoutMilliseconds,
     },
   };
 }

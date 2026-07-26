@@ -1,4 +1,4 @@
-import { AppHttpError } from "../app.js";
+import { AppHttpError } from "../http/errors.js";
 
 import type { AuthenticatedActor, AuthenticatedGateway } from "../app.js";
 import type { RealtimeChatApiConfig } from "../config/env.js";

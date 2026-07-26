@@ -5,20 +5,21 @@
 - 런타임은 함수와 명시적 의존성으로 조립한다.
 - 서비스와 미들웨어를 클래스 상속 구조로 만들지 않는다.
 - 변경 가능한 상태는 `createRealtimeChatApiApp()`과 `main.ts`의 런타임 경계에서만 소유한다.
-- 오류는 클래스 계층 대신 태그된 오류 생성 함수와 타입 가드로 분류한다.
+- 앱 HTTP 오류와 작업 deadline 오류를 명시적 타입 가드로 분류한다.
 - 프레임워크가 요구하는 `HTTPException`은 Hono 경계에서만 사용한다.
 
 ## 미들웨어 순서
 
 ```text
-request ID
-→ 보안 헤더
+보안 헤더
+→ request ID
 → Pino 접근 로그
+→ gateway Bearer 인증
 → 외부 경로 CORS
 → route별 본문 크기 제한
-→ route별 handler 시간 제한
-→ actor 또는 gateway 인증
-→ 계약 schema 검증
+→ route별 요청·operation 시간 제한
+→ actor 또는 gateway context 확인
+→ Standard Schema 검증
 → 유스케이스 호출
 → 공통 오류 응답
 ```
@@ -28,14 +29,13 @@ request ID
 
 ## 시간 제한 계층
 
-- Hono handler timeout은 클라이언트 응답 시간을 제한한다.
+- Hono request timeout은 클라이언트 응답 시간을 제한한다.
 - Node HTTP timeout은 느린 헤더와 오래 열린 HTTP 연결을 제한한다.
 - PostgreSQL connection timeout은 연결 획득 시간을 제한한다.
-- 상태 변경 허용 시간은 handler timeout에서 PostgreSQL 연결 획득 timeout과 statement timeout을 뺀
-  값이다. 이 시점에 operation `AbortSignal`을 중단하고 gateway-ticket 패키지는 SQL 시작 직전에 신호를
-  다시 확인한다.
-- PostgreSQL statement timeout은 이미 실행 중인 SQL이 최종 handler timeout 뒤까지 남지 않도록
-  제한한다. handler timeout만으로 진행 중인 DB 쿼리가 취소된다고 가정하지 않는다.
+- operation deadline에 도달하면 `AbortSignal`을 중단하고 gateway-ticket 패키지는 SQL 시작 직전에
+  신호를 다시 확인한다.
+- PostgreSQL statement timeout은 이미 실행 중인 SQL을 제한한다. Hono timeout만으로 진행 중인 DB
+  쿼리가 취소된다고 가정하지 않는다.
 
 ## 상태 확인과 종료
 

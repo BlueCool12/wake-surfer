@@ -1,6 +1,5 @@
 import { Hono } from "hono";
 
-import type { ApiCommonErrorCode, ApiErrorResponse } from "@wake-surfer/api-contracts";
 import {
   ConsumeGatewayTicketRequestBodySchema,
   IssueGatewayTicketRequestBodySchema,
@@ -9,11 +8,10 @@ import type {
   ConsumeGatewayTicketRequest,
   ConsumeGatewayTicketResponse,
   IssueGatewayTicketResponse,
-  RealtimeChatErrorCode,
 } from "@wake-surfer/realtime-chat-gateway-ticket-contracts";
 import type { MessageSendModule } from "@wake-surfer/realtime-chat-message-send";
 import {
-  parseSendMessageRequestBody,
+  SendMessageRequestBodySchema,
   type SendMessageResponse,
 } from "@wake-surfer/realtime-chat-message-send-contracts";
 import type {
@@ -21,9 +19,12 @@ import type {
   LoadOlderMessages,
   SyncAfterMessages,
 } from "@wake-surfer/realtime-chat-stream-messages";
+import { sValidator } from "@hono/standard-validator";
 import { bearerAuth } from "hono/bearer-auth";
+import { bodyLimit } from "hono/body-limit";
 import { cors } from "hono/cors";
 import { HTTPException } from "hono/http-exception";
+import { secureHeaders } from "hono/secure-headers";
 import { timeout } from "hono/timeout";
 
 import {
@@ -31,6 +32,18 @@ import {
   registerLoadOlderMessagesHttpRoute,
   registerStreamMessagesInternalHttpRoutes,
 } from "./features/stream-messages/routes.js";
+import {
+  AppHttpError,
+  createApiErrorResponse,
+  isAppHttpError,
+  isRequestDeadlineExceededError,
+  type RealtimeChatApiErrorResponse,
+} from "./http/errors.js";
+import type { RealtimeChatApiEnv } from "./http/env.js";
+import { gatewayTicketOperationDeadline } from "./http/gateway-ticket-deadline.js";
+import { realtimeChatApiRequestId } from "./http/request-id.js";
+
+export { AppHttpError } from "./http/errors.js";
 
 export type AppLogger = {
   error: (context: Record<string, unknown>, message: string) => void;
@@ -42,8 +55,12 @@ export type GatewayTicketService = {
   consume: (
     request: ConsumeGatewayTicketRequest,
     context: { gatewayId: string },
+    operationContext?: { signal?: AbortSignal },
   ) => Promise<ConsumeGatewayTicketResponse>;
-  issue: (command: { actorId: string }) => Promise<IssueGatewayTicketResponse>;
+  issue: (
+    command: { actorId: string },
+    operationContext?: { signal?: AbortSignal },
+  ) => Promise<IssueGatewayTicketResponse>;
 };
 
 export type AuthenticatedActor = {
@@ -64,34 +81,22 @@ export type RealtimeChatApiAppDeps = {
   gatewayTicket: GatewayTicketService;
   getAssertedActor?: (request: Request) => Promise<AuthenticatedActor> | AuthenticatedActor;
   gatewayApiToken: string;
+  checkReadiness?: () => Promise<void> | void;
+  isDraining?: () => boolean;
   loadLatestMessages?: LoadLatestMessages;
   loadOlderMessages?: LoadOlderMessages;
   logger: AppLogger;
   messageSend?: MessageSendModule;
+  operationAbortMilliseconds?: number;
+  requestBodyLimitBytes?: number;
   requestTimeoutMilliseconds?: number;
   syncAfterMessages?: SyncAfterMessages;
 };
 
-type RealtimeChatApiErrorCode = RealtimeChatErrorCode | ApiCommonErrorCode;
-type RealtimeChatApiErrorResponse = ApiErrorResponse<RealtimeChatApiErrorCode>;
+const DEFAULT_OPERATION_ABORT_MILLISECONDS = 8_000;
+const DEFAULT_REQUEST_BODY_LIMIT_BYTES = 16_384;
 
-export class AppHttpError extends Error {
-  readonly code: RealtimeChatApiErrorCode;
-  readonly statusCode: 400 | 401 | 403 | 404 | 500 | 503;
-
-  constructor(
-    statusCode: 400 | 401 | 403 | 404 | 500 | 503,
-    code: RealtimeChatApiErrorCode,
-    message: string,
-    options?: ErrorOptions,
-  ) {
-    super(message, options);
-    this.code = code;
-    this.statusCode = statusCode;
-  }
-}
-
-export function createRealtimeChatApiApp(deps: RealtimeChatApiAppDeps): Hono {
+export function createRealtimeChatApiApp(deps: RealtimeChatApiAppDeps): Hono<RealtimeChatApiEnv> {
   const {
     authenticateActor,
     authenticateGateway,
@@ -100,7 +105,24 @@ export function createRealtimeChatApiApp(deps: RealtimeChatApiAppDeps): Hono {
     logger,
     messageSend,
   } = deps;
-  const app = new Hono();
+  const app = new Hono<RealtimeChatApiEnv>();
+
+  app.use("*", secureHeaders());
+  app.use("*", realtimeChatApiRequestId);
+  app.use("*", async (context, next) => {
+    const startedAt = performance.now();
+    await next();
+    logger.info(
+      {
+        durationMs: Number((performance.now() - startedAt).toFixed(3)),
+        method: context.req.method,
+        path: context.req.path,
+        requestId: context.get("requestId"),
+        status: context.res.status,
+      },
+      "realtime chat api request completed",
+    );
+  });
 
   app.use(
     "/internal/realtime-chat/*",
@@ -164,9 +186,59 @@ export function createRealtimeChatApiApp(deps: RealtimeChatApiAppDeps): Hono {
           }),
       ),
     );
+    app.use(
+      "/internal/realtime-chat/gateway-tickets/consume",
+      timeout(
+        deps.requestTimeoutMilliseconds,
+        () =>
+          new HTTPException(503, {
+            res: Response.json(
+              createApiErrorResponse(
+                "gateway_ticket_unavailable",
+                "gateway ticket service unavailable",
+              ),
+              { status: 503 },
+            ),
+          }),
+      ),
+    );
   }
 
+  const limitedJsonBody = bodyLimit({
+    maxSize: deps.requestBodyLimitBytes ?? DEFAULT_REQUEST_BODY_LIMIT_BYTES,
+    onError: (context) =>
+      context.json(createApiErrorResponse("bad_request", "request body is too large"), 413),
+  });
+  app.use("/realtime-chat/gateway-tickets", limitedJsonBody);
+  app.use("/internal/realtime-chat/*", limitedJsonBody);
+
+  const gatewayTicketDeadline = gatewayTicketOperationDeadline(
+    deps.operationAbortMilliseconds ?? DEFAULT_OPERATION_ABORT_MILLISECONDS,
+  );
+  app.use("/realtime-chat/gateway-tickets", gatewayTicketDeadline);
+  app.use("/internal/realtime-chat/gateway-tickets/consume", gatewayTicketDeadline);
+
   app.get("/health", (context) => context.json({ status: "ok" as const }));
+  app.get("/health/live", (context) => context.json({ status: "ok" as const }));
+  app.get("/health/ready", async (context) => {
+    if (deps.isDraining?.() === true) {
+      return context.json({ status: "not_ready" as const }, 503);
+    }
+
+    try {
+      await deps.checkReadiness?.();
+      return context.json({ status: "ready" as const });
+    } catch (error) {
+      logger.warn(
+        {
+          error: serializeError(error),
+          requestId: context.get("requestId"),
+        },
+        "realtime chat api readiness check failed",
+      );
+      return context.json({ status: "not_ready" as const }, 503);
+    }
+  });
 
   app.post("/realtime-chat/gateway-tickets", async (context) => {
     const actor = await authenticateActor(context.req.raw);
@@ -175,10 +247,22 @@ export function createRealtimeChatApiApp(deps: RealtimeChatApiAppDeps): Hono {
     let issued: IssueGatewayTicketResponse;
 
     try {
-      issued = await gatewayTicket.issue({
-        actorId: actor.actorId,
-      });
+      const operationSignal = context.get("gatewayTicketOperationSignal");
+      issued = await gatewayTicket.issue(
+        {
+          actorId: actor.actorId,
+        },
+        {
+          signal: operationSignal,
+        },
+      );
     } catch (error) {
+      const operationSignal = context.get("gatewayTicketOperationSignal");
+
+      if (operationSignal.aborted && isRequestDeadlineExceededError(operationSignal.reason)) {
+        throw operationSignal.reason;
+      }
+
       throw new AppHttpError(
         503,
         "gateway_ticket_unavailable",
@@ -192,60 +276,97 @@ export function createRealtimeChatApiApp(deps: RealtimeChatApiAppDeps): Hono {
     return context.json(issued, 201);
   });
 
-  app.post("/internal/realtime-chat/gateway-tickets/consume", async (context) => {
-    const gateway = await authenticateGateway(context.req.raw);
-    const body = await readConsumeGatewayTicketRequest(context.req.raw);
-
-    let result: ConsumeGatewayTicketResponse;
-
-    try {
-      result = await gatewayTicket.consume(
-        {
-          ticket: body.ticket,
-        },
-        {
-          gatewayId: gateway.gatewayId,
-        },
-      );
-    } catch (error) {
-      throw new AppHttpError(
-        503,
-        "gateway_ticket_unavailable",
-        "gateway ticket service unavailable",
-        {
-          cause: error,
-        },
-      );
-    }
-
-    return context.json(result);
-  });
-
-  if (messageSend !== undefined && getAssertedActor !== undefined) {
-    app.post("/internal/realtime-chat/messages", async (context) => {
-      await authenticateGateway(context.req.raw);
-      const actor = await getAssertedActor(context.req.raw);
-      const body = await readRequiredJsonBody(context.req.raw);
-      const parsed = parseSendMessageRequestBody(body);
-
-      if (!parsed.ok) {
-        throw new AppHttpError(400, "bad_request", parsed.message);
+  app.post(
+    "/internal/realtime-chat/gateway-tickets/consume",
+    sValidator("json", ConsumeGatewayTicketRequestBodySchema, (result, context) => {
+      if (!result.success) {
+        return context.json(
+          createApiErrorResponse(
+            "bad_request",
+            "게이트웨이 티켓 소비 요청 본문이 올바르지 않습니다.",
+          ),
+          400,
+        );
       }
+    }),
+    async (context) => {
+      const gateway = await authenticateGateway(context.req.raw);
+      const body = context.req.valid("json");
 
-      let result: SendMessageResponse;
+      let result: ConsumeGatewayTicketResponse;
 
       try {
-        result = await messageSend.send(parsed.value, {
-          actorId: actor.actorId,
-        });
+        const operationSignal = context.get("gatewayTicketOperationSignal");
+        result = await gatewayTicket.consume(
+          {
+            ticket: body.ticket,
+          },
+          {
+            gatewayId: gateway.gatewayId,
+          },
+          {
+            signal: operationSignal,
+          },
+        );
       } catch (error) {
-        throw new AppHttpError(503, "internal_error", "message send service unavailable", {
-          cause: error,
-        });
+        const operationSignal = context.get("gatewayTicketOperationSignal");
+
+        if (operationSignal.aborted && isRequestDeadlineExceededError(operationSignal.reason)) {
+          throw operationSignal.reason;
+        }
+
+        throw new AppHttpError(
+          503,
+          "gateway_ticket_unavailable",
+          "gateway ticket service unavailable",
+          {
+            cause: error,
+          },
+        );
       }
 
       return context.json(result);
-    });
+    },
+  );
+
+  if (messageSend !== undefined && getAssertedActor !== undefined) {
+    app.post(
+      "/internal/realtime-chat/messages",
+      sValidator("json", SendMessageRequestBodySchema, (result, context) => {
+        if (!result.success) {
+          return context.json(
+            createApiErrorResponse("bad_request", "메시지 전송 요청 본문이 올바르지 않습니다."),
+            400,
+          );
+        }
+      }),
+      async (context) => {
+        await authenticateGateway(context.req.raw);
+        const actor = await getAssertedActor(context.req.raw);
+        const body = context.req.valid("json");
+        const command = {
+          clientMessageId: body.clientMessageId,
+          target: body.target,
+          content: body.content,
+          ...(body.commandId === undefined ? {} : { commandId: body.commandId }),
+          ...(body.sentAtClient === undefined ? {} : { sentAtClient: body.sentAtClient }),
+        };
+
+        let result: SendMessageResponse;
+
+        try {
+          result = await messageSend.send(command, {
+            actorId: actor.actorId,
+          });
+        } catch (error) {
+          throw new AppHttpError(503, "internal_error", "message send service unavailable", {
+            cause: error,
+          });
+        }
+
+        return context.json(result);
+      },
+    );
   }
 
   if (deps.loadLatestMessages !== undefined) {
@@ -294,13 +415,11 @@ export function createRealtimeChatApiApp(deps: RealtimeChatApiAppDeps): Hono {
   );
 
   app.onError((error, context) => {
-    const httpExceptionResponse = getHttpExceptionResponse(error);
-
-    if (httpExceptionResponse !== undefined) {
-      return httpExceptionResponse;
+    if (error instanceof HTTPException) {
+      return error.getResponse();
     }
 
-    if (error instanceof AppHttpError) {
+    if (isAppHttpError(error)) {
       if (error.statusCode >= 500) {
         logRequestFailure(
           logger,
@@ -318,6 +437,13 @@ export function createRealtimeChatApiApp(deps: RealtimeChatApiAppDeps): Hono {
           status: "error",
         } satisfies RealtimeChatApiErrorResponse,
         error.statusCode,
+      );
+    }
+
+    if (isRequestDeadlineExceededError(error)) {
+      return context.json(
+        createApiErrorResponse("gateway_ticket_unavailable", "gateway ticket service unavailable"),
+        503,
       );
     }
 
@@ -340,34 +466,6 @@ export function createRealtimeChatApiApp(deps: RealtimeChatApiAppDeps): Hono {
   });
 
   return app;
-}
-
-function getHttpExceptionResponse(error: unknown): Response | undefined {
-  if (error instanceof HTTPException) {
-    return error.getResponse();
-  }
-
-  if (!(error instanceof Error)) {
-    return undefined;
-  }
-
-  const candidate = error as Error & {
-    getResponse?: () => unknown;
-    status?: unknown;
-  };
-
-  if (
-    typeof candidate.getResponse !== "function" ||
-    typeof candidate.status !== "number" ||
-    !Number.isInteger(candidate.status) ||
-    candidate.status < 400 ||
-    candidate.status > 599
-  ) {
-    return undefined;
-  }
-
-  const response = candidate.getResponse();
-  return response instanceof Response ? response : undefined;
 }
 
 function logRequestFailure(
@@ -406,23 +504,6 @@ async function readIssueGatewayTicketRequest(request: Request): Promise<void> {
   }
 }
 
-async function readConsumeGatewayTicketRequest(
-  request: Request,
-): Promise<ConsumeGatewayTicketRequest> {
-  const body = await readRequiredJsonBody(request);
-  const parsed = ConsumeGatewayTicketRequestBodySchema.safeParse(body);
-
-  if (!parsed.success) {
-    throw new AppHttpError(
-      400,
-      "bad_request",
-      "게이트웨이 티켓 소비 요청 본문이 올바르지 않습니다.",
-    );
-  }
-
-  return parsed.data;
-}
-
 async function readOptionalJsonBody(request: Request): Promise<unknown> {
   const rawBody = await request.text();
 
@@ -431,14 +512,6 @@ async function readOptionalJsonBody(request: Request): Promise<unknown> {
   }
 
   return parseJsonBody(rawBody);
-}
-
-async function readRequiredJsonBody(request: Request): Promise<unknown> {
-  try {
-    return parseJsonBody(await request.text());
-  } catch {
-    throw new AppHttpError(400, "bad_request", "request body must be valid JSON");
-  }
 }
 
 function parseJsonBody(rawBody: string): unknown {

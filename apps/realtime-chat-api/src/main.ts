@@ -4,12 +4,21 @@ import { createRealtimeChatApiApp } from "./app.js";
 import { createRuntimeDeps } from "./runtime/create-runtime-deps.js";
 
 const runtime = await createRuntimeDeps();
-const app = createRealtimeChatApiApp(runtime.appDeps);
+let isShuttingDown = false;
+const app = createRealtimeChatApiApp({
+  ...runtime.appDeps,
+  isDraining: () => isShuttingDown,
+});
 
 const server = serve(
   {
     fetch: app.fetch,
     port: runtime.config.port,
+    serverOptions: {
+      headersTimeout: runtime.config.httpHeadersTimeoutMilliseconds,
+      keepAliveTimeout: runtime.config.httpKeepAliveTimeoutMilliseconds,
+      requestTimeout: runtime.config.httpRequestTimeoutMilliseconds,
+    },
   },
   (info) => {
     runtime.appDeps.logger.info(
@@ -21,8 +30,6 @@ const server = serve(
   },
 );
 
-let isShuttingDown = false;
-
 function shutdown(signal: NodeJS.Signals): void {
   if (isShuttingDown) {
     return;
@@ -31,20 +38,51 @@ function shutdown(signal: NodeJS.Signals): void {
   isShuttingDown = true;
   runtime.appDeps.logger.info({ signal }, "realtime chat api shutting down");
 
-  server.close((error) => {
-    runtime
-      .close()
-      .then(() => {
+  void closeRuntime();
+}
+
+async function closeRuntime(): Promise<void> {
+  const forceCloseTimer = setTimeout(() => {
+    runtime.appDeps.logger.warn({}, "realtime chat api shutdown grace exceeded");
+    if ("closeAllConnections" in server) {
+      server.closeAllConnections();
+    }
+  }, runtime.config.shutdownGraceMilliseconds);
+  forceCloseTimer.unref();
+  if ("closeIdleConnections" in server) {
+    server.closeIdleConnections();
+  }
+
+  let shutdownFailed = false;
+
+  try {
+    await new Promise<void>((resolve, reject) => {
+      server.close((error) => {
         if (error) {
-          runtime.appDeps.logger.error({ error }, "http server shutdown failed");
-          process.exitCode = 1;
+          reject(error);
+          return;
         }
-      })
-      .catch((closeError: unknown) => {
-        runtime.appDeps.logger.error({ error: closeError }, "runtime shutdown failed");
-        process.exitCode = 1;
+
+        resolve();
       });
-  });
+    });
+  } catch (error) {
+    shutdownFailed = true;
+    runtime.appDeps.logger.error({ error }, "realtime chat api HTTP shutdown failed");
+  }
+
+  try {
+    await runtime.close();
+  } catch (error) {
+    shutdownFailed = true;
+    runtime.appDeps.logger.error({ error }, "realtime chat api runtime shutdown failed");
+  }
+
+  clearTimeout(forceCloseTimer);
+
+  if (shutdownFailed) {
+    process.exitCode = 1;
+  }
 }
 
 process.once("SIGINT", shutdown);

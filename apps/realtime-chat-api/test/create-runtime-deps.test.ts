@@ -27,27 +27,58 @@ describe("realtime chat API runtime dependencies", () => {
   it("assembles the MVP message vertical slice without running migrations and exposes cleanup", async () => {
     const close = vi.fn(async () => undefined);
     const database = createDatabaseHandle(close);
+    const createDatabase = vi.fn(() => database);
 
     const runtime = await createRuntimeDeps(requiredEnv(), {
-      createDatabase: () => database,
+      createDatabase,
     });
 
+    expect(createDatabase).toHaveBeenCalledWith({
+      databaseUrl: "postgres://localhost/wake_surfer",
+      pool: expect.objectContaining({
+        connectionTimeoutMillis: 2_000,
+        statementTimeoutMillis: 5_000,
+      }),
+    });
     expect(runtime.appDeps.messageSend?.send).toEqual(expect.any(Function));
     expect(runtime.appDeps.loadLatestMessages).toEqual(expect.any(Function));
     expect(runtime.appDeps.loadOlderMessages).toEqual(expect.any(Function));
     expect(runtime.appDeps.syncAfterMessages).toEqual(expect.any(Function));
+    expect(runtime.appDeps.checkReadiness).toEqual(expect.any(Function));
     expect(runtime.appDeps.cors?.allowedHeaders).toContain("x-actor-id");
+    expect(runtime.appDeps.operationAbortMilliseconds).toBe(8_000);
+    expect(runtime.appDeps.requestBodyLimitBytes).toBe(16_384);
     expect(close).not.toHaveBeenCalled();
     await runtime.close();
     expect(close).toHaveBeenCalledOnce();
+  });
+
+  it("checks database readiness without depending on a domain table", async () => {
+    const executeTakeFirstOrThrow = vi.fn(async () => ({ ready: 1 }));
+    const selectNoFrom = vi.fn(() => ({ executeTakeFirstOrThrow }));
+    const database = createDatabaseHandle(
+      vi.fn(async () => undefined),
+      {
+        selectNoFrom,
+      } as unknown as RealtimeChatDatabaseHandle["db"],
+    );
+    const runtime = await createRuntimeDeps(requiredEnv(), {
+      createDatabase: () => database,
+    });
+
+    await runtime.appDeps.checkReadiness?.();
+
+    expect(selectNoFrom).toHaveBeenCalledOnce();
+    expect(executeTakeFirstOrThrow).toHaveBeenCalledOnce();
   });
 });
 
 function createDatabaseHandle(
   close: RealtimeChatDatabaseHandle["close"],
+  db: RealtimeChatDatabaseHandle["db"] = {} as RealtimeChatDatabaseHandle["db"],
 ): RealtimeChatDatabaseHandle {
   return {
-    db: {} as RealtimeChatDatabaseHandle["db"],
+    db,
     close,
   };
 }

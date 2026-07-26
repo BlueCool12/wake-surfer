@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@hono/node-server": "^2.0.8",
+    "@hono/standard-validator": "^0.3.0",
     "@wake-surfer/api-contracts": "workspace:*",
     "@wake-surfer/realtime-chat-database": "workspace:*",
     "@wake-surfer/realtime-chat-gateway-ticket": "workspace:*",

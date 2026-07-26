@@ -1,34 +1,34 @@
-import type { ApiErrorResponse } from "@wake-surfer/api-contracts";
+import type { ApiCommonErrorCode, ApiErrorResponse } from "@wake-surfer/api-contracts";
 import type { RealtimeChatErrorCode } from "@wake-surfer/realtime-chat-gateway-ticket-contracts";
 
-export type GatewayTicketErrorResponse = ApiErrorResponse<RealtimeChatErrorCode>;
+export type RealtimeChatApiErrorCode = RealtimeChatErrorCode | ApiCommonErrorCode;
+export type RealtimeChatApiErrorResponse = ApiErrorResponse<RealtimeChatApiErrorCode>;
 
-export type AppHttpError = Error & {
-  readonly code: RealtimeChatErrorCode;
-  readonly kind: "app_http_error";
-  readonly statusCode: 400 | 401 | 403;
-};
+export class AppHttpError extends Error {
+  readonly code: RealtimeChatApiErrorCode;
+  readonly statusCode: 400 | 401 | 403 | 404 | 500 | 503;
+
+  constructor(
+    statusCode: AppHttpError["statusCode"],
+    code: RealtimeChatApiErrorCode,
+    message: string,
+    options?: ErrorOptions,
+  ) {
+    super(message, options);
+    this.name = "AppHttpError";
+    this.code = code;
+    this.statusCode = statusCode;
+  }
+}
 
 export type RequestDeadlineExceededError = Error & {
   readonly kind: "request_deadline_exceeded";
 };
 
-export function createAppHttpError(
-  statusCode: AppHttpError["statusCode"],
-  code: RealtimeChatErrorCode,
+export function createApiErrorResponse(
+  code: RealtimeChatApiErrorCode,
   message: string,
-): AppHttpError {
-  return Object.assign(new Error(message), {
-    code,
-    kind: "app_http_error" as const,
-    statusCode,
-  });
-}
-
-export function createGatewayTicketErrorResponse(
-  code: RealtimeChatErrorCode,
-  message: string,
-): GatewayTicketErrorResponse {
+): RealtimeChatApiErrorResponse {
   return {
     code,
     message,
@@ -43,7 +43,7 @@ export function createRequestDeadlineExceededError(): RequestDeadlineExceededErr
 }
 
 export function isAppHttpError(error: unknown): error is AppHttpError {
-  return error instanceof Error && "kind" in error && error.kind === "app_http_error";
+  return error instanceof AppHttpError;
 }
 
 export function isRequestDeadlineExceededError(

@@ -111,7 +111,8 @@ sequenceDiagram
 ## 🛡️ 런타임 안전장치가 해결하는 문제
 
 * **요청 추적 단절 방지**: `requestId`로 gateway, API, 로그 사이의 한 요청을 연결합니다.
-* **느린 요청 점유 방지**: handler, HTTP header, request, keep-alive 시간을 서로 다른 계층에서 제한합니다.
+* **느린 요청 점유 방지**: operation, Hono 요청, HTTP header·request·keep-alive 시간을 서로 다른
+  계층에서 제한합니다.
 * **과대 본문 방지**: 작은 JSON API에 불필요하게 큰 body가 들어와 메모리를 점유하는 상황을 막습니다.
 * **신뢰 경계 역전 방지**: actor와 gateway identity를 클라이언트 JSON에서 읽지 않습니다.
 * **로그 비밀값 유출 방지**: ticket 원문, 인증 헤더, 전체 query string을 접근 로그에서 제외합니다.
@@ -125,7 +126,7 @@ sequenceDiagram
 조립합니다. 서비스 클래스를 상속하거나 거대한 application 객체를 두지 않습니다.
 
 * 미들웨어는 입력을 받고 다음 함수를 호출하는 작은 함수로 유지합니다.
-* 오류는 클래스 계층 대신 태그된 오류 생성 함수와 타입 가드로 구분합니다.
+* HTTP 경계 오류와 deadline 오류를 명시적 타입 가드로 구분합니다.
 * 변경 가능한 상태는 `main.ts`의 종료 상태와 앱 팩터리 경계 안에서만 소유합니다.
 * Hono의 `HTTPException`처럼 프레임워크가 요구하는 객체는 프레임워크 경계에서만 사용합니다.
 
