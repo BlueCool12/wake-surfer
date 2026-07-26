@@ -1,0 +1,12 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "Node16",
+    "moduleResolution": "Node16",
+    "declaration": false,
+    "declarationMap": false,
+    "sourceMap": true,
+    "noEmitOnError": true
+  }
+}

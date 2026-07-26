@@ -1,6 +1,5 @@
 export { createGatewayTicketModule } from "./gateway-ticket-module";
 export type { CreateGatewayTicketModuleConfig, GatewayTicketModule } from "./gateway-ticket-module";
-export type { GatewayTicketOperationContext } from "./operation-context";
 export {
   MAX_GATEWAY_TICKET_RAW_BYTES,
   MIN_GATEWAY_TICKET_RAW_BYTES,

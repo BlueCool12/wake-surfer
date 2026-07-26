@@ -41,6 +41,30 @@
   font-size: 0.9rem;
 }
 
+.loadOlder,
+.recoveryNotice {
+  align-self: center;
+  border: 0;
+  background: transparent;
+  color: var(--color-text-secondary);
+  font: inherit;
+  font-size: 0.8rem;
+}
+
+button.loadOlder,
+button.recoveryNotice {
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 0.2rem;
+}
+
+.recoveryError {
+  align-self: center;
+  margin: 0;
+  color: #c24141;
+  font-size: 0.8rem;
+}
+
 .composer {
   padding: 0.75rem 1.25rem 1.25rem;
   border-top: 1px solid var(--color-border);

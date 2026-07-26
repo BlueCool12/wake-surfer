@@ -8,6 +8,7 @@ import {
 
 const validConfig: OAuthConfig = {
   clientId: "client-123",
+  clientSecret: "secret-456",
   redirectUri: "https://app.example.com/auth/github/callback",
   scopes: ["user:email"],
 };
@@ -20,6 +21,12 @@ describe("assertValidOAuthConfig", () => {
   it("clientId가 비어 있으면 OAuthConfigError를 던진다", () => {
     expect(() => assertValidOAuthConfig({ ...validConfig, clientId: "  " })).toThrow(
       OAuthConfigError,
+    );
+  });
+
+  it("clientSecret이 비어 있으면 예외를 던진다", () => {
+    expect(() => assertValidOAuthConfig({ ...validConfig, clientSecret: "  " })).toThrow(
+      /clientSecret/,
     );
   });
 

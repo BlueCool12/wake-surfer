@@ -1,3 +1,4 @@
+import type { OAuthProviderError } from "../domain/oauth-provider-error";
 import { parseGithubCallbackParams } from "../infrastructure/github/callback-params";
 import type { OAuthCsrfStateStorePort } from "../runtime-deps";
 
@@ -12,12 +13,6 @@ export type OAuthCallbackErrorCode =
   | "STATE_MISMATCH"
   /** error도 없는데 code도 없다. */
   | "MISSING_CODE";
-
-/** GitHub이 콜백 쿼리에 실어 보낸 원본 에러. (로깅·디버깅용 보존) */
-export type OAuthProviderError = {
-  readonly error: string;
-  readonly errorDescription?: string;
-};
 
 export type HandleGithubCallbackResult =
   | {
@@ -40,7 +35,6 @@ export type HandleGithubCallbackInput = {
 /**
  * OAuth 콜백 처리 유스케이스.
  *
- * 흐름: state 소비 → error 분기 → state 존재 확인 → 검증 결과 확인 → code 존재 확인 → ok.
  * 예상 가능한 실패는 전부 결과 유니언으로 반환하며 예외를 던지지 않는다.
  * HTTP 상태코드·사용자 문구 매핑은 이 함수를 호출하는 apps의 책임이다.
  */

@@ -6,21 +6,20 @@ import type { AppLogger } from "./logger.js";
 export async function closeServers(
   websocketServer: WebSocketServer,
   httpServer: Server,
-  heartbeatClose: () => void,
   shutdownGraceMilliseconds: number,
   logger: AppLogger,
 ): Promise<void> {
-  heartbeatClose();
-
   for (const client of websocketServer.clients) {
-    client.close(1001, "서버가 종료 중입니다");
+    client.close(1001, "server shutdown");
   }
 
   const forceCloseTimer = setTimeout(() => {
     logger.warn({}, "실시간 채팅 게이트웨이 종료 유예 시간 초과");
+
     for (const client of websocketServer.clients) {
       client.terminate();
     }
+
     httpServer.closeAllConnections();
   }, shutdownGraceMilliseconds);
   forceCloseTimer.unref();
@@ -49,6 +48,7 @@ function closeWebSocketServer(server: WebSocketServer): Promise<void> {
         reject(error);
         return;
       }
+
       resolve();
     });
   });
@@ -61,6 +61,7 @@ function closeHttpServer(server: Server): Promise<void> {
         reject(error);
         return;
       }
+
       resolve();
     });
   });

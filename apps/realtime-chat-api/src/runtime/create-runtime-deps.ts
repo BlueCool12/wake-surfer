@@ -3,6 +3,16 @@ import {
   createGatewayTicketModule,
   createStaticGatewayAssigner,
 } from "@wake-surfer/realtime-chat-gateway-ticket";
+import {
+  createMessageSendModule,
+  type MessageWriteAuthorizer,
+} from "@wake-surfer/realtime-chat-message-send";
+import {
+  createLoadLatestMessages,
+  createLoadOlderMessages,
+  createSyncAfterMessages,
+  type ChannelReadAuthorizer,
+} from "@wake-surfer/realtime-chat-stream-messages";
 
 import { loadEnv } from "../config/env.js";
 
@@ -47,17 +57,46 @@ export async function createRuntimeDeps(
       rawTicketBytes: config.gatewayTicketRawBytes,
       ticketTtlMilliseconds: config.gatewayTicketTtlMilliseconds,
     });
-
-    await database.migrate();
+    // MVP 세로 흐름용 임시 정책이다. 실제 channel membership/permission provider로 교체해야 한다.
+    const authorizeChannelRead: ChannelReadAuthorizer = () => ({ status: "allowed" });
+    const authorizeMessageWrite: MessageWriteAuthorizer = ({ target }) =>
+      target.type === "channel" ? { status: "allowed" } : { status: "denied" };
+    const messageSend = createMessageSendModule({
+      authorizeWrite: authorizeMessageWrite,
+      db: database.db,
+    });
 
     return {
       appDeps: {
         ...createHeaderAuthContext(config),
-        checkReadiness: async () => {
-          await database.db.selectFrom("gateway_tickets").select("ticket_hash").limit(1).execute();
+        cors: {
+          allowedHeaders: [
+            "authorization",
+            "content-type",
+            "x-request-id",
+            config.actorIdHeader,
+            config.gatewayIdHeader,
+            config.gatewayAssertedActorHeader,
+          ],
+          allowedOrigins: config.corsAllowedOrigins,
         },
         gatewayTicket,
+        gatewayApiToken: config.gatewayApiToken,
+        loadLatestMessages: createLoadLatestMessages({
+          authorizeRead: authorizeChannelRead,
+          db: database.db,
+        }),
+        loadOlderMessages: createLoadOlderMessages({
+          authorizeRead: authorizeChannelRead,
+          db: database.db,
+        }),
         logger,
+        messageSend,
+        requestTimeoutMilliseconds: config.requestTimeoutMilliseconds,
+        syncAfterMessages: createSyncAfterMessages({
+          authorizeRead: authorizeChannelRead,
+          db: database.db,
+        }),
       },
       close: async () => {
         await database.close();

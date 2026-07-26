@@ -11,7 +11,9 @@ coverage/
 .env
 .env.*
 !.env.example
+!apps/realtime-chat-api/docker/postgres.dev.env
 
 *.log
 AGENTS.override.md
 .codex
+docs

@@ -5,6 +5,12 @@
 이 패키지는 요청/응답 타입과 그 타입에 대응하는 validation schema를 함께 제공한다. 저장소 로직,
 HTTP 라우팅, 도메인 유스케이스 구현은 이 패키지의 책임이 아니다.
 
+## 모듈 형식
+
+브라우저와 Node 서버가 runtime schema를 같은 계약에서 사용한다. build는 소스를 번들하지 않고 ESM과
+CommonJS로 각각 변환하며, package `exports`의 `import`와 `require` 조건이 실행 환경에 맞는 결과물을
+선택한다. 타입 선언은 두 형식이 공유한다.
+
 ## feature별 contracts로 나누는 이유
 
 `realtime-chat` 전체에 하나의 contracts 패키지만 둘 수도 있다. 하지만 이 저장소에서는 유스케이스와
@@ -96,6 +102,10 @@ API 타입이다.
 ## 소비 응답
 
 ```ts
+export const ConsumeGatewayTicketResponseSchema = z.discriminatedUnion("status", [
+  // consumed 또는 rejected strict response
+]);
+
 export type ConsumeGatewayTicketResponse =
   | {
       status: "consumed";
@@ -111,6 +121,7 @@ export type ConsumeGatewayTicketResponse =
 ```
 
 성공하면 게이트웨이가 세션을 열 수 있도록 `actorId`와 소비 시각을 반환한다.
+Gateway는 `ConsumeGatewayTicketResponseSchema`로 내부 API 응답을 런타임에서 검증한다.
 
 실패하면 세부 원인을 외부에 노출하지 않고 `invalid_or_expired` 하나로 접는다. 티켓 부재, 만료, 재사용,
 게이트웨이 불일치는 모두 같은 외부 응답이다.

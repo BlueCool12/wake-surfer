@@ -10,21 +10,29 @@
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
+    },
+    "./integration-test": {
+      "types": "./dist/realtime-chat-integration-test.d.ts",
+      "default": "./dist/realtime-chat-integration-test.js"
     }
   },
   "files": [
     "dist"
   ],
   "scripts": {
-    "build": "pnpm --filter @wake-surfer/realtime-chat-gateway-ticket build && tsc -p tsconfig.json",
-    "clean": "tsc -b tsconfig.json --clean"
+    "build": "pnpm --filter @wake-surfer/realtime-chat-gateway-ticket build && pnpm --filter @wake-surfer/realtime-chat-message-send build && tsc -p tsconfig.json",
+    "clean": "tsc -b tsconfig.json --clean",
+    "test:integration": "pnpm build && vitest run --config vitest.integration.config.ts"
   },
   "dependencies": {
     "@wake-surfer/realtime-chat-gateway-ticket": "workspace:*",
+    "@wake-surfer/realtime-chat-message-send": "workspace:*",
     "kysely": "0.28.8",
     "pg": "^8.22.0"
   },
   "devDependencies": {
-    "@types/pg": "^8.20.0"
+    "@types/node": "^24.13.2",
+    "@types/pg": "^8.20.0",
+    "vitest": "4.1.6"
   }
 }

@@ -1,0 +1,35 @@
+{
+  "name": "@wake-surfer/realtime-chat-message-send",
+  "version": "0.0.0",
+  "private": true,
+  "type": "commonjs",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./table-contract": {
+      "types": "./dist/table-contract.d.ts",
+      "default": "./dist/table-contract.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "pnpm --filter @wake-surfer/realtime-chat-message-send-contracts build && tsc -p tsconfig.json",
+    "clean": "tsc -b tsconfig.json --clean",
+    "test": "pnpm --filter @wake-surfer/realtime-chat-message-send-contracts build && vitest run"
+  },
+  "dependencies": {
+    "@wake-surfer/realtime-chat-message-contracts": "workspace:*",
+    "@wake-surfer/realtime-chat-message-send-contracts": "workspace:*",
+    "kysely": "0.28.8"
+  },
+  "devDependencies": {
+    "vitest": "4.1.6"
+  }
+}

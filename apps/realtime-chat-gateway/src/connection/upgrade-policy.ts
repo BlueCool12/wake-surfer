@@ -2,10 +2,8 @@ import type { IncomingMessage } from "node:http";
 
 export type UpgradePolicyInput = {
   allowedOrigins: string[];
-  clientCount: number;
   gatewayPath: string;
-  isDraining: boolean;
-  maxConnections: number;
+  isClosing: boolean;
 };
 
 export type UpgradeRejection = {
@@ -17,7 +15,7 @@ export function evaluateUpgrade(
   request: IncomingMessage,
   input: UpgradePolicyInput,
 ): UpgradeRejection | null {
-  if (input.isDraining) {
+  if (input.isClosing) {
     return { reason: "Service Unavailable", status: 503 };
   }
 
@@ -31,12 +29,10 @@ export function evaluateUpgrade(
     return { reason: "Not Found", status: 404 };
   }
 
-  if (!isAllowedOrigin(request, input.allowedOrigins)) {
-    return { reason: "Forbidden", status: 403 };
-  }
+  const origin = request.headers.origin?.trim();
 
-  if (input.clientCount >= input.maxConnections) {
-    return { reason: "Service Unavailable", status: 503 };
+  if (origin === undefined || !input.allowedOrigins.includes(origin)) {
+    return { reason: "Forbidden", status: 403 };
   }
 
   return null;
@@ -48,13 +44,4 @@ export function pathnameFromRequest(request: IncomingMessage): string | null {
   } catch {
     return null;
   }
-}
-
-function isAllowedOrigin(request: IncomingMessage, allowedOrigins: string[]): boolean {
-  if (allowedOrigins.length === 0) {
-    return true;
-  }
-
-  const origin = request.headers.origin?.trim();
-  return origin !== undefined && allowedOrigins.includes(origin);
 }

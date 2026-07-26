@@ -9,7 +9,18 @@ import styles from "./ChatRoomPage.module.css";
 
 function ChatRoomPage() {
   const { channelId = "test" } = useParams();
-  const { messages, isLoading, sendMessage, retryMessage } = useChatRoom(channelId);
+  const {
+    messages,
+    isLoading,
+    isLoadingOlder,
+    olderFailed,
+    hasMoreBefore,
+    recoveryPhase,
+    loadOlder,
+    retryRecovery,
+    sendMessage,
+    retryMessage,
+  } = useChatRoom(channelId);
   const [draft, setDraft] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
   const isAtBottomRef = useRef(true);
@@ -61,16 +72,41 @@ function ChatRoomPage() {
       <div className={styles.messages} ref={scrollRef} onScroll={handleScroll}>
         {isLoading ? (
           <Loading />
-        ) : messages.length === 0 ? (
-          <p className={styles.placeholder}>아직 잔잔해요. 첫 파도를 일으켜보세요 🌊</p>
         ) : (
-          messages.map((message) => (
-            <MessageBubble
-              key={message.key}
-              message={message}
-              onRetry={message.status === "failed" ? () => retryMessage(message) : undefined}
-            />
-          ))
+          <>
+            {hasMoreBefore ? (
+              <button type="button" className={styles.loadOlder} onClick={loadOlder}>
+                {isLoadingOlder
+                  ? "이전 메시지 불러오는 중…"
+                  : olderFailed
+                    ? "이전 메시지 다시 불러오기"
+                    : "이전 메시지 불러오기"}
+              </button>
+            ) : null}
+            {recoveryPhase === "recovery_pending" ? (
+              <p className={styles.recoveryNotice}>누락된 메시지를 이어서 복구하고 있어요.</p>
+            ) : recoveryPhase === "retryable_failure" ? (
+              <button type="button" className={styles.recoveryNotice} onClick={retryRecovery}>
+                연결이 잠시 끊겼어요. 복구를 다시 시도하기
+              </button>
+            ) : recoveryPhase === "stream_unavailable" ||
+              recoveryPhase === "invalid_cursor" ||
+              recoveryPhase === "authentication_failure" ||
+              recoveryPhase === "protocol_failure" ? (
+              <p className={styles.recoveryError}>메시지 기록을 안전하게 불러오지 못했어요.</p>
+            ) : null}
+            {messages.length === 0 ? (
+              <p className={styles.placeholder}>아직 잔잔해요. 첫 파도를 일으켜보세요 🌊</p>
+            ) : (
+              messages.map((message) => (
+                <MessageBubble
+                  key={message.key}
+                  message={message}
+                  onRetry={message.status === "failed" ? () => retryMessage(message) : undefined}
+                />
+              ))
+            )}
+          </>
         )}
       </div>
 

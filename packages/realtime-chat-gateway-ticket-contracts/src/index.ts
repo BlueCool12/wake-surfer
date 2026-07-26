@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+export * from "./gateway-session.js";
+
 export type ActorId = string;
 export type GatewayTicket = string;
 export type GatewayUrl = string;
@@ -20,12 +22,28 @@ export type IssueGatewayTicketResponse = {
   expiresAt: ISODateTime;
 };
 
+const NonBlankStringSchema = z.string().trim().min(1);
+const GatewayUrlSchema = z.url().refine((value) => {
+  const protocol = new URL(value).protocol;
+  return protocol === "ws:" || protocol === "wss:";
+}, "gatewayUrl은 WebSocket URL이어야 합니다.");
+const ISODateTimeSchema = z
+  .string()
+  .trim()
+  .pipe(z.iso.datetime({ offset: true }));
+
+export const IssueGatewayTicketResponseSchema = z.strictObject({
+  ticket: NonBlankStringSchema,
+  gatewayUrl: GatewayUrlSchema,
+  expiresAt: ISODateTimeSchema,
+});
+
 export const IssueGatewayTicketRequestBodySchema = z.strictObject({});
 
 export type IssueGatewayTicketRequest = z.infer<typeof IssueGatewayTicketRequestBodySchema>;
 
 export const ConsumeGatewayTicketRequestBodySchema = z.strictObject({
-  ticket: z.string().trim().min(1),
+  ticket: NonBlankStringSchema,
 });
 
 export type ConsumeGatewayTicketRequest = z.infer<typeof ConsumeGatewayTicketRequestBodySchema>;
@@ -34,8 +52,8 @@ export const ConsumeGatewayTicketResponseSchema = z.discriminatedUnion("status",
   z.strictObject({
     status: z.literal("consumed"),
     ticket: z.strictObject({
-      actorId: z.string().trim().min(1),
-      consumedAt: z.iso.datetime(),
+      actorId: NonBlankStringSchema,
+      consumedAt: ISODateTimeSchema,
     }),
   }),
   z.strictObject({
@@ -44,4 +62,15 @@ export const ConsumeGatewayTicketResponseSchema = z.discriminatedUnion("status",
   }),
 ]);
 
-export type ConsumeGatewayTicketResponse = z.infer<typeof ConsumeGatewayTicketResponseSchema>;
+export type ConsumeGatewayTicketResponse =
+  | {
+      status: "consumed";
+      ticket: {
+        actorId: ActorId;
+        consumedAt: ISODateTime;
+      };
+    }
+  | {
+      status: "rejected";
+      reason: GatewayTicketRejectedReason;
+    };

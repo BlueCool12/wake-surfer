@@ -1,343 +1,382 @@
 import type { AddressInfo } from "node:net";
 
-import { WebSocket } from "ws";
-import { describe, expect, it, vi } from "vitest";
+import type { GatewayStreamMessagesApiClient } from "@wake-surfer/realtime-chat-stream-messages-gateway";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { WebSocket, type RawData } from "ws";
 
-import { createRealtimeChatGatewayApp } from "../src/app.js";
-import { loadEnv } from "../src/config/env.js";
+import { createRealtimeChatGatewayApp, type RealtimeChatGatewayApp } from "../src/app.js";
 
-import type { RealtimeChatGatewayAppDeps } from "../src/app.js";
+import type { RealtimeChatGatewayConfig } from "../src/config/env.js";
+import type { GatewayApiClient } from "../src/runtime/gateway-api-client.js";
+import type { AppLogger } from "../src/runtime/logger.js";
 
-describe("실시간 채팅 게이트웨이 앱", () => {
-  it("헬스 체크를 제공한다", async () => {
-    const app = createRealtimeChatGatewayApp(testConfig(), createDeps());
+describe("realtime chat gateway app", () => {
+  it("serves health and rejects an invalid WebSocket origin or path", async () => {
+    const fixture = await createFixture();
+    const health = await fetch(`${fixture.httpUrl}/health`);
 
-    await app.listen({ host: "127.0.0.1", port: 0 });
-
-    try {
-      const response = await fetch(`http://127.0.0.1:${portOf(app.address())}/health`);
-
-      await expect(response.json()).resolves.toEqual({
-        status: "ok",
-      });
-      expect(response.status).toBe(200);
-    } finally {
-      await app.close();
-    }
+    expect(health.status).toBe(200);
+    await expect(health.json()).resolves.toEqual({ status: "ok" });
+    await expect(
+      rejectedUpgradeStatus(`${fixture.websocketUrl}?ticket=ticket-a`, "http://evil.example"),
+    ).resolves.toBe(403);
+    await expect(
+      rejectedUpgradeStatus(
+        fixture.websocketUrl.replace("/realtime-chat", "/wrong-path") + "?ticket=ticket-a",
+        "http://localhost:5173",
+      ),
+    ).resolves.toBe(404);
+    expect(fixture.gatewayApiClient.consumeGatewayTicket).not.toHaveBeenCalled();
   });
 
-  it("게이트웨이 티켓을 소비하고 수락한 소켓을 로컬 세션으로 유지한다", async () => {
-    const consumeGatewayTicket = vi.fn(async () => ({
-      status: "consumed" as const,
-      ticket: {
-        actorId: "actor-1",
-        consumedAt: "2026-07-09T00:00:10.000Z",
-      },
-    }));
-    const app = createRealtimeChatGatewayApp(
-      testConfig(),
-      createDeps({
-        gatewayTicketConsumer: {
-          consumeGatewayTicket,
-        },
+  it("consumes the query ticket and announces the latest gateway.connected contract", async () => {
+    const fixture = await createFixture();
+    const connection = await connectClient(fixture.websocketUrl, "ticket-a");
+
+    expect(connection.connected).toEqual({
+      type: "gateway.connected",
+      protocolVersion: 1,
+      connectionGeneration: expect.stringMatching(/^gateway-connection_/),
+      gatewayId: "gateway-1",
+      sessionId: expect.stringMatching(/^gateway-session_/),
+      connectedAt: expect.any(String),
+    });
+    expect(fixture.gatewayApiClient.consumeGatewayTicket).toHaveBeenCalledWith({
+      requestId: expect.stringMatching(/^gateway-request_/),
+      signal: expect.any(AbortSignal),
+      ticket: "ticket-a",
+    });
+    expect(fixture.app.sessionCount()).toBe(1);
+  });
+
+  it("closes an unauthenticated socket with the application authentication code", async () => {
+    const fixture = await createFixture();
+    const socket = new WebSocket(fixture.websocketUrl, {
+      origin: "http://localhost:5173",
+    });
+
+    await expect(waitForClose(socket)).resolves.toEqual({
+      code: 4401,
+      reason: "gateway ticket required",
+    });
+    expect(fixture.gatewayApiClient.consumeGatewayTicket).not.toHaveBeenCalled();
+  });
+
+  it("relays message send and fans out the created message to ready channel subscribers", async () => {
+    const fixture = await createFixture();
+    const first = await connectClient(fixture.websocketUrl, "ticket-a");
+    const second = await connectClient(fixture.websocketUrl, "ticket-b");
+    first.socket.send(JSON.stringify({ type: "chat.channel.join", channelId: "room-1" }));
+    second.socket.send(JSON.stringify({ type: "chat.channel.join", channelId: "room-1" }));
+    await waitForSocketTurn();
+
+    const accepted = waitForFrame(first.socket, "chat.message.accepted");
+    const firstCreated = waitForFrame(first.socket, "chat.message.created");
+    const secondCreated = waitForFrame(second.socket, "chat.message.created");
+    first.socket.send(
+      JSON.stringify({
+        type: "chat.message.send",
+        clientMessageId: "client-message-1",
+        target: { type: "channel", channelId: "room-1" },
+        content: { type: "text", text: "안녕하세요" },
       }),
     );
 
-    await app.listen({ host: "127.0.0.1", port: 0 });
-
-    const socket = new WebSocket(`ws://127.0.0.1:${portOf(app.address())}/realtime-chat?ticket=t1`);
-
-    try {
-      await nextOpen(socket);
-      await waitFor(() => expect(app.sessionCount()).toBe(1));
-      expect(consumeGatewayTicket).toHaveBeenCalledWith(
-        expect.objectContaining({
-          gatewayId: "gateway-1",
-          requestId: expect.stringMatching(/^gateway-request_/),
-          signal: expect.any(AbortSignal),
-          ticket: "t1",
-        }),
-      );
-    } finally {
-      socket.close();
-      await app.close();
-    }
-  });
-
-  it("게이트웨이 티켓이 없는 소켓을 닫는다", async () => {
-    const consumeGatewayTicket = vi.fn();
-    const app = createRealtimeChatGatewayApp(
-      testConfig(),
-      createDeps({
-        gatewayTicketConsumer: {
-          consumeGatewayTicket,
-        },
+    await expect(accepted).resolves.toEqual(
+      expect.objectContaining({
+        type: "chat.message.accepted",
+        status: "accepted",
+        clientMessageId: "client-message-1",
       }),
     );
-
-    await app.listen({ host: "127.0.0.1", port: 0 });
-
-    const socket = new WebSocket(`ws://127.0.0.1:${portOf(app.address())}/realtime-chat`);
-
-    try {
-      await expect(nextClose(socket)).resolves.toMatchObject({
-        code: 4401,
-      });
-      expect(consumeGatewayTicket).not.toHaveBeenCalled();
-    } finally {
-      await app.close();
-    }
-  });
-
-  it("API가 게이트웨이 티켓을 거절하면 소켓을 닫는다", async () => {
-    const app = createRealtimeChatGatewayApp(
-      testConfig(),
-      createDeps({
-        gatewayTicketConsumer: {
-          consumeGatewayTicket: vi.fn(async () => ({
-            reason: "invalid_or_expired" as const,
-            status: "rejected" as const,
-          })),
-        },
-      }),
-    );
-
-    await app.listen({ host: "127.0.0.1", port: 0 });
-
-    const socket = new WebSocket(`ws://127.0.0.1:${portOf(app.address())}/realtime-chat?ticket=t1`);
-
-    try {
-      await expect(nextClose(socket)).resolves.toMatchObject({
-        code: 4401,
-        reason: "invalid_or_expired",
-      });
-    } finally {
-      await app.close();
-    }
-  });
-
-  it("예상하지 못한 인증 처리 예외를 기록하고 소켓을 안전하게 닫는다", async () => {
-    const logger = {
-      error: vi.fn(),
-      info: vi.fn(),
-      warn: vi.fn(),
-    };
-    const app = createRealtimeChatGatewayApp(
-      testConfig(),
-      createDeps({
-        gatewayTicketConsumer: {
-          consumeGatewayTicket: vi.fn(async () => undefined as never),
-        },
-        logger,
-      }),
-    );
-
-    await app.listen({ host: "127.0.0.1", port: 0 });
-    const socket = new WebSocket(`ws://127.0.0.1:${portOf(app.address())}/realtime-chat?ticket=t1`);
-
-    try {
-      await expect(nextClose(socket)).resolves.toMatchObject({ code: 1011 });
-      expect(logger.error).toHaveBeenCalledWith(
-        expect.objectContaining({
-          error: expect.any(Object),
-          requestId: expect.stringMatching(/^gateway-request_/),
-        }),
-        "실시간 채팅 게이트웨이 연결 인증 처리 실패",
-      );
-    } finally {
-      await app.close();
-    }
-  });
-
-  it("허용되지 않은 Origin의 upgrade를 거절한다", async () => {
-    const app = createRealtimeChatGatewayApp(
-      testConfig({ allowedOrigins: ["https://web.example.com"] }),
-      createDeps(),
-    );
-
-    await app.listen({ host: "127.0.0.1", port: 0 });
-
-    const socket = new WebSocket(
-      `ws://127.0.0.1:${portOf(app.address())}/realtime-chat?ticket=t1`,
+    const expectedMessage = expect.objectContaining({
+      type: "chat.message.created",
+      messageId: "message-1",
+      streamId: "channel:room-1",
+      sequence: 1,
+      senderActorId: "actor-ticket-a",
+    });
+    await expect(firstCreated).resolves.toEqual(expectedMessage);
+    await expect(secondCreated).resolves.toEqual(expectedMessage);
+    expect(fixture.gatewayApiClient.sendMessage).toHaveBeenCalledWith(
       {
-        origin: "https://evil.example.com",
+        clientMessageId: "client-message-1",
+        target: { type: "channel", channelId: "room-1" },
+        content: { type: "text", text: "안녕하세요" },
+      },
+      {
+        actorId: "actor-ticket-a",
+        requestId: expect.stringMatching(/^gateway-request_/),
+        signal: expect.any(AbortSignal),
       },
     );
-
-    try {
-      await expect(nextUnexpectedResponse(socket)).resolves.toBe(403);
-    } finally {
-      socket.terminate();
-      await app.close();
-    }
   });
 
-  it("티켓 인증 시간이 초과되면 연결을 닫는다", async () => {
-    const app = createRealtimeChatGatewayApp(
-      testConfig({ apiRequestTimeoutMilliseconds: 5 }),
-      createDeps({
-        gatewayTicketConsumer: {
-          consumeGatewayTicket: vi.fn(() => new Promise<never>(() => {})),
-        },
+  it("fans out a persisted message when the sender disconnects before accepted delivery", async () => {
+    const fixture = await createFixture();
+    const first = await connectClient(fixture.websocketUrl, "ticket-a");
+    const second = await connectClient(fixture.websocketUrl, "ticket-b");
+    first.socket.send(JSON.stringify({ type: "chat.channel.join", channelId: "room-1" }));
+    second.socket.send(JSON.stringify({ type: "chat.channel.join", channelId: "room-1" }));
+    await waitForSocketTurn();
+
+    let resolveSend:
+      ((value: Awaited<ReturnType<GatewayApiClient["sendMessage"]>>) => void) | undefined;
+    let sendSignal: AbortSignal | undefined;
+    vi.mocked(fixture.gatewayApiClient.sendMessage).mockImplementationOnce(
+      (_request, context) =>
+        new Promise((resolve, reject) => {
+          sendSignal = context.signal;
+          const rejectOnAbort = (): void => {
+            reject(new Error("message send aborted"));
+          };
+          context.signal.addEventListener("abort", rejectOnAbort, { once: true });
+          resolveSend = (value) => {
+            context.signal.removeEventListener("abort", rejectOnAbort);
+            resolve(value);
+          };
+        }),
+    );
+
+    const secondCreated = waitForFrame(second.socket, "chat.message.created");
+    first.socket.send(
+      JSON.stringify({
+        type: "chat.message.send",
+        clientMessageId: "client-message-disconnect",
+        target: { type: "channel", channelId: "room-1" },
+        content: { type: "text", text: "계속 전달" },
+      }),
+    );
+    await vi.waitFor(() => {
+      expect(fixture.gatewayApiClient.sendMessage).toHaveBeenCalledTimes(1);
+    });
+
+    const senderClosed = waitForClose(first.socket);
+    first.socket.close(1000, "sender left");
+    await senderClosed;
+    expect(sendSignal?.aborted).toBe(false);
+    resolveSend?.({
+      status: "accepted",
+      clientMessageId: "client-message-disconnect",
+      message: {
+        messageId: "message-disconnect",
+        streamId: "channel:room-1",
+        sequence: 2,
+        senderActorId: "actor-ticket-a",
+        target: { type: "channel", channelId: "room-1" },
+        content: { type: "text", text: "계속 전달" },
+        createdAt: "2026-07-25T00:00:02.000Z",
+      },
+    });
+
+    await expect(secondCreated).resolves.toEqual(
+      expect.objectContaining({
+        type: "chat.message.created",
+        messageId: "message-disconnect",
+        sequence: 2,
+      }),
+    );
+  });
+
+  it("connects chat.stream.sync to the Stream Messages gateway relay", async () => {
+    const fixture = await createFixture();
+    const connection = await connectClient(fixture.websocketUrl, "ticket-a");
+    const synced = waitForFrame(connection.socket, "chat.stream.synced");
+    connection.socket.send(
+      JSON.stringify({
+        type: "chat.stream.sync",
+        requestId: "request-1",
+        channelId: "room-1",
+        afterSequence: 0,
+        limit: 50,
       }),
     );
 
-    await app.listen({ host: "127.0.0.1", port: 0 });
-
-    const socket = new WebSocket(`ws://127.0.0.1:${portOf(app.address())}/realtime-chat?ticket=t1`);
-
-    try {
-      await expect(nextClose(socket)).resolves.toMatchObject({ code: 1011 });
-      expect(app.pendingAuthenticationCount()).toBe(0);
-    } finally {
-      await app.close();
-    }
-  });
-
-  it("인증 대기 연결 상한을 넘으면 새 연결을 거절한다", async () => {
-    const app = createRealtimeChatGatewayApp(
-      testConfig({
-        apiRequestTimeoutMilliseconds: 1_000,
-        maxPendingAuthentications: 1,
-        shutdownGraceMilliseconds: 50,
-      }),
-      createDeps({
-        gatewayTicketConsumer: {
-          consumeGatewayTicket: vi.fn(() => new Promise<never>(() => {})),
-        },
-      }),
+    await expect(synced).resolves.toEqual({
+      type: "chat.stream.synced",
+      requestId: "request-1",
+      streamId: "channel:room-1",
+      afterSequence: 0,
+      throughSequence: 0,
+      messages: [],
+      nextAfterSequence: 0,
+      hasMoreAfter: false,
+    });
+    expect(fixture.streamMessagesApiClient.syncAfter).toHaveBeenCalledWith(
+      {
+        channelId: "room-1",
+        afterSequence: 0,
+        limit: 50,
+      },
+      {
+        actorId: "actor-ticket-a",
+        requestId: "request-1",
+        signal: expect.any(AbortSignal),
+      },
     );
-
-    await app.listen({ host: "127.0.0.1", port: 0 });
-
-    const first = new WebSocket(
-      `ws://127.0.0.1:${portOf(app.address())}/realtime-chat?ticket=first`,
-    );
-    await nextOpen(first);
-    await waitFor(() => expect(app.pendingAuthenticationCount()).toBe(1));
-
-    const second = new WebSocket(
-      `ws://127.0.0.1:${portOf(app.address())}/realtime-chat?ticket=second`,
-    );
-
-    try {
-      await expect(nextClose(second)).resolves.toMatchObject({ code: 1013 });
-    } finally {
-      first.close();
-      await app.close();
-    }
-  });
-
-  it("전체 연결 상한을 넘으면 upgrade를 거절한다", async () => {
-    const app = createRealtimeChatGatewayApp(testConfig({ maxConnections: 1 }), createDeps());
-
-    await app.listen({ host: "127.0.0.1", port: 0 });
-
-    const first = new WebSocket(
-      `ws://127.0.0.1:${portOf(app.address())}/realtime-chat?ticket=first`,
-    );
-    await nextOpen(first);
-
-    const second = new WebSocket(
-      `ws://127.0.0.1:${portOf(app.address())}/realtime-chat?ticket=second`,
-    );
-
-    try {
-      await expect(nextUnexpectedResponse(second)).resolves.toBe(503);
-    } finally {
-      second.terminate();
-      first.close();
-      await app.close();
-    }
-  });
-
-  it("heartbeat에 응답하지 않는 연결을 정리한다", async () => {
-    const app = createRealtimeChatGatewayApp(
-      testConfig({ heartbeatIntervalMilliseconds: 10 }),
-      createDeps(),
-    );
-
-    await app.listen({ host: "127.0.0.1", port: 0 });
-
-    const socket = new WebSocket(`ws://127.0.0.1:${portOf(app.address())}/realtime-chat?ticket=t1`);
-
-    try {
-      await nextOpen(socket);
-      await waitFor(() => expect(app.sessionCount()).toBe(1));
-      const closed = nextClose(socket);
-      socket.pause();
-
-      await waitFor(() => expect(app.sessionCount()).toBe(0));
-      socket.resume();
-      await expect(closed).resolves.toMatchObject({ code: 1006 });
-    } finally {
-      socket.terminate();
-      await app.close();
-    }
   });
 });
 
-function createDeps(
-  overrides: Partial<RealtimeChatGatewayAppDeps> = {},
-): RealtimeChatGatewayAppDeps {
+async function createFixture(): Promise<{
+  app: RealtimeChatGatewayApp;
+  gatewayApiClient: GatewayApiClient;
+  httpUrl: string;
+  streamMessagesApiClient: GatewayStreamMessagesApiClient;
+  websocketUrl: string;
+}> {
+  const gatewayApiClient: GatewayApiClient = {
+    consumeGatewayTicket: vi.fn<GatewayApiClient["consumeGatewayTicket"]>(async ({ ticket }) => ({
+      status: "consumed",
+      ticket: {
+        actorId: `actor-${ticket}`,
+        consumedAt: "2026-07-25T00:00:00.000Z",
+      },
+    })),
+    sendMessage: vi.fn<GatewayApiClient["sendMessage"]>(async (request, context) => ({
+      status: "accepted",
+      clientMessageId: request.clientMessageId,
+      message: {
+        messageId: "message-1",
+        streamId: "channel:room-1",
+        sequence: 1,
+        senderActorId: context.actorId,
+        target: request.target,
+        content: request.content,
+        createdAt: "2026-07-25T00:00:01.000Z",
+      },
+    })),
+  };
+  const streamMessagesApiClient: GatewayStreamMessagesApiClient = {
+    syncAfter: vi.fn<GatewayStreamMessagesApiClient["syncAfter"]>(async (request) => ({
+      streamId: `channel:${request.channelId}`,
+      afterSequence: request.afterSequence,
+      throughSequence: 0,
+      messages: [],
+      nextAfterSequence: 0,
+      hasMoreAfter: false,
+    })),
+  };
+  const app = createRealtimeChatGatewayApp(testConfig(), {
+    gatewayApiClient,
+    logger: testLogger(),
+    streamMessagesApiClient,
+  });
+  await app.listen({ host: "127.0.0.1", port: 0 });
+  const address = app.address() as AddressInfo;
+  runningAppsForCurrentTest().push(app);
+  const httpUrl = `http://127.0.0.1:${address.port}`;
+
   return {
-    gatewayTicketConsumer: overrides.gatewayTicketConsumer ?? {
-      consumeGatewayTicket: vi.fn(async () => ({
-        status: "consumed" as const,
-        ticket: {
-          actorId: "actor-1",
-          consumedAt: "2026-07-09T00:00:10.000Z",
-        },
-      })),
-    },
-    logger: overrides.logger ?? {
-      error: vi.fn(),
-      info: vi.fn(),
-      warn: vi.fn(),
-    },
+    app,
+    gatewayApiClient,
+    httpUrl,
+    streamMessagesApiClient,
+    websocketUrl: `${httpUrl.replace("http:", "ws:")}/realtime-chat`,
   };
 }
 
-function testConfig(
-  overrides: Partial<ReturnType<typeof loadEnv>> = {},
-): ReturnType<typeof loadEnv> {
+const appRegistry: RealtimeChatGatewayApp[] = [];
+
+function runningAppsForCurrentTest(): RealtimeChatGatewayApp[] {
+  return appRegistry;
+}
+
+afterEach(async () => {
+  await Promise.all(appRegistry.splice(0).map((app) => app.close()));
+});
+
+function testConfig(): RealtimeChatGatewayConfig {
   return {
-    ...loadEnv({
-      HOST: "127.0.0.1",
-      LOG_LEVEL: "silent",
-      PORT: "3001",
-      REALTIME_CHAT_API_BASE_URL: "http://127.0.0.1:3000",
-      REALTIME_CHAT_API_GATEWAY_ID_HEADER: "x-gateway-id",
-      REALTIME_CHAT_GATEWAY_ID: "gateway-1",
-      REALTIME_CHAT_GATEWAY_MAX_PAYLOAD_BYTES: "65536",
-      REALTIME_CHAT_GATEWAY_PATH: "/realtime-chat",
-      REALTIME_CHAT_GATEWAY_TICKET_HEADER: "x-gateway-ticket",
-    }),
-    ...overrides,
+    allowedOrigins: ["http://localhost:5173"],
+    apiActorHeader: "x-realtime-chat-actor-id",
+    apiBaseUrl: "http://localhost:3000/",
+    apiGatewayIdHeader: "x-gateway-id",
+    apiRequestTimeoutMilliseconds: 1_000,
+    gatewayApiToken: "test-token-that-is-at-least-32-bytes",
+    gatewayId: "gateway-1",
+    gatewayPath: "/realtime-chat",
+    host: "127.0.0.1",
+    internalTransportSecurity: "development",
+    logLevel: "silent",
+    maxPayloadBytes: 65_536,
+    nodeEnvironment: "test",
+    port: 0,
+    shutdownGraceMilliseconds: 1_000,
   };
 }
 
-function nextOpen(socket: WebSocket): Promise<void> {
+function testLogger(): AppLogger {
+  return {
+    error: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+  };
+}
+
+async function connectClient(
+  websocketUrl: string,
+  ticket: string,
+): Promise<{ connected: Record<string, unknown>; socket: WebSocket }> {
+  const socket = new WebSocket(`${websocketUrl}?ticket=${encodeURIComponent(ticket)}`, {
+    origin: "http://localhost:5173",
+  });
+  const connected = waitForFrame(socket, "gateway.connected");
+  await waitForOpen(socket);
+  return { connected: await connected, socket };
+}
+
+function waitForOpen(socket: WebSocket): Promise<void> {
   return new Promise((resolve, reject) => {
-    socket.once("open", () => resolve());
+    if (socket.readyState === WebSocket.OPEN) {
+      resolve();
+      return;
+    }
+
+    socket.once("open", resolve);
     socket.once("error", reject);
   });
 }
 
-function nextClose(socket: WebSocket): Promise<{ code: number; reason: string }> {
+function waitForFrame(socket: WebSocket, type: string): Promise<Record<string, unknown>> {
   return new Promise((resolve, reject) => {
-    socket.once("close", (code, reason) =>
-      resolve({
-        code,
-        reason: reason.toString(),
-      }),
-    );
+    const timeout = setTimeout(() => {
+      cleanup();
+      reject(new Error(`Timed out waiting for ${type}`));
+    }, 2_000);
+    const onMessage = (data: RawData): void => {
+      const frame = JSON.parse(data.toString()) as Record<string, unknown>;
+
+      if (frame.type === type) {
+        cleanup();
+        resolve(frame);
+      }
+    };
+    const onClose = (): void => {
+      cleanup();
+      reject(new Error(`Socket closed while waiting for ${type}`));
+    };
+    const cleanup = (): void => {
+      clearTimeout(timeout);
+      socket.off("message", onMessage);
+      socket.off("close", onClose);
+    };
+    socket.on("message", onMessage);
+    socket.once("close", onClose);
+  });
+}
+
+function waitForClose(socket: WebSocket): Promise<{ code: number; reason: string }> {
+  return new Promise((resolve, reject) => {
+    socket.once("close", (code, reason) => {
+      resolve({ code, reason: reason.toString() });
+    });
     socket.once("error", reject);
   });
 }
 
-function nextUnexpectedResponse(socket: WebSocket): Promise<number> {
+function rejectedUpgradeStatus(url: string, origin: string): Promise<number> {
   return new Promise((resolve, reject) => {
+    const socket = new WebSocket(url, { origin });
     socket.once("unexpected-response", (_request, response) => {
       response.resume();
       resolve(response.statusCode ?? 0);
@@ -346,27 +385,6 @@ function nextUnexpectedResponse(socket: WebSocket): Promise<number> {
   });
 }
 
-async function waitFor(assertion: () => void): Promise<void> {
-  const startedAt = Date.now();
-  let lastError: unknown;
-
-  while (Date.now() - startedAt < 1_000) {
-    try {
-      assertion();
-      return;
-    } catch (error) {
-      lastError = error;
-      await new Promise((resolve) => setTimeout(resolve, 10));
-    }
-  }
-
-  throw lastError;
-}
-
-function portOf(address: AddressInfo | string | null): number {
-  if (!address || typeof address === "string") {
-    throw new Error("테스트 서버 주소를 사용할 수 없습니다");
-  }
-
-  return address.port;
+async function waitForSocketTurn(): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve, 20));
 }

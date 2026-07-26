@@ -41,6 +41,21 @@ importers:
       '@wake-surfer/realtime-chat-gateway-ticket-contracts':
         specifier: workspace:*
         version: link:../../packages/realtime-chat-gateway-ticket-contracts
+      '@wake-surfer/realtime-chat-message-contracts':
+        specifier: workspace:*
+        version: link:../../packages/realtime-chat-message-contracts
+      '@wake-surfer/realtime-chat-message-send':
+        specifier: workspace:*
+        version: link:../../packages/realtime-chat-message-send
+      '@wake-surfer/realtime-chat-message-send-contracts':
+        specifier: workspace:*
+        version: link:../../packages/realtime-chat-message-send-contracts
+      '@wake-surfer/realtime-chat-stream-messages':
+        specifier: workspace:*
+        version: link:../../packages/realtime-chat-stream-messages
+      '@wake-surfer/realtime-chat-stream-messages-contracts':
+        specifier: workspace:*
+        version: link:../../packages/realtime-chat-stream-messages-contracts
       hono:
         specifier: ^4.12.28
         version: 4.12.28
@@ -63,12 +78,18 @@ importers:
       '@wake-surfer/realtime-chat-gateway-ticket-contracts':
         specifier: workspace:*
         version: link:../../packages/realtime-chat-gateway-ticket-contracts
+      '@wake-surfer/realtime-chat-message-send-contracts':
+        specifier: workspace:*
+        version: link:../../packages/realtime-chat-message-send-contracts
+      '@wake-surfer/realtime-chat-stream-messages-gateway':
+        specifier: workspace:*
+        version: link:../../packages/realtime-chat-stream-messages-gateway
       pino:
         specifier: ^10.3.1
         version: 10.3.1
       ws:
         specifier: ^8.18.3
-        version: 8.21.0
+        version: 8.21.1
     devDependencies:
       '@types/node':
         specifier: ^24.13.2
@@ -85,6 +106,15 @@ importers:
 
   apps/web:
     dependencies:
+      '@wake-surfer/realtime-chat-message-contracts':
+        specifier: workspace:*
+        version: link:../../packages/realtime-chat-message-contracts
+      '@wake-surfer/realtime-chat-message-send-contracts':
+        specifier: workspace:*
+        version: link:../../packages/realtime-chat-message-send-contracts
+      '@wake-surfer/realtime-chat-stream-messages-client':
+        specifier: workspace:*
+        version: link:../../packages/realtime-chat-stream-messages-client
       lucide-react:
         specifier: ^1.23.0
         version: 1.23.0(react@19.2.7)
@@ -116,6 +146,9 @@ importers:
       vite:
         specifier: ^8.1.1
         version: 8.1.3(@types/node@24.13.2)(yaml@2.9.0)
+      vitest:
+        specifier: 4.1.6
+        version: 4.1.6(@types/node@24.13.2)(vite@8.1.3(@types/node@24.13.2)(yaml@2.9.0))
 
   packages/api-contracts: {}
 
@@ -133,6 +166,9 @@ importers:
       '@wake-surfer/realtime-chat-gateway-ticket':
         specifier: workspace:*
         version: link:../realtime-chat-gateway-ticket
+      '@wake-surfer/realtime-chat-message-send':
+        specifier: workspace:*
+        version: link:../realtime-chat-message-send
       kysely:
         specifier: 0.28.8
         version: 0.28.8
@@ -140,9 +176,15 @@ importers:
         specifier: ^8.22.0
         version: 8.22.0
     devDependencies:
+      '@types/node':
+        specifier: ^24.13.2
+        version: 24.13.2
       '@types/pg':
         specifier: ^8.20.0
         version: 8.20.0
+      vitest:
+        specifier: 4.1.6
+        version: 4.1.6(@types/node@24.13.2)(vite@8.1.3(@types/node@24.13.2)(yaml@2.9.0))
 
   packages/realtime-chat-gateway-ticket:
     dependencies:
@@ -163,6 +205,103 @@ importers:
         specifier: 4.2.1
         version: 4.2.1
     devDependencies:
+      vitest:
+        specifier: 4.1.6
+        version: 4.1.6(@types/node@24.13.2)(vite@8.1.3(@types/node@24.13.2)(yaml@2.9.0))
+
+  packages/realtime-chat-message-contracts:
+    dependencies:
+      zod:
+        specifier: 4.2.1
+        version: 4.2.1
+    devDependencies:
+      vitest:
+        specifier: 4.1.6
+        version: 4.1.6(@types/node@24.13.2)(vite@8.1.3(@types/node@24.13.2)(yaml@2.9.0))
+
+  packages/realtime-chat-message-send:
+    dependencies:
+      '@wake-surfer/realtime-chat-message-contracts':
+        specifier: workspace:*
+        version: link:../realtime-chat-message-contracts
+      '@wake-surfer/realtime-chat-message-send-contracts':
+        specifier: workspace:*
+        version: link:../realtime-chat-message-send-contracts
+      kysely:
+        specifier: 0.28.8
+        version: 0.28.8
+    devDependencies:
+      vitest:
+        specifier: 4.1.6
+        version: 4.1.6(@types/node@24.13.2)(vite@8.1.3(@types/node@24.13.2)(yaml@2.9.0))
+
+  packages/realtime-chat-message-send-contracts:
+    dependencies:
+      '@wake-surfer/realtime-chat-message-contracts':
+        specifier: workspace:*
+        version: link:../realtime-chat-message-contracts
+      zod:
+        specifier: 4.2.1
+        version: 4.2.1
+    devDependencies:
+      vitest:
+        specifier: 4.1.6
+        version: 4.1.6(@types/node@24.13.2)(vite@8.1.3(@types/node@24.13.2)(yaml@2.9.0))
+
+  packages/realtime-chat-stream-messages:
+    dependencies:
+      kysely:
+        specifier: 0.28.8
+        version: 0.28.8
+    devDependencies:
+      '@types/node':
+        specifier: ^24.13.2
+        version: 24.13.2
+      '@wake-surfer/realtime-chat-database':
+        specifier: workspace:*
+        version: link:../realtime-chat-database
+      vitest:
+        specifier: 4.1.6
+        version: 4.1.6(@types/node@24.13.2)(vite@8.1.3(@types/node@24.13.2)(yaml@2.9.0))
+
+  packages/realtime-chat-stream-messages-client:
+    dependencies:
+      '@wake-surfer/realtime-chat-gateway-ticket-contracts':
+        specifier: workspace:*
+        version: link:../realtime-chat-gateway-ticket-contracts
+      '@wake-surfer/realtime-chat-message-contracts':
+        specifier: workspace:*
+        version: link:../realtime-chat-message-contracts
+      '@wake-surfer/realtime-chat-stream-messages-contracts':
+        specifier: workspace:*
+        version: link:../realtime-chat-stream-messages-contracts
+    devDependencies:
+      vitest:
+        specifier: 4.1.6
+        version: 4.1.6(@types/node@24.13.2)(vite@8.1.3(@types/node@24.13.2)(yaml@2.9.0))
+
+  packages/realtime-chat-stream-messages-contracts:
+    dependencies:
+      '@wake-surfer/realtime-chat-message-contracts':
+        specifier: workspace:*
+        version: link:../realtime-chat-message-contracts
+      zod:
+        specifier: 4.2.1
+        version: 4.2.1
+    devDependencies:
+      vitest:
+        specifier: 4.1.6
+        version: 4.1.6(@types/node@24.13.2)(vite@8.1.3(@types/node@24.13.2)(yaml@2.9.0))
+
+  packages/realtime-chat-stream-messages-gateway:
+    dependencies:
+      '@wake-surfer/realtime-chat-stream-messages-contracts':
+        specifier: workspace:*
+        version: link:../realtime-chat-stream-messages-contracts
+    devDependencies:
+      '@types/node':
+        specifier: ^24.13.2
+        version: 24.13.2
       vitest:
         specifier: 4.1.6
         version: 4.1.6(@types/node@24.13.2)(vite@8.1.3(@types/node@24.13.2)(yaml@2.9.0))
@@ -1214,14 +1353,13 @@ packages:
   why-is-node-running@2.3.0:
     resolution: {integrity: sha512-hUrmaWBdVDcxvYqnyh09zunKzROWjbZTiNy8dBEjkS7ehEDQibXJ7XvlmtbwuTclUiIyN+CyXQD4Vmko8fNm8w==}
     engines: {node: '>=8'}
-    hasBin: true
 
   word-wrap@1.2.5:
     resolution: {integrity: sha512-BN22B5eaMMI9UMtjrGd5g5eCYPpCPDUy0FJXbYsaT5zYxjFOckS53SQDE3pWkVoWpHXVb3BrYcEN4Twa55B5cA==}
     engines: {node: '>=0.10.0'}
 
-  ws@8.21.0:
-    resolution: {integrity: sha512-Vsp28b7DRcimFQvrqu2Wek3z1iYxDCWqHYB8Qsnk/S4RfaCQzPGPyBNuVjJV3cd6UiKtUtp6sNM77gWvzcCH+g==}
+  ws@8.21.1:
+    resolution: {integrity: sha512-+0NTnW77fFN/DjQi6k/Sq/Yvk4Sgajw7urW8V+asjXnRgDs9gyGkdb7EzgfhA4goXsRIZKE28fzIXBHEzhuiWw==}
     engines: {node: '>=10.0.0'}
     peerDependencies:
       bufferutil: ^4.0.1
@@ -2168,7 +2306,7 @@ snapshots:
 
   word-wrap@1.2.5: {}
 
-  ws@8.21.0: {}
+  ws@8.21.1: {}
 
   xtend@4.0.2: {}
 

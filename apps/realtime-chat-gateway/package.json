@@ -5,13 +5,15 @@
   "type": "module",
   "scripts": {
     "build": "pnpm run build:deps && tsc -p tsconfig.json",
-    "build:deps": "pnpm --filter @wake-surfer/realtime-chat-gateway-ticket-contracts build",
+    "build:deps": "pnpm --filter @wake-surfer/realtime-chat-gateway-ticket-contracts build && pnpm --filter @wake-surfer/realtime-chat-message-send-contracts build && pnpm --filter @wake-surfer/realtime-chat-stream-messages-gateway build",
     "start": "node dist/main.js",
     "test": "pnpm run build:deps && vitest run",
     "typecheck": "pnpm run build:deps && tsc -p tsconfig.test.json"
   },
   "dependencies": {
     "@wake-surfer/realtime-chat-gateway-ticket-contracts": "workspace:*",
+    "@wake-surfer/realtime-chat-message-send-contracts": "workspace:*",
+    "@wake-surfer/realtime-chat-stream-messages-gateway": "workspace:*",
     "pino": "^10.3.1",
     "ws": "^8.18.3"
   },

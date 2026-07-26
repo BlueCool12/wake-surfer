@@ -2,34 +2,33 @@ import { describe, expect, it } from "vitest";
 
 import { loadEnv } from "../src/config/env.js";
 
-describe("realtime chat gateway runtime configuration", () => {
-  it("loads deployment safety defaults", () => {
-    const config = loadEnv(requiredEnv());
-
-    expect(config).toMatchObject({
-      allowedOrigins: [],
-      apiRequestTimeoutMilliseconds: 6_000,
-      heartbeatIntervalMilliseconds: 30_000,
-      maxConnections: 10_000,
-      maxPendingAuthentications: 256,
-      shutdownGraceMilliseconds: 10_000,
+describe("realtime chat gateway env", () => {
+  it("loads the development MVP defaults", () => {
+    const config = loadEnv({
+      REALTIME_CHAT_API_BASE_URL: "http://localhost:3000",
+      REALTIME_CHAT_GATEWAY_API_TOKEN: "test-token-that-is-at-least-32-bytes",
+      REALTIME_CHAT_GATEWAY_ID: "gateway-1",
     });
+
+    expect(config).toEqual(
+      expect.objectContaining({
+        allowedOrigins: ["http://localhost:5173"],
+        apiBaseUrl: "http://localhost:3000/",
+        gatewayId: "gateway-1",
+        gatewayPath: "/realtime-chat",
+        port: 3001,
+      }),
+    );
   });
 
-  it("requires the HTTP headers timeout not to exceed the request timeout", () => {
+  it("rejects an insecure production internal transport", () => {
     expect(() =>
       loadEnv({
-        ...requiredEnv(),
-        REALTIME_CHAT_GATEWAY_HTTP_HEADERS_TIMEOUT_MS: "10001",
-        REALTIME_CHAT_GATEWAY_HTTP_REQUEST_TIMEOUT_MS: "10000",
+        NODE_ENV: "production",
+        REALTIME_CHAT_API_BASE_URL: "http://localhost:3000",
+        REALTIME_CHAT_GATEWAY_API_TOKEN: "test-token-that-is-at-least-32-bytes",
+        REALTIME_CHAT_GATEWAY_ID: "gateway-1",
       }),
-    ).toThrow(/HTTP_HEADERS_TIMEOUT_MS/);
+    ).toThrow("production requires REALTIME_CHAT_INTERNAL_TRANSPORT_SECURITY");
   });
 });
-
-function requiredEnv(): NodeJS.ProcessEnv {
-  return {
-    REALTIME_CHAT_API_BASE_URL: "http://localhost:3000",
-    REALTIME_CHAT_GATEWAY_ID: "gateway-1",
-  };
-}

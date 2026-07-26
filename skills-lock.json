@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "skills": {
+    "tasks-explain-diff": {
+      "source": "makenotion/cursor-notion-plugin",
+      "sourceType": "github",
+      "skillPath": "skills/tasks-explain-diff/SKILL.md",
+      "computedHash": "7b860d936c46394d7d2098e1b764b64f995f0aa06dc93def067e0b634fe404f1"
+    }
+  }
+}
