@@ -20,6 +20,19 @@ Gateway ticket rules and SQL remain owned by packages.
 배포·호출자가 의존할 수 있는 상태 확인, 요청 제한, 종료 의미는
 `apps/realtime-chat-api/public-docs/runtime-contract.md`에 정의한다.
 
+## Runtime configuration
+
+운영 설정은 모두 필수 env로 주입하며 누락·빈 값·잘못된 범위는 시작 실패로 처리한다. 코드에
+운영 기본값이나 profile 분기를 두지 않는다. `apps/realtime-chat-api/.env.example`은 개발자 3명의
+`team-internal` 실행 예시일 뿐 앱 parser의 fallback이 아니다. 루트 `pnpm dev:realtime-chat` 실행기만
+이를 로컬 개발 배포 입력으로 명시적으로 읽는다. 외부 시연과 고객 운영은 같은 artifact에 별도 배포
+값을 제공한다. 내부 예시는 임시 credential과 trusted header를 사용하므로 loopback에 bind하며, 외부
+bind는 실제 secret·trusted edge·TLS 경계를 함께 구성한 배포에서 명시적으로 선택한다.
+
+JSON 요청 본문 65,536 UTF-8 byte 상한은 배포 설정이 아니라 transport 계약이다. 이 상한은
+대표적인 Message Send 필드 조합에서 최대 8,192-byte text가 최악의 JSON escape로 확장되는 경우를
+수용하도록 코드 상수로 유지한다.
+
 Database schema migration is not part of application startup. The root Compose
 `realtime-chat-migrate` one-shot service must apply the Atlas versioned migrations before this app starts.
 

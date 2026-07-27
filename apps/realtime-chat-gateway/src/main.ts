@@ -2,6 +2,7 @@ import { createGatewayStreamMessagesApiClient } from "@wake-surfer/realtime-chat
 
 import { createRealtimeChatGatewayApp } from "./app.js";
 import { loadEnv } from "./config/env.js";
+import { MAX_INBOUND_WEBSOCKET_PAYLOAD_BYTES } from "./config/runtime-policy.js";
 import { createGatewayApiClient } from "./runtime/gateway-api-client.js";
 import { createLogger } from "./runtime/logger.js";
 
@@ -34,9 +35,24 @@ const app = createRealtimeChatGatewayApp(config, {
 await app.listen();
 logger.info(
   {
+    allowedOrigins: config.allowedOrigins,
+    gatewayApiClientTimeoutMilliseconds: config.apiRequestTimeoutMilliseconds,
     gatewayId: config.gatewayId,
+    heartbeatIntervalMilliseconds: config.heartbeatIntervalMilliseconds,
+    host: config.host,
+    inboundHttpServer: {
+      headersTimeoutMilliseconds: config.httpHeadersTimeoutMilliseconds,
+      keepAliveTimeoutMilliseconds: config.httpKeepAliveTimeoutMilliseconds,
+      requestTimeoutMilliseconds: config.httpRequestTimeoutMilliseconds,
+    },
+    internalTransportSecurity: config.internalTransportSecurity,
+    maxConnections: config.maxConnections,
+    maxInboundWebSocketPayloadBytes: MAX_INBOUND_WEBSOCKET_PAYLOAD_BYTES,
+    maxPendingAuthentications: config.maxPendingAuthentications,
+    nodeEnvironment: config.nodeEnvironment,
     path: config.gatewayPath,
     port: config.port,
+    shutdownGraceMilliseconds: config.shutdownGraceMilliseconds,
   },
   "실시간 채팅 게이트웨이 시작",
 );

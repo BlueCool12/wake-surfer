@@ -1,6 +1,7 @@
 import { serve } from "@hono/node-server";
 
 import { createRealtimeChatApiApp } from "./app.js";
+import { MAX_REALTIME_CHAT_REQUEST_BODY_UTF8_BYTES } from "./http/request-body-policy.js";
 import { createRuntimeDeps } from "./runtime/create-runtime-deps.js";
 
 const runtime = await createRuntimeDeps();
@@ -13,6 +14,7 @@ const app = createRealtimeChatApiApp({
 const server = serve(
   {
     fetch: app.fetch,
+    hostname: runtime.config.host,
     port: runtime.config.port,
     serverOptions: {
       headersTimeout: runtime.config.httpHeadersTimeoutMilliseconds,
@@ -23,7 +25,30 @@ const server = serve(
   (info) => {
     runtime.appDeps.logger.info(
       {
+        host: runtime.config.host,
         port: info.port,
+        runtimePolicy: {
+          actorAuthSecurity: runtime.config.actorAuthSecurity,
+          corsAllowedOriginCount: runtime.config.corsAllowedOrigins.length,
+          corsAllowedOrigins: runtime.config.corsAllowedOrigins,
+          gatewayTicketRawBytes: runtime.config.gatewayTicketRawBytes,
+          gatewayTicketTtlMilliseconds: runtime.config.gatewayTicketTtlMilliseconds,
+          httpHeadersTimeoutMilliseconds: runtime.config.httpHeadersTimeoutMilliseconds,
+          httpKeepAliveTimeoutMilliseconds: runtime.config.httpKeepAliveTimeoutMilliseconds,
+          httpRequestTimeoutMilliseconds: runtime.config.httpRequestTimeoutMilliseconds,
+          internalTransportSecurity: runtime.config.internalTransportSecurity,
+          nodeEnvironment: runtime.config.nodeEnvironment,
+          operationAbortMilliseconds: runtime.config.operationAbortMilliseconds,
+          postgresConnectionTimeoutMilliseconds:
+            runtime.config.postgresPool.connectionTimeoutMillis,
+          postgresIdleTimeoutMilliseconds: runtime.config.postgresPool.idleTimeoutMillis,
+          postgresMaxLifetimeSeconds: runtime.config.postgresPool.maxLifetimeSeconds,
+          postgresPoolMax: runtime.config.postgresPool.max,
+          postgresStatementTimeoutMilliseconds: runtime.config.postgresPool.statementTimeoutMillis,
+          requestBodyLimitBytes: MAX_REALTIME_CHAT_REQUEST_BODY_UTF8_BYTES,
+          requestTimeoutMilliseconds: runtime.config.requestTimeoutMilliseconds,
+          shutdownGraceMilliseconds: runtime.config.shutdownGraceMilliseconds,
+        },
       },
       "realtime chat api started",
     );

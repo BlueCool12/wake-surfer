@@ -47,7 +47,7 @@ describe("realtime chat API runtime dependencies", () => {
     expect(runtime.appDeps.checkReadiness).toEqual(expect.any(Function));
     expect(runtime.appDeps.cors?.allowedHeaders).toContain("x-actor-id");
     expect(runtime.appDeps.operationAbortMilliseconds).toBe(8_000);
-    expect(runtime.appDeps.requestBodyLimitBytes).toBe(16_384);
+    expect(runtime.appDeps.requestTimeoutMilliseconds).toBe(10_000);
     expect(close).not.toHaveBeenCalled();
     await runtime.close();
     expect(close).toHaveBeenCalledOnce();
@@ -85,9 +85,32 @@ function createDatabaseHandle(
 
 function requiredEnv(): NodeJS.ProcessEnv {
   return {
+    HOST: "127.0.0.1",
+    LOG_LEVEL: "info",
+    NODE_ENV: "development",
+    PORT: "3000",
+    REALTIME_CHAT_ACTOR_AUTH_SECURITY: "development",
+    REALTIME_CHAT_ACTOR_ID_HEADER: "x-actor-id",
+    REALTIME_CHAT_CORS_ALLOWED_ORIGINS: "http://localhost:5173",
     REALTIME_CHAT_DATABASE_URL: "postgres://localhost/wake_surfer",
     REALTIME_CHAT_GATEWAY_API_TOKEN: "a".repeat(32),
+    REALTIME_CHAT_GATEWAY_ASSERTED_ACTOR_HEADER: "x-realtime-chat-actor-id",
     REALTIME_CHAT_GATEWAY_ID: "gateway-1",
+    REALTIME_CHAT_GATEWAY_ID_HEADER: "x-gateway-id",
+    REALTIME_CHAT_GATEWAY_TICKET_RAW_BYTES: "32",
+    REALTIME_CHAT_GATEWAY_TICKET_TTL_MS: "60000",
     REALTIME_CHAT_GATEWAY_URL: "ws://localhost:3001/realtime-chat",
+    REALTIME_CHAT_HTTP_HEADERS_TIMEOUT_MS: "5000",
+    REALTIME_CHAT_HTTP_KEEP_ALIVE_TIMEOUT_MS: "5000",
+    REALTIME_CHAT_HTTP_REQUEST_TIMEOUT_MS: "12000",
+    REALTIME_CHAT_INTERNAL_TRANSPORT_SECURITY: "development",
+    REALTIME_CHAT_OPERATION_ABORT_MS: "8000",
+    REALTIME_CHAT_POSTGRES_CONNECTION_TIMEOUT_MS: "2000",
+    REALTIME_CHAT_POSTGRES_IDLE_TIMEOUT_MS: "30000",
+    REALTIME_CHAT_POSTGRES_MAX_LIFETIME_SECONDS: "300",
+    REALTIME_CHAT_POSTGRES_POOL_MAX: "10",
+    REALTIME_CHAT_POSTGRES_STATEMENT_TIMEOUT_MS: "5000",
+    REALTIME_CHAT_REQUEST_TIMEOUT_MS: "10000",
+    REALTIME_CHAT_SHUTDOWN_GRACE_MS: "10000",
   };
 }

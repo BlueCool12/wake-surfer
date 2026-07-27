@@ -98,7 +98,6 @@ export async function createRuntimeDeps(
         logger,
         messageSend,
         operationAbortMilliseconds: config.operationAbortMilliseconds,
-        requestBodyLimitBytes: config.requestBodyLimitBytes,
         requestTimeoutMilliseconds: config.requestTimeoutMilliseconds,
         syncAfterMessages: createSyncAfterMessages({
           authorizeRead: authorizeChannelRead,

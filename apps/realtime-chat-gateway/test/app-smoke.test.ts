@@ -7,6 +7,7 @@ import { WebSocket, type RawData } from "ws";
 import { createRealtimeChatGatewayApp, type RealtimeChatGatewayApp } from "../src/app.js";
 
 import type { RealtimeChatGatewayConfig } from "../src/config/env.js";
+import { MAX_INBOUND_WEBSOCKET_PAYLOAD_BYTES } from "../src/config/runtime-policy.js";
 import type { GatewayApiClient } from "../src/runtime/gateway-api-client.js";
 import type { AppLogger } from "../src/runtime/logger.js";
 
@@ -70,10 +71,12 @@ describe("realtime chat gateway app", () => {
   });
 
   it("rejects upgrades after reaching the total connection limit", async () => {
+    const logger = testLogger();
     const fixture = await createFixture({
       config: {
         maxConnections: 1,
       },
+      logger,
     });
     const first = await connectClient(fixture.websocketUrl, "ticket-first");
 
@@ -84,12 +87,20 @@ describe("realtime chat gateway app", () => {
           "http://localhost:5173",
         ),
       ).resolves.toBe(503);
+      expect(logger.warn).toHaveBeenCalledWith(
+        {
+          connectionCount: 1,
+          maxConnections: 1,
+        },
+        "실시간 채팅 게이트웨이 전체 연결 상한 도달",
+      );
     } finally {
       first.socket.close();
     }
   });
 
   it("closes new sockets while the authentication queue is full", async () => {
+    const logger = testLogger();
     const consumeGatewayTicket = vi.fn<GatewayApiClient["consumeGatewayTicket"]>(
       () => new Promise<never>(() => undefined),
     );
@@ -101,6 +112,7 @@ describe("realtime chat gateway app", () => {
       gatewayApiClient: {
         consumeGatewayTicket,
       },
+      logger,
     });
     const first = new WebSocket(`${fixture.websocketUrl}?ticket=ticket-first`, {
       origin: "http://localhost:5173",
@@ -119,6 +131,13 @@ describe("realtime chat gateway app", () => {
         reason: "too many pending authentications",
       });
       expect(consumeGatewayTicket).toHaveBeenCalledOnce();
+      expect(logger.warn).toHaveBeenCalledWith(
+        {
+          maxPendingAuthentications: 1,
+          pendingAuthenticationCount: 1,
+        },
+        "실시간 채팅 게이트웨이 인증 대기 상한 도달",
+      );
     } finally {
       first.close();
     }
@@ -145,6 +164,20 @@ describe("realtime chat gateway app", () => {
     } finally {
       connection.socket.terminate();
     }
+  });
+
+  it("closes a message over the fixed inbound payload contract before relaying it", async () => {
+    const fixture = await createFixture();
+    const connection = await connectClient(fixture.websocketUrl, "ticket-payload");
+    const closed = waitForClose(connection.socket);
+
+    connection.socket.send("x".repeat(MAX_INBOUND_WEBSOCKET_PAYLOAD_BYTES + 1));
+
+    await expect(closed).resolves.toMatchObject({
+      code: 1009,
+    });
+    expect(fixture.gatewayApiClient.sendMessage).not.toHaveBeenCalled();
+    expect(fixture.streamMessagesApiClient.syncAfter).not.toHaveBeenCalled();
   });
 
   it("relays message send and fans out the created message to ready channel subscribers", async () => {
@@ -306,6 +339,7 @@ async function createFixture(
   options: {
     config?: Partial<RealtimeChatGatewayConfig>;
     gatewayApiClient?: Partial<GatewayApiClient>;
+    logger?: AppLogger;
   } = {},
 ): Promise<{
   app: RealtimeChatGatewayApp;
@@ -354,7 +388,7 @@ async function createFixture(
     },
     {
       gatewayApiClient,
-      logger: testLogger(),
+      logger: options.logger ?? testLogger(),
       streamMessagesApiClient,
     },
   );
@@ -400,7 +434,6 @@ function testConfig(): RealtimeChatGatewayConfig {
     internalTransportSecurity: "development",
     logLevel: "silent",
     maxConnections: 10_000,
-    maxPayloadBytes: 65_536,
     maxPendingAuthentications: 256,
     nodeEnvironment: "test",
     port: 0,

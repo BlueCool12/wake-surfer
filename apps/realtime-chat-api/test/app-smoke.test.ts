@@ -1,9 +1,11 @@
 import { once } from "node:events";
 
 import { serve } from "@hono/node-server";
+import { MAX_TEXT_UTF8_BYTES } from "@wake-surfer/realtime-chat-message-contracts";
 import { describe, expect, it, vi } from "vitest";
 
 import { createRealtimeChatApiApp } from "../src/app.js";
+import { MAX_REALTIME_CHAT_REQUEST_BODY_UTF8_BYTES } from "../src/http/request-body-policy.js";
 
 import type { RealtimeChatApiAppDeps } from "../src/app.js";
 
@@ -70,12 +72,13 @@ describe("realtime chat api app", () => {
     const app = createRealtimeChatApiApp(
       createDeps({
         issue,
-        requestBodyLimitBytes: 16,
       }),
     );
 
     const response = await app.request("/realtime-chat/gateway-tickets", {
-      body: JSON.stringify({ actorId: "a".repeat(32) }),
+      body: JSON.stringify({
+        actorId: "a".repeat(MAX_REALTIME_CHAT_REQUEST_BODY_UTF8_BYTES),
+      }),
       headers: {
         "content-type": "application/json",
         "x-actor-id": "authenticated-actor",
@@ -89,6 +92,64 @@ describe("realtime chat api app", () => {
       status: "error",
     });
     expect(issue).not.toHaveBeenCalled();
+  });
+
+  it("accepts a representative request with maximum text after worst-case JSON escaping", async () => {
+    const text = "\u0000".repeat(MAX_TEXT_UTF8_BYTES);
+    const body = JSON.stringify({
+      clientMessageId: "client-message-max-text",
+      target: {
+        type: "channel",
+        channelId: "channel-1",
+      },
+      content: {
+        type: "text",
+        text,
+      },
+    });
+    const send = vi.fn(async () => ({
+      status: "accepted" as const,
+      clientMessageId: "client-message-max-text",
+      message: {
+        messageId: "message-1",
+        streamId: "channel:channel-1",
+        sequence: 1,
+        senderActorId: "asserted-actor",
+        target: {
+          type: "channel" as const,
+          channelId: "channel-1",
+        },
+        content: {
+          type: "text" as const,
+          text,
+        },
+        createdAt: "2026-07-25T00:00:00.000Z",
+      },
+    }));
+    const app = createRealtimeChatApiApp(
+      createDeps({
+        getAssertedActor: () => ({ actorId: "asserted-actor" }),
+        messageSend: { send },
+      }),
+    );
+
+    expect(new TextEncoder().encode(body).byteLength).toBeLessThanOrEqual(
+      MAX_REALTIME_CHAT_REQUEST_BODY_UTF8_BYTES,
+    );
+
+    const response = await app.request("/internal/realtime-chat/messages", {
+      body,
+      headers: {
+        authorization: `Bearer ${GATEWAY_API_TOKEN}`,
+        "content-type": "application/json",
+        "x-gateway-id": "gateway-1",
+        "x-realtime-chat-actor-id": "asserted-actor",
+      },
+      method: "POST",
+    });
+
+    expect(response.status).toBe(200);
+    expect(send).toHaveBeenCalledOnce();
   });
 
   it("aborts gateway ticket operations before the outer request timeout", async () => {
@@ -698,7 +759,7 @@ describe("realtime chat api app", () => {
     expect(denied.headers.get("access-control-allow-origin")).toBeNull();
   });
 
-  it("keeps ticket and Stream Messages timeout codes feature-specific", async () => {
+  it("keeps ticket, Message Send, and Stream Messages timeout codes feature-specific", async () => {
     const delayed = () => new Promise<never>(() => undefined);
     const ticketApp = createRealtimeChatApiApp(
       createDeps({
@@ -713,10 +774,37 @@ describe("realtime chat api app", () => {
         requestTimeoutMilliseconds: 5,
       }),
     );
+    const messageApp = createRealtimeChatApiApp(
+      createDeps({
+        getAssertedActor: () => ({ actorId: "actor-timeout" }),
+        messageSend: { send: vi.fn(delayed) },
+        requestTimeoutMilliseconds: 5,
+      }),
+    );
 
-    const [ticket, stream] = await Promise.all([
+    const [ticket, message, stream] = await Promise.all([
       ticketApp.request("/realtime-chat/gateway-tickets", {
         headers: { "x-actor-id": "actor-timeout" },
+        method: "POST",
+      }),
+      messageApp.request("/internal/realtime-chat/messages", {
+        body: JSON.stringify({
+          clientMessageId: "client-message-timeout",
+          target: {
+            type: "channel",
+            channelId: "channel-timeout",
+          },
+          content: {
+            type: "text",
+            text: "hello",
+          },
+        }),
+        headers: {
+          authorization: `Bearer ${GATEWAY_API_TOKEN}`,
+          "content-type": "application/json",
+          "x-gateway-id": "gateway-1",
+          "x-realtime-chat-actor-id": "actor-timeout",
+        },
         method: "POST",
       }),
       streamApp.request("/realtime-chat/channels/channel-timeout/messages/latest", {
@@ -726,6 +814,9 @@ describe("realtime chat api app", () => {
 
     await expect(ticket.json()).resolves.toMatchObject({
       code: "gateway_ticket_unavailable",
+    });
+    await expect(message.json()).resolves.toMatchObject({
+      code: "internal_error",
     });
     await expect(stream.json()).resolves.toMatchObject({
       code: "stream_messages_unavailable",
@@ -772,17 +863,10 @@ function createDeps(
     },
     gatewayApiToken: overrides.gatewayApiToken ?? GATEWAY_API_TOKEN,
     logger: overrides.logger ?? createLogger(),
+    operationAbortMilliseconds: overrides.operationAbortMilliseconds ?? 8_000,
+    requestTimeoutMilliseconds: overrides.requestTimeoutMilliseconds ?? 10_000,
     ...(overrides.checkReadiness === undefined ? {} : { checkReadiness: overrides.checkReadiness }),
     ...(overrides.isDraining === undefined ? {} : { isDraining: overrides.isDraining }),
-    ...(overrides.operationAbortMilliseconds === undefined
-      ? {}
-      : { operationAbortMilliseconds: overrides.operationAbortMilliseconds }),
-    ...(overrides.requestBodyLimitBytes === undefined
-      ? {}
-      : { requestBodyLimitBytes: overrides.requestBodyLimitBytes }),
-    ...(overrides.requestTimeoutMilliseconds === undefined
-      ? {}
-      : { requestTimeoutMilliseconds: overrides.requestTimeoutMilliseconds }),
     ...(overrides.getAssertedActor === undefined
       ? {}
       : { getAssertedActor: overrides.getAssertedActor }),

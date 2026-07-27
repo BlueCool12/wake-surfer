@@ -41,6 +41,7 @@ import {
 } from "./http/errors.js";
 import type { RealtimeChatApiEnv } from "./http/env.js";
 import { gatewayTicketOperationDeadline } from "./http/gateway-ticket-deadline.js";
+import { MAX_REALTIME_CHAT_REQUEST_BODY_UTF8_BYTES } from "./http/request-body-policy.js";
 import { realtimeChatApiRequestId } from "./http/request-id.js";
 
 export { AppHttpError } from "./http/errors.js";
@@ -87,14 +88,10 @@ export type RealtimeChatApiAppDeps = {
   loadOlderMessages?: LoadOlderMessages;
   logger: AppLogger;
   messageSend?: MessageSendModule;
-  operationAbortMilliseconds?: number;
-  requestBodyLimitBytes?: number;
-  requestTimeoutMilliseconds?: number;
+  operationAbortMilliseconds: number;
+  requestTimeoutMilliseconds: number;
   syncAfterMessages?: SyncAfterMessages;
 };
-
-const DEFAULT_OPERATION_ABORT_MILLISECONDS = 8_000;
-const DEFAULT_REQUEST_BODY_LIMIT_BYTES = 16_384;
 
 export function createRealtimeChatApiApp(deps: RealtimeChatApiAppDeps): Hono<RealtimeChatApiEnv> {
   const {
@@ -165,56 +162,52 @@ export function createRealtimeChatApiApp(deps: RealtimeChatApiAppDeps): Hono<Rea
     );
   }
 
-  if (deps.requestTimeoutMilliseconds !== undefined) {
-    app.use(
-      "/realtime-chat/gateway-tickets",
-      timeout(
-        deps.requestTimeoutMilliseconds,
-        () =>
-          new HTTPException(503, {
-            res: new Response(
-              JSON.stringify({
-                code: "gateway_ticket_unavailable",
-                message: "gateway ticket service unavailable",
-                status: "error",
-              } satisfies RealtimeChatApiErrorResponse),
-              {
-                status: 503,
-                headers: { "content-type": "application/json; charset=UTF-8" },
-              },
+  app.use(
+    "/realtime-chat/gateway-tickets",
+    timeout(
+      deps.requestTimeoutMilliseconds,
+      () =>
+        new HTTPException(503, {
+          res: new Response(
+            JSON.stringify({
+              code: "gateway_ticket_unavailable",
+              message: "gateway ticket service unavailable",
+              status: "error",
+            } satisfies RealtimeChatApiErrorResponse),
+            {
+              status: 503,
+              headers: { "content-type": "application/json; charset=UTF-8" },
+            },
+          ),
+        }),
+    ),
+  );
+  app.use(
+    "/internal/realtime-chat/gateway-tickets/consume",
+    timeout(
+      deps.requestTimeoutMilliseconds,
+      () =>
+        new HTTPException(503, {
+          res: Response.json(
+            createApiErrorResponse(
+              "gateway_ticket_unavailable",
+              "gateway ticket service unavailable",
             ),
-          }),
-      ),
-    );
-    app.use(
-      "/internal/realtime-chat/gateway-tickets/consume",
-      timeout(
-        deps.requestTimeoutMilliseconds,
-        () =>
-          new HTTPException(503, {
-            res: Response.json(
-              createApiErrorResponse(
-                "gateway_ticket_unavailable",
-                "gateway ticket service unavailable",
-              ),
-              { status: 503 },
-            ),
-          }),
-      ),
-    );
-  }
+            { status: 503 },
+          ),
+        }),
+    ),
+  );
 
   const limitedJsonBody = bodyLimit({
-    maxSize: deps.requestBodyLimitBytes ?? DEFAULT_REQUEST_BODY_LIMIT_BYTES,
+    maxSize: MAX_REALTIME_CHAT_REQUEST_BODY_UTF8_BYTES,
     onError: (context) =>
       context.json(createApiErrorResponse("bad_request", "request body is too large"), 413),
   });
   app.use("/realtime-chat/gateway-tickets", limitedJsonBody);
   app.use("/internal/realtime-chat/*", limitedJsonBody);
 
-  const gatewayTicketDeadline = gatewayTicketOperationDeadline(
-    deps.operationAbortMilliseconds ?? DEFAULT_OPERATION_ABORT_MILLISECONDS,
-  );
+  const gatewayTicketDeadline = gatewayTicketOperationDeadline(deps.operationAbortMilliseconds);
   app.use("/realtime-chat/gateway-tickets", gatewayTicketDeadline);
   app.use("/internal/realtime-chat/gateway-tickets/consume", gatewayTicketDeadline);
 
@@ -330,6 +323,19 @@ export function createRealtimeChatApiApp(deps: RealtimeChatApiAppDeps): Hono<Rea
   );
 
   if (messageSend !== undefined && getAssertedActor !== undefined) {
+    app.use(
+      "/internal/realtime-chat/messages",
+      timeout(
+        deps.requestTimeoutMilliseconds,
+        () =>
+          new HTTPException(503, {
+            res: Response.json(
+              createApiErrorResponse("internal_error", "message send service unavailable"),
+              { status: 503 },
+            ),
+          }),
+      ),
+    );
     app.post(
       "/internal/realtime-chat/messages",
       sValidator("json", SendMessageRequestBodySchema, (result, context) => {
@@ -374,9 +380,7 @@ export function createRealtimeChatApiApp(deps: RealtimeChatApiAppDeps): Hono<Rea
       authenticateActor,
       loadLatest: deps.loadLatestMessages,
       logger,
-      ...(deps.requestTimeoutMilliseconds === undefined
-        ? {}
-        : { timeoutMilliseconds: deps.requestTimeoutMilliseconds }),
+      timeoutMilliseconds: deps.requestTimeoutMilliseconds,
     });
   }
 
@@ -385,9 +389,7 @@ export function createRealtimeChatApiApp(deps: RealtimeChatApiAppDeps): Hono<Rea
       authenticateActor,
       loadOlder: deps.loadOlderMessages,
       logger,
-      ...(deps.requestTimeoutMilliseconds === undefined
-        ? {}
-        : { timeoutMilliseconds: deps.requestTimeoutMilliseconds }),
+      timeoutMilliseconds: deps.requestTimeoutMilliseconds,
     });
   }
 
@@ -397,9 +399,7 @@ export function createRealtimeChatApiApp(deps: RealtimeChatApiAppDeps): Hono<Rea
       getAssertedActor: deps.getAssertedActor,
       logger,
       syncAfter: deps.syncAfterMessages,
-      ...(deps.requestTimeoutMilliseconds === undefined
-        ? {}
-        : { timeoutMilliseconds: deps.requestTimeoutMilliseconds }),
+      timeoutMilliseconds: deps.requestTimeoutMilliseconds,
     });
   }
 

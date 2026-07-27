@@ -23,6 +23,7 @@ import { WebSocket, WebSocketServer, type RawData } from "ws";
 import { createGatewayHeartbeat } from "./connection/heartbeat.js";
 import { evaluateUpgrade } from "./connection/upgrade-policy.js";
 import type { RealtimeChatGatewayConfig } from "./config/env.js";
+import { MAX_INBOUND_WEBSOCKET_PAYLOAD_BYTES } from "./config/runtime-policy.js";
 import { respondToHttpRequest } from "./http/health.js";
 import {
   isRecord,
@@ -76,7 +77,7 @@ export function createRealtimeChatGatewayApp(
   let closePromise: Promise<void> | undefined;
 
   const websocketServer = new WebSocketServer({
-    maxPayload: config.maxPayloadBytes,
+    maxPayload: MAX_INBOUND_WEBSOCKET_PAYLOAD_BYTES,
     noServer: true,
     perMessageDeflate: false,
   });
@@ -139,6 +140,15 @@ export function createRealtimeChatGatewayApp(
     });
 
     if (rejection !== null) {
+      if (!isClosing && websocketServer.clients.size >= config.maxConnections) {
+        deps.logger.warn(
+          {
+            connectionCount: websocketServer.clients.size,
+            maxConnections: config.maxConnections,
+          },
+          "실시간 채팅 게이트웨이 전체 연결 상한 도달",
+        );
+      }
       rejectUpgrade(socket, rejection.status, rejection.reason);
       return;
     }
@@ -175,6 +185,13 @@ export function createRealtimeChatGatewayApp(
     });
 
     if (pendingAuthentications.size >= config.maxPendingAuthentications) {
+      deps.logger.warn(
+        {
+          maxPendingAuthentications: config.maxPendingAuthentications,
+          pendingAuthenticationCount: pendingAuthentications.size,
+        },
+        "실시간 채팅 게이트웨이 인증 대기 상한 도달",
+      );
       closeIfOpen(websocket, 1013, "too many pending authentications");
       return;
     }

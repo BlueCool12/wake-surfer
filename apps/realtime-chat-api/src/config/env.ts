@@ -17,14 +17,14 @@ export type RealtimeChatApiConfig = {
   gatewayTicketRawBytes: number;
   gatewayTicketTtlMilliseconds: number;
   gatewayUrl: string;
+  host: string;
   httpHeadersTimeoutMilliseconds: number;
   httpKeepAliveTimeoutMilliseconds: number;
   httpRequestTimeoutMilliseconds: number;
-  logLevel: string;
+  logLevel: "debug" | "error" | "fatal" | "info" | "silent" | "trace" | "warn";
   nodeEnvironment: "development" | "production" | "test";
   operationAbortMilliseconds: number;
   port: number;
-  requestBodyLimitBytes: number;
   requestTimeoutMilliseconds: number;
   shutdownGraceMilliseconds: number;
   internalTransportSecurity: "development" | "direct-tls" | "service-mesh-tls";
@@ -38,45 +38,46 @@ export type RealtimeChatApiConfig = {
 };
 
 export function loadEnv(env: NodeJS.ProcessEnv = process.env): RealtimeChatApiConfig {
+  rejectRemovedSetting(
+    env,
+    "REALTIME_CHAT_REQUEST_BODY_LIMIT_BYTES",
+    "HTTP request body 상한은 65536-byte 코드 계약으로 고정되었습니다.",
+  );
   const nodeEnvironment = readNodeEnvironment(env);
   const internalTransportSecurity = readInternalTransportSecurity(env);
   const actorAuthSecurity = readActorAuthSecurity(env);
   const gatewayApiToken = readRequiredString(env, "REALTIME_CHAT_GATEWAY_API_TOKEN");
   const gatewayUrl = readRequiredString(env, "REALTIME_CHAT_GATEWAY_URL");
-  const operationAbortMilliseconds = readInteger(env, "REALTIME_CHAT_OPERATION_ABORT_MS", 8_000, {
+  const operationAbortMilliseconds = readRequiredInteger(env, "REALTIME_CHAT_OPERATION_ABORT_MS", {
     min: 1,
   });
-  const requestTimeoutMilliseconds = readInteger(env, "REALTIME_CHAT_REQUEST_TIMEOUT_MS", 10_000, {
+  const requestTimeoutMilliseconds = readRequiredInteger(env, "REALTIME_CHAT_REQUEST_TIMEOUT_MS", {
     min: 100,
   });
-  const httpRequestTimeoutMilliseconds = readInteger(
+  const httpRequestTimeoutMilliseconds = readRequiredInteger(
     env,
     "REALTIME_CHAT_HTTP_REQUEST_TIMEOUT_MS",
-    12_000,
     {
       min: 1,
     },
   );
-  const httpHeadersTimeoutMilliseconds = readInteger(
+  const httpHeadersTimeoutMilliseconds = readRequiredInteger(
     env,
     "REALTIME_CHAT_HTTP_HEADERS_TIMEOUT_MS",
-    5_000,
     {
       min: 1,
     },
   );
-  const postgresConnectionTimeoutMilliseconds = readInteger(
+  const postgresConnectionTimeoutMilliseconds = readRequiredInteger(
     env,
     "REALTIME_CHAT_POSTGRES_CONNECTION_TIMEOUT_MS",
-    2_000,
     {
       min: 1,
     },
   );
-  const postgresStatementTimeoutMilliseconds = readInteger(
+  const postgresStatementTimeoutMilliseconds = readRequiredInteger(
     env,
     "REALTIME_CHAT_POSTGRES_STATEMENT_TIMEOUT_MS",
-    5_000,
     {
       min: 1,
     },
@@ -115,12 +116,6 @@ export function loadEnv(env: NodeJS.ProcessEnv = process.env): RealtimeChatApiCo
     );
   }
 
-  if (requestTimeoutMilliseconds >= httpRequestTimeoutMilliseconds) {
-    throw new Error(
-      "REALTIME_CHAT_REQUEST_TIMEOUT_MS must be less than REALTIME_CHAT_HTTP_REQUEST_TIMEOUT_MS",
-    );
-  }
-
   if (httpHeadersTimeoutMilliseconds > httpRequestTimeoutMilliseconds) {
     throw new Error(
       "REALTIME_CHAT_HTTP_HEADERS_TIMEOUT_MS must be less than or equal to REALTIME_CHAT_HTTP_REQUEST_TIMEOUT_MS",
@@ -139,59 +134,52 @@ export function loadEnv(env: NodeJS.ProcessEnv = process.env): RealtimeChatApiCo
 
   return {
     actorAuthSecurity,
-    actorIdHeader: readOptionalString(env, "REALTIME_CHAT_ACTOR_ID_HEADER", "x-actor-id"),
+    actorIdHeader: readHeaderName(env, "REALTIME_CHAT_ACTOR_ID_HEADER"),
     corsAllowedOrigins: readCorsAllowedOrigins(env),
     databaseUrl: readRequiredString(env, "REALTIME_CHAT_DATABASE_URL"),
     gatewayApiToken,
-    gatewayAssertedActorHeader: readOptionalString(
-      env,
-      "REALTIME_CHAT_GATEWAY_ASSERTED_ACTOR_HEADER",
-      "x-realtime-chat-actor-id",
-    ),
+    gatewayAssertedActorHeader: readHeaderName(env, "REALTIME_CHAT_GATEWAY_ASSERTED_ACTOR_HEADER"),
     gatewayId: readRequiredString(env, "REALTIME_CHAT_GATEWAY_ID"),
-    gatewayIdHeader: readOptionalString(env, "REALTIME_CHAT_GATEWAY_ID_HEADER", "x-gateway-id"),
-    gatewayTicketRawBytes: readInteger(env, "REALTIME_CHAT_GATEWAY_TICKET_RAW_BYTES", 32, {
+    gatewayIdHeader: readHeaderName(env, "REALTIME_CHAT_GATEWAY_ID_HEADER"),
+    gatewayTicketRawBytes: readRequiredInteger(env, "REALTIME_CHAT_GATEWAY_TICKET_RAW_BYTES", {
       max: MAX_GATEWAY_TICKET_RAW_BYTES,
       min: MIN_GATEWAY_TICKET_RAW_BYTES,
     }),
-    gatewayTicketTtlMilliseconds: readInteger(env, "REALTIME_CHAT_GATEWAY_TICKET_TTL_MS", 60_000, {
+    gatewayTicketTtlMilliseconds: readRequiredInteger(env, "REALTIME_CHAT_GATEWAY_TICKET_TTL_MS", {
       min: 1_000,
     }),
     gatewayUrl,
+    host: readRequiredString(env, "HOST"),
     httpHeadersTimeoutMilliseconds,
-    httpKeepAliveTimeoutMilliseconds: readInteger(
+    httpKeepAliveTimeoutMilliseconds: readRequiredInteger(
       env,
       "REALTIME_CHAT_HTTP_KEEP_ALIVE_TIMEOUT_MS",
-      5_000,
       {
         min: 1,
       },
     ),
     httpRequestTimeoutMilliseconds,
     internalTransportSecurity,
-    logLevel: readOptionalString(env, "LOG_LEVEL", "info"),
+    logLevel: readLogLevel(env),
     nodeEnvironment,
     operationAbortMilliseconds,
-    port: readInteger(env, "PORT", 3000, {
+    port: readRequiredInteger(env, "PORT", {
       max: 65_535,
       min: 1,
     }),
-    requestBodyLimitBytes: readInteger(env, "REALTIME_CHAT_REQUEST_BODY_LIMIT_BYTES", 16_384, {
-      min: 1,
-    }),
     requestTimeoutMilliseconds,
-    shutdownGraceMilliseconds: readInteger(env, "REALTIME_CHAT_SHUTDOWN_GRACE_MS", 10_000, {
+    shutdownGraceMilliseconds: readRequiredInteger(env, "REALTIME_CHAT_SHUTDOWN_GRACE_MS", {
       min: 1,
     }),
     postgresPool: {
       connectionTimeoutMillis: postgresConnectionTimeoutMilliseconds,
-      idleTimeoutMillis: readInteger(env, "REALTIME_CHAT_POSTGRES_IDLE_TIMEOUT_MS", 30_000, {
+      idleTimeoutMillis: readRequiredInteger(env, "REALTIME_CHAT_POSTGRES_IDLE_TIMEOUT_MS", {
         min: 1,
       }),
-      max: readInteger(env, "REALTIME_CHAT_POSTGRES_POOL_MAX", 10, {
+      max: readRequiredInteger(env, "REALTIME_CHAT_POSTGRES_POOL_MAX", {
         min: 1,
       }),
-      maxLifetimeSeconds: readInteger(env, "REALTIME_CHAT_POSTGRES_MAX_LIFETIME_SECONDS", 300, {
+      maxLifetimeSeconds: readRequiredInteger(env, "REALTIME_CHAT_POSTGRES_MAX_LIFETIME_SECONDS", {
         min: 1,
       }),
       statementTimeoutMillis: postgresStatementTimeoutMilliseconds,
@@ -199,8 +187,14 @@ export function loadEnv(env: NodeJS.ProcessEnv = process.env): RealtimeChatApiCo
   };
 }
 
+function rejectRemovedSetting(env: NodeJS.ProcessEnv, name: string, reason: string): void {
+  if (env[name] !== undefined) {
+    throw new Error(`${name} is no longer supported. ${reason}`);
+  }
+}
+
 function readActorAuthSecurity(env: NodeJS.ProcessEnv): RealtimeChatApiConfig["actorAuthSecurity"] {
-  const value = readOptionalString(env, "REALTIME_CHAT_ACTOR_AUTH_SECURITY", "development");
+  const value = readRequiredString(env, "REALTIME_CHAT_ACTOR_AUTH_SECURITY");
 
   if (value === "development" || value === "trusted-edge") {
     return value;
@@ -210,11 +204,7 @@ function readActorAuthSecurity(env: NodeJS.ProcessEnv): RealtimeChatApiConfig["a
 }
 
 function readCorsAllowedOrigins(env: NodeJS.ProcessEnv): string[] {
-  const rawValue = readOptionalString(
-    env,
-    "REALTIME_CHAT_CORS_ALLOWED_ORIGINS",
-    "http://localhost:5173",
-  );
+  const rawValue = readRequiredString(env, "REALTIME_CHAT_CORS_ALLOWED_ORIGINS");
   const origins = [
     ...new Set(
       rawValue
@@ -246,7 +236,7 @@ function readCorsAllowedOrigins(env: NodeJS.ProcessEnv): string[] {
 }
 
 function readNodeEnvironment(env: NodeJS.ProcessEnv): RealtimeChatApiConfig["nodeEnvironment"] {
-  const value = readOptionalString(env, "NODE_ENV", "development");
+  const value = readRequiredString(env, "NODE_ENV");
 
   if (value === "development" || value === "production" || value === "test") {
     return value;
@@ -258,7 +248,7 @@ function readNodeEnvironment(env: NodeJS.ProcessEnv): RealtimeChatApiConfig["nod
 function readInternalTransportSecurity(
   env: NodeJS.ProcessEnv,
 ): RealtimeChatApiConfig["internalTransportSecurity"] {
-  const value = readOptionalString(env, "REALTIME_CHAT_INTERNAL_TRANSPORT_SECURITY", "development");
+  const value = readRequiredString(env, "REALTIME_CHAT_INTERNAL_TRANSPORT_SECURITY");
 
   if (value === "development" || value === "direct-tls" || value === "service-mesh-tls") {
     return value;
@@ -267,6 +257,36 @@ function readInternalTransportSecurity(
   throw new Error(
     "REALTIME_CHAT_INTERNAL_TRANSPORT_SECURITY must be development, direct-tls, or service-mesh-tls",
   );
+}
+
+function readLogLevel(env: NodeJS.ProcessEnv): RealtimeChatApiConfig["logLevel"] {
+  const value = readRequiredString(env, "LOG_LEVEL");
+
+  if (
+    value === "trace" ||
+    value === "debug" ||
+    value === "info" ||
+    value === "warn" ||
+    value === "error" ||
+    value === "fatal" ||
+    value === "silent"
+  ) {
+    return value;
+  }
+
+  throw new Error("LOG_LEVEL must be trace, debug, info, warn, error, fatal, or silent");
+}
+
+function readHeaderName(env: NodeJS.ProcessEnv, name: string): string {
+  const value = readRequiredString(env, name).toLowerCase();
+
+  try {
+    new Headers({ [value]: "validation" });
+  } catch {
+    throw new Error(`${name} must be a valid HTTP header name`);
+  }
+
+  return value;
 }
 
 function readRequiredString(env: NodeJS.ProcessEnv, name: string): string {
@@ -279,15 +299,9 @@ function readRequiredString(env: NodeJS.ProcessEnv, name: string): string {
   return value;
 }
 
-function readOptionalString(env: NodeJS.ProcessEnv, name: string, fallback: string): string {
-  const value = env[name]?.trim();
-  return value || fallback;
-}
-
-function readInteger(
+function readRequiredInteger(
   env: NodeJS.ProcessEnv,
   name: string,
-  fallback: number,
   limits: {
     max?: number;
     min?: number;
@@ -296,13 +310,13 @@ function readInteger(
   const rawValue = env[name]?.trim();
 
   if (!rawValue) {
-    return fallback;
+    throw new Error(`${name} is required`);
   }
 
   const value = Number(rawValue);
 
-  if (!Number.isInteger(value)) {
-    throw new Error(`${name} must be an integer`);
+  if (!Number.isSafeInteger(value)) {
+    throw new Error(`${name} must be a safe integer`);
   }
 
   if (limits.min !== undefined && value < limits.min) {

@@ -1,55 +1,47 @@
 import { spawn } from "node:child_process";
 import console from "node:console";
+import { readFileSync } from "node:fs";
 import process from "node:process";
 import { setTimeout } from "node:timers";
 import { fileURLToPath, URL } from "node:url";
+import { parseEnv } from "node:util";
 
-const gatewayApiToken =
-  process.env.REALTIME_CHAT_GATEWAY_API_TOKEN ?? "wake-surfer-local-gateway-token-change-me";
-const databaseUrl =
-  process.env.REALTIME_CHAT_DATABASE_URL ??
-  "postgresql://wake_surfer_realtime_chat:wake_surfer_realtime_chat_dev_password@localhost:5432/wake_surfer_realtime_chat";
 const workspaceRoot = fileURLToPath(new URL("..", import.meta.url));
 const webDirectory = fileURLToPath(new URL("../apps/web", import.meta.url));
+const apiEnvironment = loadTeamInternalEnvironment(
+  new URL("../apps/realtime-chat-api/.env.example", import.meta.url),
+  {
+    PORT: "REALTIME_CHAT_API_PORT",
+  },
+);
+const gatewayEnvironment = loadTeamInternalEnvironment(
+  new URL("../apps/realtime-chat-gateway/.env.example", import.meta.url),
+  {
+    PORT: "REALTIME_CHAT_GATEWAY_PORT",
+  },
+);
+const childShutdownTimeoutMilliseconds =
+  Math.max(
+    readPositiveSafeInteger(apiEnvironment, "REALTIME_CHAT_SHUTDOWN_GRACE_MS", "realtime-chat-api"),
+    readPositiveSafeInteger(
+      gatewayEnvironment,
+      "REALTIME_CHAT_GATEWAY_SHUTDOWN_GRACE_MS",
+      "realtime-chat-gateway",
+    ),
+  ) + 2_000;
 
 const services = [
   startService(
     "realtime-chat-api",
     process.execPath,
     [fileURLToPath(new URL("../apps/realtime-chat-api/dist/main.js", import.meta.url))],
-    {
-      LOG_LEVEL: process.env.LOG_LEVEL ?? "info",
-      NODE_ENV: "development",
-      PORT: process.env.REALTIME_CHAT_API_PORT ?? "3000",
-      REALTIME_CHAT_ACTOR_AUTH_SECURITY: "development",
-      REALTIME_CHAT_CORS_ALLOWED_ORIGINS:
-        process.env.REALTIME_CHAT_CORS_ALLOWED_ORIGINS ??
-        "http://localhost:5173,http://127.0.0.1:5173",
-      REALTIME_CHAT_DATABASE_URL: databaseUrl,
-      REALTIME_CHAT_GATEWAY_API_TOKEN: gatewayApiToken,
-      REALTIME_CHAT_GATEWAY_ID: "gateway-1",
-      REALTIME_CHAT_GATEWAY_URL:
-        process.env.REALTIME_CHAT_GATEWAY_URL ?? "ws://localhost:3001/realtime-chat",
-      REALTIME_CHAT_INTERNAL_TRANSPORT_SECURITY: "development",
-    },
+    apiEnvironment,
   ),
   startService(
     "realtime-chat-gateway",
     process.execPath,
     [fileURLToPath(new URL("../apps/realtime-chat-gateway/dist/main.js", import.meta.url))],
-    {
-      LOG_LEVEL: process.env.LOG_LEVEL ?? "info",
-      NODE_ENV: "development",
-      PORT: process.env.REALTIME_CHAT_GATEWAY_PORT ?? "3001",
-      REALTIME_CHAT_API_BASE_URL: process.env.REALTIME_CHAT_API_BASE_URL ?? "http://localhost:3000",
-      REALTIME_CHAT_GATEWAY_API_TOKEN: gatewayApiToken,
-      REALTIME_CHAT_GATEWAY_ID: "gateway-1",
-      REALTIME_CHAT_GATEWAY_PATH: "/realtime-chat",
-      REALTIME_CHAT_INTERNAL_TRANSPORT_SECURITY: "development",
-      REALTIME_CHAT_GATEWAY_ALLOWED_ORIGINS:
-        process.env.REALTIME_CHAT_GATEWAY_ALLOWED_ORIGINS ??
-        "http://localhost:5173,http://127.0.0.1:5173",
-    },
+    gatewayEnvironment,
   ),
   startService(
     "web",
@@ -106,6 +98,31 @@ function startService(name, command, args, serviceEnv, cwd = workspaceRoot) {
   return { child, name };
 }
 
+function loadTeamInternalEnvironment(fileUrl, aliases = {}) {
+  const exampleEnvironment = parseEnv(readFileSync(fileUrl, "utf8"));
+
+  return Object.fromEntries(
+    Object.entries(exampleEnvironment).map(([name, exampleValue]) => {
+      const sourceName = aliases[name] ?? name;
+      const override = process.env[sourceName];
+
+      return [name, override === undefined ? exampleValue : override];
+    }),
+  );
+}
+
+function readPositiveSafeInteger(environment, name, serviceName) {
+  const value = Number(environment[name]);
+
+  if (!Number.isSafeInteger(value) || value <= 0) {
+    throw new Error(
+      `${serviceName} ${name}은 개발 실행기의 종료 예산 계산을 위해 양의 safe integer여야 합니다.`,
+    );
+  }
+
+  return value;
+}
+
 function stopAll(exitCode) {
   if (stopping) {
     return;
@@ -127,5 +144,5 @@ function stopAll(exitCode) {
       }
     }
     process.exit(exitCode);
-  }, 3_000).unref();
+  }, childShutdownTimeoutMilliseconds).unref();
 }

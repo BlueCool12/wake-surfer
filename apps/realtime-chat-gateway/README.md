@@ -12,12 +12,19 @@
 - `GET /health/live`
 - `GET /health/ready`
 - `WS /realtime-chat?ticket=<one-time-ticket>`
-- 기본 포트: `3001`
-- 기본 허용 Origin: `http://localhost:5173`
 
 WebSocket upgrade는 설정된 path와 Origin이 모두 일치해야 한다. 브라우저가 사용자 지정 WebSocket
 header를 보낼 수 없으므로 티켓은 query parameter로 받는다. 전체 연결과 동시 ticket 인증 대기에는
 각각 별도 상한을 적용하고, ping/pong heartbeat로 응답하지 않는 연결을 정리한다.
+
+모든 운영 설정은 환경 변수로 명시해야 한다. 누락되거나 유효하지 않은 설정이 있으면 프로세스는
+서버를 열기 전에 실패한다. `.env.example`의 포트 `3001`, 허용 Origin
+`http://localhost:5173`, 연결 상한 `32`는 3인 내부 팀 사용을 위한 예시이지 코드 기본값이나 외부
+운영 보장이 아니다. 외부 시연과 고객 운영은 배포 환경별 값을 따로 제공한다.
+
+WebSocket 수신 message payload 상한 `65,536바이트`는 배포 프로필로 달라지지 않는 wire 보호
+계약이며 환경 변수가 아닌 코드 상수로 고정한다. fragmented frame은 재조립된 message 전체 크기에
+이 상한을 적용한다.
 
 게이트웨이가 API를 호출할 때는 다음 서버 신뢰 정보를 직접 추가한다.
 
@@ -59,7 +66,11 @@ header를 보낼 수 없으므로 티켓은 query parameter로 받는다. 전체
 
 ## 로컬 실행
 
-`.env.example`을 기준으로 API와 같은 gateway token·gateway id를 설정한 뒤 실행한다.
+`.env.example`의 모든 항목을 실행 환경에 명시하고, API와 같은 gateway token·gateway id를 설정한 뒤
+실행한다. `.env.example` 자체는 앱의 런타임 fallback을 제공하지 않으며, 루트
+`pnpm dev:realtime-chat` 실행기만 이를 로컬 `team-internal` 입력으로 명시적으로 읽는다. 예시는 알려진
+개발 token과 `development` 보안 모드를 사용하므로 loopback에만 bind한다. 다른 인터페이스에
+노출하려면 실제 token과 접근·전송 보안 경계를 함께 설정해야 한다.
 
 ```powershell
 pnpm --filter @wake-surfer/realtime-chat-gateway build
