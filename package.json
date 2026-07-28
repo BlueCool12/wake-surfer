@@ -6,7 +6,9 @@
   "packageManager": "pnpm@11.7.0",
   "scripts": {
     "build:realtime-chat": "pnpm --filter @wake-surfer/realtime-chat-api build && pnpm --filter @wake-surfer/realtime-chat-gateway build && pnpm --filter @wake-surfer/realtime-chat-stream-messages-client build && pnpm --filter web build",
-    "dev:realtime-chat": "pnpm docker:up && pnpm build:realtime-chat && node scripts/run-realtime-chat-dev.mjs",
+    "deploy": "node scripts/deploy.mjs",
+    "dev:realtime-chat": "pnpm run deploy",
+    "dev:realtime-chat:host": "pnpm docker:up && pnpm build:realtime-chat && node scripts/run-realtime-chat-dev.mjs",
     "lint": "eslint .",
     "format": "prettier . --write",
     "format:check": "prettier . --check",

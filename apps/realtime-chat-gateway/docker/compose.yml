@@ -1,0 +1,38 @@
+services:
+  realtime-chat-gateway:
+    image: wake-surfer/realtime-chat-gateway:local
+    pull_policy: build
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    init: true
+    restart: unless-stopped
+    env_file:
+      - ./runtime.dev.env
+    environment:
+      REALTIME_CHAT_GATEWAY_ALLOWED_ORIGINS: "${REALTIME_CHAT_PUBLIC_WEB_ORIGIN:-http://localhost:5173}"
+    ports:
+      - "127.0.0.1:${REALTIME_CHAT_GATEWAY_PORT:-3001}:3001"
+    depends_on:
+      realtime-chat-api:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3001/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - default
+      - realtime-chat-gateway-host-access
+    stop_grace_period: 10s
+
+networks:
+  realtime-chat-gateway-host-access:
+    driver: bridge

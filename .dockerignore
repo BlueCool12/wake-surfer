@@ -1,0 +1,16 @@
+.git
+.github
+.codex
+.idea
+.obsidian
+.deploy
+node_modules
+**/node_modules
+**/dist
+**/build
+**/coverage
+**/docker/artifact
+docs
+*.log
+.env
+.env.*

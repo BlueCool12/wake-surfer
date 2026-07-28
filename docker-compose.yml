@@ -1,57 +1,12 @@
-services:
-  realtime-chat-postgres:
-    image: postgres:18-alpine
-    restart: unless-stopped
-    env_file:
-      - ./apps/realtime-chat-api/docker/postgres.dev.env
-    ports:
-      - "127.0.0.1:${REALTIME_CHAT_POSTGRES_PORT:-5432}:5432"
-    volumes:
-      - realtime-chat-postgres-data:/var/lib/postgresql
-    healthcheck:
-      test: ["CMD-SHELL", 'pg_isready -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}"']
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 10s
-    networks:
-      - internal
-      - postgres-host-access
+name: wake-surfer
 
-  realtime-chat-migrate:
-    build:
-      context: ./packages/realtime-chat-database
-      dockerfile: docker/Dockerfile
-    restart: "no"
-    env_file:
-      - ./packages/realtime-chat-database/docker/atlas.dev.env
-    command: ["migrate", "apply", "--env", "runtime", "--config", "file:///workspace/atlas.hcl"]
-    depends_on:
-      realtime-chat-postgres:
-        condition: service_healthy
-    networks:
-      - internal
-
-  realtime-chat-redis:
-    image: redis:8.8.0-alpine
-    restart: unless-stopped
-    command: ["redis-server", "--save", "", "--appendonly", "no", "--loglevel", "warning"]
-    ports:
-      - "127.0.0.1:${REALTIME_CHAT_REDIS_PORT:-6379}:6379"
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 5s
-    networks:
-      - internal
-
-volumes:
-  realtime-chat-postgres-data:
+include:
+  - ./packages/runtime-infra/docker/compose.yml
+  - ./packages/realtime-chat-database/docker/compose.yml
+  - ./apps/realtime-chat-api/docker/compose.yml
+  - ./apps/realtime-chat-gateway/docker/compose.yml
+  - ./apps/web/docker/compose.yml
 
 networks:
-  internal:
+  default:
     internal: true
-  postgres-host-access:
-    driver: bridge

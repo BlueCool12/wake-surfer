@@ -80,3 +80,24 @@ to an actor. That decision belongs to the future authentication design.
 
 The stable rule for this app is narrower: gateway ticket issuance needs a server-confirmed actor id, and that value must
 not come from the client request body.
+
+## Docker 배포
+
+이 앱의 Docker 자산은 `docker/`가 소유한다.
+
+- `docker/compose.yml`: API container, 상태 확인, 공개 포트와 내부 의존성
+- `docker/runtime.dev.env`: container 내부 개발 runtime 환경
+- `docker/Dockerfile`: 사전 생성된 esbuild 번들만 복사하는 Node runtime image
+- `docker/Dockerfile.dockerignore`: image 입력을 `dist/main.mjs`로 제한
+- `docker/volumes/`: API가 향후 소유할 volume mount content 경계
+
+배포 스크립트가 호스트에서 TypeScript 검사와 esbuild를 실행해 `dist/main.mjs`를 먼저 만든다.
+Dockerfile은 프로젝트를 빌드하거나 의존성을 설치하지 않고 이 번들만 runtime image에 복사한다.
+
+```bash
+npm run deploy -- realtime-chat-api
+docker compose logs -f realtime-chat-api
+```
+
+이 명령은 `--no-deps`로 API만 교체한다. PostgreSQL과 migration이 준비되지 않은 최초 환경에서는 먼저
+전체 `npm run deploy`를 실행한다.
