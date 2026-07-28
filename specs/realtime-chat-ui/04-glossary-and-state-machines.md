@@ -52,20 +52,6 @@ connection보다 오래 살 수 있다.
 - 금지 해석:
   - 현행 `sessionId`를 Discord식 resumable session ID로 보면 안 된다.
 
-### Device Session
-
-브라우저 profile, app 설치 또는 물리 기기처럼 여러 connection을 만들 수 있는 client 실행 주체의
-논리적 식별자다.
-
-- 현행: `deviceSessionId`가 없다. actor와 WebSocket connection만 구분한다.
-- P:
-  - 각 browser·device runtime의 Connection, Gateway Session, recovery는 서로 독립적이다.
-  - 현재 `sessionId`를 stable device identity로 대체 사용하지 않는다(`P-MULTI-001`).
-- 미결정:
-  - stable device ID를 실제로 도입할지와 notification·local pending 중 무엇을 소유하게 할지
-- 금지 해석:
-  - `sessionId`나 `connectionGeneration`을 device identity로 사용하지 않는다.
-
 ### Conversation
 
 message가 흐르고 권한·구독·정렬 범위가 적용되는 논리적 대화 공간이다.
@@ -162,7 +148,7 @@ domain에서 이미 발생한 사실을 과거형으로 표현한 값이다. 원
   - `PresenceChanged`도 message history·message sequence·message replay와 분리된 ephemeral 범주로
     다룬다(`SC-EPH-003`).
 - 미결정:
-  - presence 공개 범위·상태 집합·multi-device merge·TTL과 별도 current-state snapshot 필요 여부
+  - presence 공개 범위·상태 집합·TTL과 별도 current-state snapshot 필요 여부
 - 금지 해석:
   - ephemeral event를 message sequence 복구에 자동 포함하지 않는다.
 
@@ -213,10 +199,9 @@ domain에서 이미 발생한 사실을 과거형으로 표현한 값이다. 원
 현재 cursor persistence는 actor/channel key의 page-lifetime memory다. browser reload를 넘는 durable
 cursor가 아니다.
 
-`P-MULTI-003`은 delivery sync cursor와 read cursor를 분리한다. 전자는 Client storage
-profile+Conversation의 복구 진행 상태이고, 후자는 사용자가 실제로 읽은 위치를 나타내는 domain
-state다. Read cursor는 actor+Conversation 범위에서 단조 증가하고 같은 actor의 다른 device에
-동기화한다. Background delivery만으로 read cursor를 전진시키지 않는다.
+Delivery sync cursor와 read cursor는 분리한다. 전자는 Client storage profile+Conversation의 복구
+진행 상태이고, 후자는 사용자가 실제로 읽은 위치를 나타내는 domain state다. Background delivery만으로
+read cursor를 전진시키지 않는다.
 
 ### Sequence
 
@@ -298,7 +283,7 @@ server가 resumable session 또는 event log에 보존한 누락 event를 원래
 | 식별자 | 현재 scope | 안정성 | 다른 값으로 해석하면 안 되는 것 |
 | --- | --- | --- | --- |
 | `actorId` | 인증된 application principal | ticket과 trusted header 경계에서 확정 | client body의 `userId` |
-| `sessionId` | 한 Gateway connection의 local record | reconnect 시 변경 | device session, resumable session |
+| `sessionId` | 한 Gateway connection의 local record | reconnect 시 변경 | resumable session |
 | `connectionGeneration` | stale connection/response를 구분하는 opaque 값 | reconnect 시 변경 | message sequence |
 | `gatewayId` | ticket이 할당되고 connection을 처리한 Gateway identity | deployment 설정 | actor 또는 session |
 | `channelId` | channel target와 local subscription routing key | domain identity | canonical `streamId` 전체 |
@@ -420,7 +405,7 @@ stateDiagram-v2
 - `READY`는 Connection Ready만 뜻하며 Conversation별 sync 완료를 뜻하지 않는다.
 - Conversation recovery의 `CATCHING_UP`, `FULL_SYNC_REQUIRED`, `LIVE`는 connection 상태와 별도다.
 
-미결정 항목은 heartbeat 도입 여부·timeout, 구체적인 reconnect delay 값, stable device ID 도입 여부다.
+미결정 항목은 heartbeat 도입 여부·timeout과 구체적인 reconnect delay 값이다.
 
 ---
 
@@ -505,14 +490,13 @@ flowchart LR
 1. `actorId`와 외부 user identity는 1:1인가, 별도 principal mapping인가?
 2. Message 이외의 domain event 복구에 conversation event log가 필요한가, authoritative state
    재조회로 충분한가?
-3. stable device ID가 필요한가? 필요하다면 notification·local pending 중 무엇을 소유하는가?
-4. 채택된 구독 성공 의미를 어떤 wire event 이름, request correlation, generation 필드로 표현할 것인가?
-5. Message send에서 Commit ACK 전에 별도의 Command ACK 단계를 둘 필요가 있는가?
-6. delivery 상태를 사용자에게 보일 필요가 있는가? 있다면 recipient 범위를 어떻게 정의하는가?
-7. edit/delete/reaction이 추가될 때 message sequence로 충분한가, conversation event sequence가 필요한가?
-8. 어떤 cursor를 browser reload 이후에도 저장하며, actor 전환과 logout 때 언제 지우는가?
-9. Full Sync baseline에 edit/delete/reaction projection을 어떤 형태로 포함할 것인가?
-10. Presence를 도입한다면 reconnect 뒤 현재 상태 snapshot을 제공할 것인가?
+3. 채택된 구독 성공 의미를 어떤 wire event 이름, request correlation, generation 필드로 표현할 것인가?
+4. Message send에서 Commit ACK 전에 별도의 Command ACK 단계를 둘 필요가 있는가?
+5. delivery 상태를 사용자에게 보일 필요가 있는가? 있다면 recipient 범위를 어떻게 정의하는가?
+6. edit/delete/reaction이 추가될 때 message sequence로 충분한가, conversation event sequence가 필요한가?
+7. 어떤 cursor를 browser reload 이후에도 저장하며, actor 전환과 logout 때 언제 지우는가?
+8. Full Sync baseline에 edit/delete/reaction projection을 어떤 형태로 포함할 것인가?
+9. Presence를 도입한다면 reconnect 뒤 현재 상태 snapshot을 제공할 것인가?
 
 ## 공식 참고 자료의 적용 범위
 

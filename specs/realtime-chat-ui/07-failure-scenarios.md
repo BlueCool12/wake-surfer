@@ -78,7 +78,6 @@ Sender ACK
 | FS-MSG-008 | message event 순서 역전 | C: cursor보다 미래 sequence 수신; G: send scheduling/경로 순서 다름; A: DB 순서는 확정; O: 서로 다른 순서 가능 | 화면 순서 역전 | 미래 event buffer, 연속 구간만 apply. gap을 catch-up한 뒤 drain | timeline buffer 구현 |
 | FS-MSG-009 | 중간 sequence 누락 | C: cursor gap; G: 누락 인지 못할 수 있음; A: 연속 rows 존재; O: 각기 다름 | 한 message 미표시 | `afterSequence` catch-up, fixed watermark page 적용. 연속성 위반은 protocol failure | gap buffer·generation bootstrap sync는 구현. live gap 자체의 catch-up trigger는 미구현 `P` |
 | FS-MSG-010 | 삭제 뒤 수정 명령 도착 | C: stale editable view; G: relay; A: deleted version; O: 삭제를 봤을 수 있음 | 삭제 사실 역전 | `P`: edit를 conflict/rejected로 종료하고 최신 tombstone 적용. 자동 재시도 안 함 | edit/delete 미구현 |
-| FS-MSG-011 | 두 device가 같은 메시지 동시 수정 | C A/B: 같은 base version; G: 둘 다 전달; A: 한 transaction 먼저 commit; O: 한 순서 관찰 | lost update | `P`: expected version 비교, 첫 commit만 성공, 나중 명령은 conflict와 최신 version 반환 | 미구현 |
 | FS-MSG-012 | 수정 중 다른 actor가 삭제 | C: edit pending; G: 두 명령을 relay; A: edit/delete 중 하나 선행; O: 순서에 따라 다름 | edit resurrection | `P`: 첫 commit의 version이 우선. 삭제 뒤 edit는 거절; Client는 tombstone 반영 | 미구현 |
 | FS-MSG-013 | 잘못된 JSON/schema/field | C: 잘못된 command; G: parse 가능 여부에 따라 모름; A: strict schema 전에 도달 안 함; O: 없음 | 공격·state 없음 | request correlation을 신뢰할 수 있으면 command reject, frame 자체를 신뢰할 수 없으면 1008 close. 사용자 입력 오류와 protocol 오류 분리 | 현행 malformed frame/send는 1008 |
 | FS-MSG-014 | frame 또는 text 허용 크기 초과 | C: pending 가능; G: frame max 또는 schema 거절; A: text 8KiB 검증/DB check; O: 없음 | 자원 고갈 | oversized frame은 1009, 상관 가능한 text validation은 `invalid_content`로 명령 거절. 자동 재시도 없음 | maxPayload·8KiB 계약 구현, WS mapping 부분 |
@@ -106,16 +105,14 @@ Sender ACK
 | FS-SYNC-006 | Client가 기대한 session과 server session 불일치 | C: old session metadata; G: 매 연결 새 ID; A: session 기준 없음; O: 정상 | session resume 오해 | stable session을 복원하려 하지 않고 actor+channel delivery cursor로 catch-up. 권한 변화 시 full sync | 현행 모델 |
 | FS-SYNC-007 | older history의 `beforeSequence`가 유효하지 않거나 조회 중 history 권한이 바뀜 | C: 기존 timeline과 delivery cursor는 유효하고 older 요청만 실패; G: public HTTP 경로라 local session 변화 없음; A: `invalid_cursor` 또는 `stream_unavailable`; O: 변화 없음 | 과거 page 공백 또는 반복 실패 | 같은 history cursor의 자동 반복을 멈춘다. 접근 가능 상태를 다시 확인하고 필요하면 authoritative latest/history 경계에서 pagination만 다시 시작한다. 이 실패만으로 delivery cursor를 폐기하거나 Full Sync하지 않는다 | older API 거절과 Client `olderFailed` 표시는 구현, capability 판정 미구현 |
 
-## 임시 상태·읽음·권한·다중 기기
+## 임시 상태·읽음·권한
 
 | ID | 실패·주입 지점 | C / G / A / O 상태 | 위험 | 재시도·복구·사용자 표시 | 현행 |
 | --- | --- | --- | --- | --- | --- |
 | FS-EPH-001 | 한 actor가 typing 시작·종료 event를 과도하게 전송 | C: typing 상태를 반복 전송; G: coalescing·rate limit 없이 fan-out할 수 있음; A: 일반 message 기준 상태 변화 없음; O: ephemeral event 폭증 | fan-out 자원 고갈·UI 깜빡임 | actor+Conversation 최신 상태로 coalesce하고 typing 전용 rate limit을 적용한다. 상관 가능한 거절 또는 drop을 사용하며 반복 악용 전에는 connection 전체를 닫지 않는다 | typing과 전용 limiter 미구현 |
 | FS-EPH-002 | typing stop event가 유실되거나 start/stop 순서가 역전 | C: 이미 입력을 멈춤; G: 마지막 start만 알고 있거나 상태 없음; A: durable message 상태 변화 없음; O: stale typing indicator | 사용자가 계속 입력 중으로 보임 | typing은 replay하지 않고 TTL 만료와 actor+Conversation 최신 상태 우선 규칙으로 제거한다. TTL·generation wire는 `미결정` | typing 미구현 |
-| FS-READ-001 | read cursor가 뒤로 이동하거나 server head·접근 범위를 벗어난 위치를 가리킴 | C: 잘못된 unread 감소 또는 read marker 이동을 시도; G: 명령 relay 가능; A: 기존 actor+Conversation cursor와 head 유지; O: 다른 device는 기존 cursor 관찰 | unread 유실·권한 밖 위치 노출 | cursor는 단조 증가만 허용하고 접근 가능한 committed sequence까지만 받는다. 거절 시 authoritative read cursor를 재조회하며 delivery cursor를 폐기하거나 Full Sync하지 않는다 | read cursor 미구현 |
-| FS-READ-002 | 저장된 read cursor의 다른 device fan-out이 유실되거나 device가 offline | C: Device A는 전진을 확인; G: 일부 connection에만 전달하거나 session 없음; A: actor+Conversation cursor는 commit; O: Device B는 stale unread 표시 | device 간 unread 불일치 | Device B가 reconnect/query할 때 authoritative read cursor를 가져오고 max cursor로 멱등 병합한다. message delivery catch-up과 별도 단계로 처리한다 | read cursor 저장·fan-out 미구현 |
+| FS-READ-001 | read cursor가 뒤로 이동하거나 server head·접근 범위를 벗어난 위치를 가리킴 | C: 잘못된 unread 감소 또는 read marker 이동을 시도; G: 명령 relay 가능; A: 기존 actor+Conversation cursor와 head 유지 | unread 유실·권한 밖 위치 노출 | cursor는 단조 증가만 허용하고 접근 가능한 committed sequence까지만 받는다. 거절 시 authoritative read cursor를 재조회하며 delivery cursor를 폐기하거나 Full Sync하지 않는다 | read cursor 미구현 |
 | FS-AUTH-001 | 접속 중 write capability가 회수됐지만 stale Gateway 또는 in-flight 명령이 전송됨 | C: pending mutation; G: stale 구독·capability로 relay할 수 있음; A: 권한 version과 commit 순서에 따라 거절하거나 이미 commit; O: commit된 경우에만 사실 관찰 | 회수 뒤 무단 쓰기 또는 성공 결과 오판 | mutation transaction에서 현재 capability를 다시 판정한다. 회수 전에 commit된 사실은 유지하고 이후 명령은 거절한다. ACK 유실 재시도는 기존 결과 조회와 새 mutation 권한 판정을 분리한다 | capability provider·회수 전파 미구현 |
-| FS-MULTI-001 | device-only logout과 actor-wide logout 범위가 뒤바뀌거나 취소가 socket에 전파되지 않음 | C: 로그아웃한 device가 계속 연결되거나 다른 device까지 종료; G: 대상 session 식별 실패 또는 stale socket 유지; A: device/actor Auth session 중 요청 범위만 무효화; O: message 기준 상태 변화 없음 | 세션 탈취 지속·정상 device 강제 종료 | `LogoutDevice`는 선택한 Auth/device session만, `LogoutAllDevices`는 actor 전체를 취소하고 해당 Gateway connection에 전파한다. 범위를 식별할 수 없으면 임의 확대하지 않는다 | stable device session·취소 전파 미구현 |
 
 ## 처리 지연과 흐름 제어
 

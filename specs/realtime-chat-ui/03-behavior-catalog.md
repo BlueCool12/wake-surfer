@@ -229,8 +229,6 @@ Slack Socket Mode 문서는 **Slack 앱용 Events API 전송 방식**이다. `en
   - timeline은 `messageId`와 `sequence`로 중복을 제거한다.
 - 근거:
   - `현행`: fan-out 범위는 단일 Gateway의 local session이다.
-  - `P`: 같은 actor 여부와 무관하게 Conversation을 구독한 모든 device가 같은 canonical identity를
-    반영하는 것을 목표로 한다(`P-MULTI-002`).
   - `I`: API 응답과 socket push 사이 장애가 발생하면 저장된 message와 사용자 화면이 일시적으로
     달라질 수 있다.
 - 열린 항목: 다중 Gateway fan-out, recipient 계산, broker/outbox는 현재 구현이 아니며 별도 결정이다.
@@ -396,7 +394,7 @@ Slack Socket Mode 문서는 **Slack 앱용 Events API 전송 방식**이다. `en
   - `P`: typing은 message history와 분리하고 저장·replay하지 않는 TTL 기반 ephemeral event로
     처리한다(`SC-EPH-001`, `SC-EPH-002`, `FS-EPH-001`, `FS-EPH-002`).
   - `I`: 최신 상태만 의미가 있으므로 일반적으로 message처럼 replay하지 않는 편이 자연스럽다.
-- 열린 항목: debounce/TTL, reconnect 후 상태, 다중 device 합성, privacy.
+- 열린 항목: debounce/TTL, reconnect 후 상태, privacy.
 
 ### BH-EPH-002 — 온라인·presence 상태를 반영한다
 
@@ -417,18 +415,15 @@ Slack Socket Mode 문서는 **Slack 앱용 Events API 전송 방식**이다. `en
     이는 event 분류 참고일 뿐 Discord client UI나 내부 처리의 증거가 아니다.
   - `P`: presence 변화는 `PresenceChanged` ephemeral 범주로 분류하고 message replay에서
     제외한다(`SC-EPH-003`).
-  - `I`: 같은 actor의 connection 하나가 닫혔다고 actor 전체를 offline으로 만들면 다른 device의
-    활성 연결과 충돌할 수 있으므로 별도 merge 정책이 필요하다.
-- 열린 항목: 공개 대상과 privacy, online/away/offline 상태 집합, multi-device merge 우선순위,
-  heartbeat와 presence의 관계, TTL, latest-state 저장 여부, reconnect snapshot.
+- 열린 항목: 공개 대상과 privacy, online/away/offline 상태 집합, heartbeat와 presence의 관계, TTL,
+  latest-state 저장 여부, reconnect snapshot.
 
 ### BH-READ-001 — 사용자가 읽은 위치와 unread 상태를 갱신한다
 
 - 상태: `미구현`
 - 사전조건: actor가 conversation을 읽을 수 있다고 가정한다.
 - 사용자 행동: timeline을 특정 위치까지 본다.
-- 사용자 가시 결과: 채택된 목표 행동은 자신의 unread 표시가 줄거나 사라지고 다른 device에도 같은
-  read 위치가 반영되는 것이다.
+- 사용자 가시 결과: 채택된 목표 행동은 자신의 unread 표시가 줄거나 사라지는 것이다.
 - 프로젝트 처리:
   - domain read cursor, unread projection, `AdvanceReadCursor` command는 현재 없다.
   - 현재 `deliverySyncCursor`는 client가 연속 반영한 message 위치일 뿐, 사용자가 실제로 읽은 위치가
@@ -436,16 +431,14 @@ Slack Socket Mode 문서는 **Slack 앱용 Events API 전송 방식**이다. `en
 - 근거:
   - `현행`: delivery 복구 cursor만 존재한다.
   - `P`: delivery sync cursor와 actor+Conversation 단위 read cursor를 분리하고, background
-    delivery만으로 read cursor를 전진시키지 않으며, 명시적으로 전진한 위치는 같은 actor의 다른
-    device에도 반영한다(`P-MULTI-003`, `SC-READ-001`, `SC-READ-003`, `FS-READ-001`,
-    `FS-READ-002`).
+    delivery만으로 read cursor를 전진시키지 않는다(`SC-READ-001`, `FS-READ-001`).
   - `I`: delivery cursor를 read cursor로 재사용하면 background tab에서도 읽음이 과도하게 전진할 수
     있다.
-- 열린 항목: actor 단위 cursor의 영속·다른 device fan-out 계약, thread unread, 권한 상실 시 처리.
+- 열린 항목: actor 단위 cursor의 영속, thread unread, 권한 상실 시 처리.
 
 ---
 
-## 권한과 다중 연결
+## 권한
 
 ### BH-AUTH-001 — 연결 중 conversation 권한이 회수된다
 
@@ -464,25 +457,7 @@ Slack Socket Mode 문서는 **Slack 앱용 Events API 전송 방식**이다. `en
     `FS-SUB-003`). write만 회수되면 구독을 유지하고 새 mutation을 거절한다(`SC-AUTH-001`,
     `FS-AUTH-001`).
   - `I`: command 시점 권한과 이미 열린 subscription의 fan-out 권한은 별도 검사 지점이다.
-- 열린 항목: 즉시 unsubscribe, 기존 message 제거, 동일 actor의 모든 connection 처리.
-
-### BH-MULTI-001 — 같은 actor가 여러 connection에서 같은 channel을 사용한다
-
-- 상태: `부분`
-- 사전조건: 같은 actor ID로 둘 이상의 browser/tab/device가 연결되고 같은 Gateway/channel을 join한다.
-- 사용자 행동: 한 connection에서 message를 보낸다.
-- 사용자 가시 결과: 같은 Gateway에 붙은 다른 connection에도 canonical message가 나타난다.
-- 프로젝트 처리:
-  - 각 WebSocket은 별도 `sessionId`와 channel Set을 가진다.
-  - local fan-out은 actor가 아니라 channel subscription을 기준으로 모든 local connection에 보낸다.
-  - `deviceSessionId`는 없고 한 connection의 logout 범위도 정의되지 않았다.
-- 근거:
-  - `현행`: 같은 actor의 local 다중 session은 구조상 가능하다.
-  - `I`: 여러 Gateway에 나뉜 connection과 browser reload 이후 pending 정리는 현재 보장되지 않는다.
-  - `P`: 각 client runtime의 Connection·Gateway Session·recovery는 독립시키고, 한 device의 종료가
-    다른 device를 자동 종료하지 않게 한다(`P-MULTI-001`, `SC-MULTI-001`, `FS-MULTI-001`).
-- 열린 항목: device identity, logout 범위, actor 단위 read cursor의 영속·fan-out 계약, pending message
-  소유권.
+- 열린 항목: 즉시 unsubscribe, 기존 message 제거.
 
 ---
 

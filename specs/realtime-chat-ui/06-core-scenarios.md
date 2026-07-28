@@ -327,7 +327,6 @@
 | Client 변화 | source의 현재 상태 입력과 viewer의 presence projection을 분리해 최신 허용 상태로 교체 |
 | Gateway/API | presence owner가 허용된 viewer projection을 갱신하며, message API의 durable history에는 넣지 않음 |
 | 이벤트 | `PresenceChanged`를 message history·sequence와 분리한 ephemeral event로 전달 |
-| 다중 device | connection 하나의 종료를 actor 전체 offline으로 단정하지 않으며, merge 규칙은 미결정 |
 | 종료 | 허용된 viewer의 presence projection이 최신 상태로 교체됨. 상태 집합·공개 범위는 미결정 |
 | 실패 | FS-CON-005, 007, FS-FLOW-003. 과거 presence event를 message처럼 replay하지 않음 |
 | 근거·구현 | `D`, `P`, 미구현 |
@@ -356,19 +355,7 @@
 | 권한·실패 | view 가능 / FS-MSG-007~009; 중복 event는 count를 중복 증가시키지 않음 |
 | 근거·구현 | `P`, 미구현 |
 
-### SC-READ-003 — 다른 기기의 읽은 위치 동기화
-
-| 필드 | 내용 |
-| --- | --- |
-| Actor·조건 | 같은 actor의 Device A/B, 모두 대화 접근 가능 |
-| 행동·상태 | A가 cursor 전진; B가 `ReadCursorAdvanced` 수신 |
-| Client 변화 | A와 B가 같은 authoritative read cursor에서 각자의 unread projection을 다시 계산 |
-| Gateway/API | 사용자 단위 cursor를 모든 활성 device에 fan-out |
-| 종료 | B의 unread projection도 감소 |
-| 권한·실패 | `read_cursor:update` / FS-CON-007, FS-READ-002; offline B는 다음 read-cursor sync에서 회복 |
-| 근거·구현 | `P`, 미구현 |
-
-## 권한과 다중 접속
+## 권한
 
 ### SC-AUTH-001 — 접속 중 쓰기 권한 회수
 
@@ -393,43 +380,6 @@
 | API | history/sync/message 명령을 일반적인 unavailable/forbidden으로 거절 |
 | 종료 | 다른 대화 연결은 유지 가능; suspended/removed면 전체 연결 종료 |
 | 실패 | FS-SUB-003. 회수 event 유실 시 다음 API 판정이 방어 |
-| 근거·구현 | `P`, 미구현 |
-
-### SC-MULTI-001 — 같은 actor의 여러 device 연결
-
-| 필드 | 내용 |
-| --- | --- |
-| Actor·조건 | 같은 인증 actor, 서로 다른 device session |
-| 행동·상태 | 각 device가 독립 ticket·connection·connectionGeneration을 가짐 |
-| Client 변화 | 각 device가 독립 connection·pending·delivery recovery 상태를 유지 |
-| Gateway/API | 동일 actor의 복수 session 허용; pending command는 device-local |
-| 이벤트 | 각 connection에 `gateway.connected` |
-| 종료 | 두 연결 모두 ready |
-| 실패 | FS-CON-007, 008. 한 connection 종료가 다른 connection을 자동 종료하지 않음 |
-| 근거·구현 | `P`, 부분. 복수 연결은 가능하지만 stable device ID는 없음 |
-
-### SC-MULTI-002 — 한 device의 메시지를 다른 device에 반영
-
-| 필드 | 내용 |
-| --- | --- |
-| Actor·조건 | 같은 actor의 A/B가 같은 대화 구독 |
-| 행동·상태 | A가 메시지를 전송; A는 accepted, A/B 모두 created 수신 |
-| Client | B는 자신의 actor 메시지로 표시하되 A의 pending item을 소유하지 않음 |
-| API/Gateway | 저장 메시지를 actor의 모든 구독 connection에 fan-out |
-| 종료 | 두 timeline이 같은 sequence |
-| 실패 | FS-MSG-006~009. 다른 Gateway에 있으면 현행 local fan-out으로 누락, cursor sync로 복구 |
-| 근거·구현 | `P`, 부분 |
-
-### SC-MULTI-003 — 한 device logout의 범위
-
-| 필드 | 내용 |
-| --- | --- |
-| Actor·조건 | A/B 활성, A에서 logout |
-| 행동·상태 | 기본 logout은 A의 device session과 connection만 무효화 |
-| Client 변화 | A는 종료·로그인 필요 상태가 되고, B는 actor-wide logout이 아니면 READY를 유지 |
-| Gateway/API | A 정리, B 유지. “모든 device에서 logout” 명령만 actor 전체 session 무효화 |
-| 종료 | 선택한 범위와 UI 문구가 일치 |
-| 실패 | FS-MULTI-001. 범위 불명확 상태에서 전체 session을 임의 종료하지 않음 |
 | 근거·구현 | `P`, 미구현 |
 
 ## 구현 핵심 시퀀스
@@ -495,9 +445,7 @@ sequenceDiagram
 
 ## 완료 기준
 
-- 첨부의 최소 26개와 보완 3개를 합한 29개 핵심 시나리오에 actor, 사전조건, 상태 변화, Gateway/API
-  처리, event, 권한, 실패 연결이 있다.
+- 각 핵심 시나리오에 actor, 사전조건, 상태 변화, Gateway/API 처리, event, 권한, 실패 연결이 있다.
 - message accepted와 타 Client delivery를 별도 시나리오로 다룬다.
 - 미구현 edit/delete/reaction/typing/read/권한 회수를 현행처럼 서술하지 않는다.
 - 초기 이력과 live event의 경합을 명시한다.
-- 다중 device의 connection, pending message, logout 범위를 구분한다.
