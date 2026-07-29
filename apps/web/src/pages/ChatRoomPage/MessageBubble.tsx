@@ -1,3 +1,5 @@
+import { RotateCw } from "lucide-react";
+
 import type { ChatMessageView } from "../../features/chat/useChatRoom";
 import { formatTime } from "../../utils/date";
 import styles from "./MessageBubble.module.css";
@@ -25,9 +27,12 @@ function MessageBubble({ message, onRetry }: MessageBubbleProps) {
       <div className={bubbleClass}>
         <span className={styles.text}>{message.text}</span>
         {message.status === "failed" ? (
-          <button type="button" className={styles.retry} onClick={onRetry}>
-            전송 실패 · 다시 시도
-          </button>
+          <span className={styles.retryRow}>
+            전송 실패
+            <button type="button" className={styles.retry} onClick={onRetry} aria-label="다시 시도">
+              <RotateCw size={12} />
+            </button>
+          </span>
         ) : (
           <span className={styles.meta}>
             {message.status === "pending" ? "전송 중…" : formatTime(message.createdAt)}
