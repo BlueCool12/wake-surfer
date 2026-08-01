@@ -49,6 +49,11 @@
   font-weight: 600;
 }
 
+.memberCount {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+}
+
 .messages {
   flex: 1;
   overflow-y: auto;

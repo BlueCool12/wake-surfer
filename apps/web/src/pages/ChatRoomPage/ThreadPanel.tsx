@@ -1,5 +1,14 @@
 import { useEffect, useRef, useState } from "react";
-import { Check, MessagesSquare, PanelRightClose, Pencil, Send, StickyNote, X } from "lucide-react";
+import {
+  Check,
+  MessagesSquare,
+  PanelRightClose,
+  Pencil,
+  Send,
+  StickyNote,
+  Users,
+  X,
+} from "lucide-react";
 
 import { formatTime } from "../../utils/date";
 import type { ChatMessageView } from "../../features/chat/useChatRoom";
@@ -11,7 +20,13 @@ export type ThreadReply = {
   createdAt: string;
 };
 
-export type ThreadPanelTab = "thread" | "memo";
+export type RoomMember = {
+  id: string;
+  name: string;
+  isOnline: boolean;
+};
+
+export type ThreadPanelTab = "thread" | "members" | "memo";
 
 type ThreadPanelProps = {
   activeTab: ThreadPanelTab;
@@ -23,11 +38,12 @@ type ThreadPanelProps = {
   onDeleteParent: () => void;
   replies: ThreadReply[];
   onAddReply: (text: string) => void;
+  members: RoomMember[];
   isCollapsed: boolean;
   onCollapsedChange: (collapsed: boolean) => void;
 };
 
-/** 채팅방 오른쪽에 고정되는 스레드/메모 패널. 백엔드에 스레드 개념이 없어 답글은 이 화면 안에서만 유지된다. */
+/** 채팅방 오른쪽에 고정되는 스레드/멤버/메모 패널. 백엔드에 스레드 개념이 없어 답글은 이 화면 안에서만 유지된다. */
 function ThreadPanel({
   activeTab,
   onTabChange,
@@ -38,6 +54,7 @@ function ThreadPanel({
   onDeleteParent,
   replies,
   onAddReply,
+  members,
   isCollapsed,
   onCollapsedChange,
 }: ThreadPanelProps) {
@@ -130,6 +147,18 @@ function ThreadPanel({
             <StickyNote size={16} />
             <span className={styles.tooltip}>메모</span>
           </button>
+          <button
+            type="button"
+            className={styles.tab}
+            onClick={() => {
+              onCollapsedChange(false);
+              onTabChange("members");
+            }}
+            aria-label="멤버 패널 펼치기"
+          >
+            <Users size={16} />
+            <span className={styles.tooltip}>멤버</span>
+          </button>
         </div>
       </aside>
     );
@@ -156,6 +185,15 @@ function ThreadPanel({
           <StickyNote size={16} />
           <span className={styles.tooltip}>메모</span>
         </button>
+        <button
+          type="button"
+          className={activeTab === "members" ? `${styles.tab} ${styles.tabActive}` : styles.tab}
+          onClick={() => onTabChange("members")}
+          aria-label="멤버"
+        >
+          <Users size={16} />
+          <span className={styles.tooltip}>멤버</span>
+        </button>
 
         <button
           type="button"
@@ -168,7 +206,46 @@ function ThreadPanel({
         </button>
       </div>
 
-      {activeTab === "memo" ? (
+      {activeTab === "members" ? (
+        <div className={styles.memberList}>
+          {[
+            { label: "온라인", members: members.filter((member) => member.isOnline) },
+            { label: "오프라인", members: members.filter((member) => !member.isOnline) },
+          ].map((group) =>
+            group.members.length === 0 ? null : (
+              <div key={group.label} className={styles.memberGroup}>
+                <p className={styles.memberGroupLabel}>
+                  {group.label} {group.members.length}
+                </p>
+                <ul className={styles.memberGroupList}>
+                  {group.members.map((member) => (
+                    <li key={member.id} className={styles.member}>
+                      <span className={styles.memberAvatarWrap}>
+                        <span className={styles.memberAvatar} aria-hidden="true">
+                          {member.name.slice(0, 1)}
+                        </span>
+                        <span
+                          className={
+                            member.isOnline
+                              ? `${styles.memberStatusDot} ${styles.memberStatusDotOnline}`
+                              : styles.memberStatusDot
+                          }
+                          aria-hidden="true"
+                        />
+                      </span>
+                      <span
+                        className={member.isOnline ? styles.memberName : `${styles.memberName} ${styles.memberNameOffline}`}
+                      >
+                        {member.name}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ),
+          )}
+        </div>
+      ) : activeTab === "memo" ? (
         <div className={styles.emptyState}>
           <p>메모 기능은 아직 준비 중이에요.</p>
         </div>

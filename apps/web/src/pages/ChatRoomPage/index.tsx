@@ -7,8 +7,17 @@ import { useChatRoom, type ChatMessageView } from "../../features/chat/useChatRo
 import MessageBubble from "./MessageBubble";
 import type { MessageReactionsValue } from "./MessageReactions";
 import RoomListSidebar from "./RoomListSidebar";
-import ThreadPanel, { type ThreadPanelTab, type ThreadReply } from "./ThreadPanel";
+import ThreadPanel, { type RoomMember, type ThreadPanelTab, type ThreadReply } from "./ThreadPanel";
 import styles from "./ChatRoomPage.module.css";
+
+// 방 멤버 목록/인원수 API가 아직 없어(chat-backend-contract 참고) 고정값으로 mock한다.
+const ROOM_MEMBERS: RoomMember[] = [
+  { id: "user-me", name: "나", isOnline: true },
+  { id: "user-alice", name: "Alice", isOnline: true },
+  { id: "user-bob", name: "Bob", isOnline: false },
+  { id: "user-carol", name: "Carol", isOnline: true },
+  { id: "user-dan", name: "Dan", isOnline: false },
+];
 
 function ChatRoomPage() {
   const { channelId = "test" } = useParams();
@@ -147,6 +156,7 @@ function ChatRoomPage() {
       <header className={styles.header}>
         <span className={styles.channelHash}>#</span>
         <h1 className={styles.channelName}>{channelId}</h1>
+        <span className={styles.memberCount}>{ROOM_MEMBERS.length}명</span>
       </header>
 
       <div className={styles.page}>
@@ -192,6 +202,7 @@ function ChatRoomPage() {
                     onOpenThread={() => handleOpenThread(message.key)}
                     reactions={reactionsByMessageKey[message.key] ?? {}}
                     onToggleReaction={(emoji) => handleToggleReaction(message.key, emoji)}
+                    unreadCount={Math.max(ROOM_MEMBERS.length - 1, 0)}
                   />
                 ))
               )}
@@ -237,6 +248,7 @@ function ChatRoomPage() {
         }}
         replies={selectedThreadReplies}
         onAddReply={handleAddReply}
+        members={ROOM_MEMBERS}
         isCollapsed={isPanelCollapsed}
         onCollapsedChange={setIsPanelCollapsed}
       />

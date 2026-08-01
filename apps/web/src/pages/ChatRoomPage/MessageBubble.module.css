@@ -1,3 +1,9 @@
+.wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
 .row {
   display: flex;
   align-items: flex-end;
@@ -6,6 +12,15 @@
 }
 
 .rowMine {
+  justify-content: flex-end;
+}
+
+.reactionsRow {
+  display: flex;
+  justify-content: flex-start;
+}
+
+.reactionsRowMine {
   justify-content: flex-end;
 }
 
@@ -58,6 +73,13 @@
   opacity: 0.7;
 }
 
+.unreadCount {
+  flex-shrink: 0;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-2xs);
+  font-weight: 600;
+}
+
 .retryRow {
   display: flex;
   align-items: center;
@@ -98,8 +120,15 @@
 }
 
 .bubbleThreadActive {
-  outline: 2px solid var(--color-accent);
-  outline-offset: 2px;
+  box-shadow:
+    var(--shadow-sm),
+    inset 0 0 0 2px var(--color-accent);
+}
+
+.bubbleMine.bubbleThreadActive {
+  box-shadow:
+    var(--shadow-sm),
+    inset 0 0 0 2px var(--color-accent-text);
 }
 
 .bubbleClickable {

@@ -25,6 +25,8 @@ type MessageBubbleProps = {
   reactions?: MessageReactionsValue;
   /** 반응 이모지를 눌렀을 때 호출(추가/취소 토글). */
   onToggleReaction?: ((emoji: string) => void) | undefined;
+  /** 아직 이 메시지를 읽지 않은 인원 수. 0이면 표시하지 않는다. */
+  unreadCount?: number;
 };
 
 /** 채팅방의 메시지 한 건을 말풍선으로 렌더링한다. 내/상대, 전송 상태에 따라 스타일이 달라진다. */
@@ -39,6 +41,7 @@ function MessageBubble({
   onOpenThread,
   reactions = {},
   onToggleReaction,
+  unreadCount = 0,
 }: MessageBubbleProps) {
   const isClickable = message.status === "sent" && onOpenThread !== undefined;
 
@@ -75,73 +78,88 @@ function MessageBubble({
     <MessageReactions reactions={reactions} onToggle={onToggleReaction} isMine={message.isMine} />
   ) : null;
 
+  const unreadCountNode =
+    message.status === "sent" && unreadCount > 0 ? (
+      <span className={styles.unreadCount}>{unreadCount}</span>
+    ) : null;
+
   return (
-    <div className={rowClass}>
-      {message.isMine ? reactionsNode : null}
+    <div className={styles.wrapper}>
+      <div className={rowClass}>
+        {message.isMine ? unreadCountNode : null}
 
-      <div
-        className={bubbleClass}
-        onClick={isClickable ? onOpenThread : undefined}
-        role={isClickable ? "button" : undefined}
-        tabIndex={isClickable ? 0 : undefined}
-        onKeyDown={isClickable ? handleKeyDown : undefined}
-      >
-        {isDeleted ? (
-          <span className={styles.deletedText}>삭제된 메시지입니다</span>
-        ) : (
-          <>
-            <span className={styles.text}>{message.text}</span>
+        <div
+          className={bubbleClass}
+          onClick={isClickable ? onOpenThread : undefined}
+          role={isClickable ? "button" : undefined}
+          tabIndex={isClickable ? 0 : undefined}
+          onKeyDown={isClickable ? handleKeyDown : undefined}
+        >
+          {isDeleted ? (
+            <span className={styles.deletedText}>삭제된 메시지입니다</span>
+          ) : (
+            <>
+              <span className={styles.text}>{message.text}</span>
 
-            {message.status === "failed" ? (
-              <span className={styles.retryRow}>
-                전송 실패
-                <span className={styles.retryDivider} aria-hidden="true">
-                  ·
+              {message.status === "failed" ? (
+                <span className={styles.retryRow}>
+                  전송 실패
+                  <span className={styles.retryDivider} aria-hidden="true">
+                    ·
+                  </span>
+                  <button
+                    type="button"
+                    className={styles.actionButton}
+                    onClick={onRetry}
+                    aria-label="다시 시도"
+                  >
+                    <RotateCw size={10} />
+                  </button>
+                  <button
+                    type="button"
+                    className={styles.actionButton}
+                    onClick={handleDelete}
+                    aria-label="메시지 삭제"
+                  >
+                    <X size={10} />
+                  </button>
                 </span>
-                <button
-                  type="button"
-                  className={styles.actionButton}
-                  onClick={onRetry}
-                  aria-label="다시 시도"
-                >
-                  <RotateCw size={10} />
-                </button>
-                <button
-                  type="button"
-                  className={styles.actionButton}
-                  onClick={handleDelete}
-                  aria-label="메시지 삭제"
-                >
-                  <X size={10} />
-                </button>
-              </span>
-            ) : (
-              <span className={styles.metaRow}>
-                {replyCount > 0 ? (
-                  <>
-                    <span className={styles.threadCount}>
-                      <MessagesSquare size={11} />
-                      {replyCount}
-                    </span>
-                    <span className={styles.retryDivider} aria-hidden="true">
-                      ·
-                    </span>
-                  </>
-                ) : null}
-                <span className={styles.metaText}>
-                  {message.status === "pending"
-                    ? "전송 중…"
-                    : isEdited
-                      ? `수정됨 · ${formatTime(message.createdAt)}`
-                      : formatTime(message.createdAt)}
+              ) : (
+                <span className={styles.metaRow}>
+                  {replyCount > 0 ? (
+                    <>
+                      <span className={styles.threadCount}>
+                        <MessagesSquare size={11} />
+                        {replyCount}
+                      </span>
+                      <span className={styles.retryDivider} aria-hidden="true">
+                        ·
+                      </span>
+                    </>
+                  ) : null}
+                  <span className={styles.metaText}>
+                    {message.status === "pending"
+                      ? "전송 중…"
+                      : isEdited
+                        ? `수정됨 · ${formatTime(message.createdAt)}`
+                        : formatTime(message.createdAt)}
+                  </span>
                 </span>
-              </span>
-            )}
-          </>
-        )}
+              )}
+            </>
+          )}
+        </div>
+
+        {message.isMine ? null : unreadCountNode}
       </div>
 
-      {message.isMine ? null : reactionsNode}
+      {reactionsNode ? (
+        <div
+          className={message.isMine ? `${styles.reactionsRow} ${styles.reactionsRowMine}` : styles.reactionsRow}
+        >
+          {reactionsNode}
+        </div>
+      ) : null}
     </div>
   );
 }
