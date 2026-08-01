@@ -44,8 +44,14 @@
   word-break: break-word;
 }
 
-.metaText {
+.metaRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-0-5);
   align-self: flex-end;
+}
+
+.metaText {
   font-size: var(--font-size-2xs);
   opacity: 0.7;
 }
@@ -61,13 +67,6 @@
 .retryDivider {
   margin-left: var(--space-0-5);
   opacity: 0.5;
-}
-
-.actions {
-  display: flex;
-  align-items: center;
-  gap: var(--space-0-5);
-  align-self: flex-end;
 }
 
 .actionButton {
@@ -87,41 +86,6 @@
   background: var(--color-overlay-hover);
 }
 
-.editRow {
-  display: flex;
-  align-items: flex-end;
-  gap: var(--space-0-5);
-}
-
-.editInput {
-  flex: 1;
-  min-width: 8rem;
-  padding: var(--space-1) var(--space-2);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  background: var(--color-bg);
-  color: var(--color-text);
-  font: inherit;
-  font-size: var(--font-size-sm);
-  resize: none;
-}
-
-.editButton {
-  display: flex;
-  align-items: center;
-  padding: var(--space-0-5);
-  border: none;
-  border-radius: var(--radius-sm);
-  background: none;
-  color: inherit;
-  cursor: pointer;
-  opacity: 0.85;
-}
-
-.editButton:hover {
-  opacity: 1;
-}
-
 .deletedText {
   font-style: italic;
   opacity: 0.6;
@@ -129,4 +93,35 @@
 
 .bubbleDeleted {
   box-shadow: none;
+}
+
+.bubbleThreadActive {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+.bubbleClickable {
+  cursor: pointer;
+}
+
+.bubbleClickable:hover {
+  filter: brightness(0.96);
+}
+
+.threadCount {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-0-5);
+  border: none;
+  background: none;
+  padding: 0;
+  color: inherit;
+  font: inherit;
+  font-size: var(--font-size-2xs);
+  opacity: 0.85;
+  cursor: pointer;
+}
+
+.threadCount:hover {
+  opacity: 1;
 }
