@@ -5,11 +5,19 @@ import { Send } from "lucide-react";
 import Loading from "../../components/Loading";
 import ThemeToggle from "../../components/ThemeToggle";
 import { useChatRoom, type ChatMessageView } from "../../features/chat/useChatRoom";
+import MentionPicker from "./MentionPicker";
 import MessageBubble from "./MessageBubble";
 import type { MessageReactionsValue } from "./MessageReactions";
 import RoomListSidebar from "./RoomListSidebar";
 import ThreadPanel, { type RoomMember, type ThreadPanelTab, type ThreadReply } from "./ThreadPanel";
 import styles from "./ChatRoomPage.module.css";
+
+/** 커서 바로 앞에서 진행 중인 "@닉네임" 멘션 입력을 찾는다. 공백/줄바꿈이 나오면 멘션 입력이 끝난 것으로 본다. */
+function findMentionQuery(value: string, cursor: number): string | undefined {
+  const beforeCursor = value.slice(0, cursor);
+  const match = /(?:^|\s)@([^\s@]*)$/.exec(beforeCursor);
+  return match?.[1];
+}
 
 // 방 멤버 목록/인원수 API가 아직 없어(chat-backend-contract 참고) 고정값으로 mock한다.
 const ROOM_MEMBERS: RoomMember[] = [
@@ -38,6 +46,17 @@ function ChatRoomPage() {
   const scrollRef = useRef<HTMLDivElement>(null);
   const isAtBottomRef = useRef(true);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // "@"로 멘션할 멤버를 고르는 팝업. 백엔드에 멘션 개념이 없어 텍스트에 이름을 끼워 넣는 UI만 구현한다.
+  const [mentionQuery, setMentionQuery] = useState<string | undefined>(undefined);
+  const [mentionActiveIndex, setMentionActiveIndex] = useState(0);
+  const mentionMatches =
+    mentionQuery === undefined
+      ? []
+      : ROOM_MEMBERS.filter((member) =>
+          member.name.toLowerCase().startsWith(mentionQuery.toLowerCase()),
+        );
+  const isMentionOpen = mentionQuery !== undefined && mentionMatches.length > 0;
 
   // 답글/스레드/수정/삭제는 백엔드에 개념이 없어(chat-backend-contract 참고) 이 화면 세션 안에서만 유지되는 로컬 상태다.
   const [threadsByMessageKey, setThreadsByMessageKey] = useState<Record<string, ThreadReply[]>>({});
@@ -136,9 +155,55 @@ function ChatRoomPage() {
     if (draft.trim() === "") return;
     sendMessage(draft);
     setDraft("");
+    setMentionQuery(undefined);
+  };
+
+  const handleDraftChange = (event: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const value = event.target.value;
+    setDraft(value);
+    setMentionQuery(findMentionQuery(value, event.target.selectionStart));
+    setMentionActiveIndex(0);
+  };
+
+  const handleSelectMention = (member: RoomMember) => {
+    const el = textareaRef.current;
+    const cursor = el?.selectionStart ?? draft.length;
+    const before = draft.slice(0, cursor).replace(/@([^\s@]*)$/, `@${member.name} `);
+    const after = draft.slice(cursor);
+    setDraft(before + after);
+    setMentionQuery(undefined);
+
+    requestAnimationFrame(() => {
+      el?.focus();
+      el?.setSelectionRange(before.length, before.length);
+    });
   };
 
   const handleKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (isMentionOpen) {
+      if (event.key === "ArrowDown") {
+        event.preventDefault();
+        setMentionActiveIndex((index) => (index + 1) % mentionMatches.length);
+        return;
+      }
+      if (event.key === "ArrowUp") {
+        event.preventDefault();
+        setMentionActiveIndex((index) => (index - 1 + mentionMatches.length) % mentionMatches.length);
+        return;
+      }
+      if (event.key === "Enter" || event.key === "Tab") {
+        event.preventDefault();
+        const activeMember = mentionMatches[mentionActiveIndex];
+        if (activeMember !== undefined) handleSelectMention(activeMember);
+        return;
+      }
+      if (event.key === "Escape") {
+        event.preventDefault();
+        setMentionQuery(undefined);
+        return;
+      }
+    }
+
     if (event.key === "Enter" && !event.shiftKey) {
       event.preventDefault();
       handleSend();
@@ -212,12 +277,19 @@ function ChatRoomPage() {
         </div>
 
         <div className={styles.composer}>
+          {isMentionOpen ? (
+            <MentionPicker
+              members={mentionMatches}
+              activeIndex={mentionActiveIndex}
+              onSelect={handleSelectMention}
+            />
+          ) : null}
           <div className={styles.inputWrap}>
             <textarea
               ref={textareaRef}
               className={styles.input}
               value={draft}
-              onChange={(event) => setDraft(event.target.value)}
+              onChange={handleDraftChange}
               onKeyDown={handleKeyDown}
               placeholder={`#${channelId}에 메시지 보내기`}
               rows={1}

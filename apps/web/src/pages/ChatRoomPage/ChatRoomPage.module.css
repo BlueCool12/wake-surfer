@@ -94,6 +94,7 @@ button.recoveryNotice {
 }
 
 .composer {
+  position: relative;
   height: 4.5rem;
   box-sizing: border-box;
   display: flex;
