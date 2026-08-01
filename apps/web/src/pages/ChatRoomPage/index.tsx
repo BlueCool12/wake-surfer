@@ -3,6 +3,7 @@ import { useParams } from "react-router-dom";
 import { Send } from "lucide-react";
 
 import Loading from "../../components/Loading";
+import ThemeToggle from "../../components/ThemeToggle";
 import { useChatRoom, type ChatMessageView } from "../../features/chat/useChatRoom";
 import MessageBubble from "./MessageBubble";
 import type { MessageReactionsValue } from "./MessageReactions";
@@ -156,7 +157,7 @@ function ChatRoomPage() {
       <header className={styles.header}>
         <span className={styles.channelHash}>#</span>
         <h1 className={styles.channelName}>{channelId}</h1>
-        <span className={styles.memberCount}>{ROOM_MEMBERS.length}명</span>
+        <ThemeToggle className={styles.themeToggle} />
       </header>
 
       <div className={styles.page}>
