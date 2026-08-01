@@ -1,5 +1,7 @@
 .row {
   display: flex;
+  align-items: flex-end;
+  gap: var(--space-1);
   justify-content: flex-start;
 }
 

@@ -2,6 +2,7 @@ import { MessagesSquare, RotateCw, X } from "lucide-react";
 
 import type { ChatMessageView } from "../../features/chat/useChatRoom";
 import { formatTime } from "../../utils/date";
+import MessageReactions, { type MessageReactionsValue } from "./MessageReactions";
 import styles from "./MessageBubble.module.css";
 
 type MessageBubbleProps = {
@@ -20,6 +21,10 @@ type MessageBubbleProps = {
   isThreadActive?: boolean;
   /** 말풍선을 눌렀을 때 호출. 답글/수정/삭제는 모두 오른쪽 스레드 패널에서 이뤄진다. */
   onOpenThread?: (() => void) | undefined;
+  /** 이모지별 반응 상태. */
+  reactions?: MessageReactionsValue;
+  /** 반응 이모지를 눌렀을 때 호출(추가/취소 토글). */
+  onToggleReaction?: ((emoji: string) => void) | undefined;
 };
 
 /** 채팅방의 메시지 한 건을 말풍선으로 렌더링한다. 내/상대, 전송 상태에 따라 스타일이 달라진다. */
@@ -32,6 +37,8 @@ function MessageBubble({
   replyCount = 0,
   isThreadActive = false,
   onOpenThread,
+  reactions = {},
+  onToggleReaction,
 }: MessageBubbleProps) {
   const isClickable = message.status === "sent" && onOpenThread !== undefined;
 
@@ -63,8 +70,15 @@ function MessageBubble({
     }
   };
 
+  const showReactions = message.status === "sent" && !isDeleted && onToggleReaction !== undefined;
+  const reactionsNode = showReactions ? (
+    <MessageReactions reactions={reactions} onToggle={onToggleReaction} isMine={message.isMine} />
+  ) : null;
+
   return (
     <div className={rowClass}>
+      {message.isMine ? reactionsNode : null}
+
       <div
         className={bubbleClass}
         onClick={isClickable ? onOpenThread : undefined}
@@ -126,6 +140,8 @@ function MessageBubble({
           </>
         )}
       </div>
+
+      {message.isMine ? null : reactionsNode}
     </div>
   );
 }

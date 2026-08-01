@@ -5,6 +5,7 @@ import { Send } from "lucide-react";
 import Loading from "../../components/Loading";
 import { useChatRoom, type ChatMessageView } from "../../features/chat/useChatRoom";
 import MessageBubble from "./MessageBubble";
+import type { MessageReactionsValue } from "./MessageReactions";
 import RoomListSidebar from "./RoomListSidebar";
 import ThreadPanel, { type ThreadPanelTab, type ThreadReply } from "./ThreadPanel";
 import styles from "./ChatRoomPage.module.css";
@@ -35,6 +36,9 @@ function ChatRoomPage() {
   const [isPanelCollapsed, setIsPanelCollapsed] = useState(false);
   const [messageEdits, setMessageEdits] = useState<Record<string, string>>({});
   const [deletedMessageKeys, setDeletedMessageKeys] = useState<Record<string, true>>({});
+  const [reactionsByMessageKey, setReactionsByMessageKey] = useState<
+    Record<string, MessageReactionsValue>
+  >({});
 
   const resolveMessage = (message: ChatMessageView): ChatMessageView => {
     const editedText = messageEdits[message.key];
@@ -76,6 +80,23 @@ function ChatRoomPage() {
 
   const handleDeleteMessage = (messageKey: string) => {
     setDeletedMessageKeys((prev) => ({ ...prev, [messageKey]: true }));
+  };
+
+  const handleToggleReaction = (messageKey: string, emoji: string) => {
+    setReactionsByMessageKey((prev) => {
+      const current = prev[messageKey] ?? {};
+      const wasReacted = current[emoji]?.reactedByMe ?? false;
+      const nextCount = (current[emoji]?.count ?? 0) + (wasReacted ? -1 : 1);
+
+      const nextMessageReactions = { ...current };
+      if (nextCount <= 0) {
+        delete nextMessageReactions[emoji];
+      } else {
+        nextMessageReactions[emoji] = { count: nextCount, reactedByMe: !wasReacted };
+      }
+
+      return { ...prev, [messageKey]: nextMessageReactions };
+    });
   };
 
   // 입력 내용에 따라 textarea 높이를 늘린다(최대 높이는 CSS max-height 가 제한).
@@ -169,6 +190,8 @@ function ChatRoomPage() {
                     replyCount={threadsByMessageKey[message.key]?.length ?? 0}
                     isThreadActive={message.key === selectedThreadKey}
                     onOpenThread={() => handleOpenThread(message.key)}
+                    reactions={reactionsByMessageKey[message.key] ?? {}}
+                    onToggleReaction={(emoji) => handleToggleReaction(message.key, emoji)}
                   />
                 ))
               )}

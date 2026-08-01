@@ -1,0 +1,78 @@
+.row {
+  position: relative;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-0-5);
+}
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-0-5);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-full);
+  padding: 0 var(--space-1);
+  background: var(--color-overlay-hover);
+  color: inherit;
+  font: inherit;
+  font-size: var(--font-size-2xs);
+  cursor: pointer;
+}
+
+.pillActive {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+  font-weight: 600;
+}
+
+.pickerWrap {
+  position: relative;
+  display: inline-flex;
+}
+
+.addButton {
+  display: inline-flex;
+  align-items: center;
+  border: none;
+  border-radius: var(--radius-sm);
+  padding: var(--space-0-5);
+  background: none;
+  color: inherit;
+  opacity: 0.6;
+  cursor: pointer;
+}
+
+.addButton:hover {
+  opacity: 1;
+  background: var(--color-overlay-hover);
+}
+
+.picker {
+  position: absolute;
+  top: calc(100% + var(--space-1));
+  left: 0;
+  z-index: 5;
+  display: flex;
+  gap: var(--space-0-5);
+  padding: var(--space-1);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-sm);
+}
+
+.pickerEmoji {
+  border: none;
+  background: none;
+  padding: var(--space-0-5);
+  border-radius: var(--radius-sm);
+  color: var(--color-text);
+  font-size: var(--font-size-sm);
+  line-height: 1;
+  cursor: pointer;
+}
+
+.pickerEmoji:hover {
+  background: var(--color-overlay-hover);
+}
