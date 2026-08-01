@@ -11,7 +11,7 @@ function LoginPage() {
 
   const handleGithubLogin = () => {
     alert("GitHub 로그인 버튼 클릭됨" + apiBaseUrl);
-    navigate("/");
+    navigate("/rooms");
   };
 
   return (
