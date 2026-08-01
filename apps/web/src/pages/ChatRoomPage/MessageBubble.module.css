@@ -10,13 +10,13 @@
 .bubble {
   display: flex;
   flex-direction: column;
-  gap: 0.15rem;
+  gap: var(--space-0-5);
   max-width: 75%;
-  padding: 0.45rem 0.75rem;
-  border-radius: 12px;
-  font-size: 0.9rem;
-  line-height: 1.4;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-lg);
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-normal);
+  box-shadow: var(--shadow-sm);
 }
 
 .bubbleOther {
@@ -34,40 +34,99 @@
 }
 
 .bubbleFailed {
-  background: var(--color-danger);
-  color: var(--color-accent-text);
+  background: var(--color-border);
+  color: var(--color-text);
 }
 
 .text {
+  padding: var(--space-1) 0;
   white-space: pre-wrap;
   word-break: break-word;
 }
 
-.meta {
+.metaText {
   align-self: flex-end;
-  font-size: 0.7rem;
+  font-size: var(--font-size-2xs);
   opacity: 0.7;
 }
 
 .retryRow {
   display: flex;
   align-items: center;
-  gap: 0.25rem;
+  gap: var(--space-0-5);
   align-self: flex-end;
-  font-size: 0.7rem;
+  font-size: var(--font-size-2xs);
 }
 
-.retry {
+.retryDivider {
+  margin-left: var(--space-0-5);
+  opacity: 0.5;
+}
+
+.actions {
   display: flex;
   align-items: center;
-  padding: 0;
+  gap: var(--space-0-5);
+  align-self: flex-end;
+}
+
+.actionButton {
+  display: flex;
+  align-items: center;
+  padding: var(--space-0-5);
   border: none;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: inherit;
+  cursor: pointer;
+  opacity: 0.7;
+}
+
+.actionButton:hover {
+  opacity: 1;
+  background: var(--color-overlay-hover);
+}
+
+.editRow {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--space-0-5);
+}
+
+.editInput {
+  flex: 1;
+  min-width: 8rem;
+  padding: var(--space-1) var(--space-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-bg);
+  color: var(--color-text);
+  font: inherit;
+  font-size: var(--font-size-sm);
+  resize: none;
+}
+
+.editButton {
+  display: flex;
+  align-items: center;
+  padding: var(--space-0-5);
+  border: none;
+  border-radius: var(--radius-sm);
   background: none;
   color: inherit;
   cursor: pointer;
   opacity: 0.85;
 }
 
-.retry:hover {
+.editButton:hover {
   opacity: 1;
+}
+
+.deletedText {
+  font-style: italic;
+  opacity: 0.6;
+}
+
+.bubbleDeleted {
+  box-shadow: none;
 }
