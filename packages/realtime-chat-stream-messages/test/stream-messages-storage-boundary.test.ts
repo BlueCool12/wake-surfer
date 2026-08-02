@@ -51,9 +51,7 @@ describe("Stream Messages storage boundary", () => {
         senderActorId: "actor-1",
         targetType: "channel",
         targetId: "channel-1",
-        contentType: "text",
         contentText: "hello",
-        sentAtClient: null,
         createdAt: new Date("2026-07-21T00:00:00.000Z"),
       },
       expected,
@@ -63,10 +61,7 @@ describe("Stream Messages storage boundary", () => {
       messageId: "message-1",
       sequence: 1,
       senderActorId: "actor-1",
-      content: {
-        type: "text",
-        text: "hello",
-      },
+      text: "hello",
       createdAt: new Date("2026-07-21T00:00:00.000Z"),
     });
     expect(message).not.toHaveProperty("streamId");

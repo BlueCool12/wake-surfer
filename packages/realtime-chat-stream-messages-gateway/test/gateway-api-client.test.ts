@@ -163,7 +163,7 @@ function createSyncResponse() {
         sequence: 1,
         senderActorId: "actor-relay",
         target: { type: "channel" as const, channelId: "channel/relay" },
-        content: { type: "text" as const, text: "hello" },
+        text: "hello",
         createdAt: "2026-07-18T00:00:00.000Z",
       },
     ],

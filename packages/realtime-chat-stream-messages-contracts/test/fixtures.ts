@@ -1,8 +1,8 @@
-import type { PublicMessage } from "@wake-surfer/realtime-chat-message-contracts";
+import type { ChatMessage } from "@wake-surfer/realtime-chat-message-contracts";
 
 import type { LatestStreamMessagesResponse } from "../src/index";
 
-export function createMessage(sequence: number, text = "message"): PublicMessage {
+export function createMessage(sequence: number, text = "message"): ChatMessage {
   return {
     messageId: `message-${sequence}`,
     streamId: "channel:channel-1",
@@ -12,15 +12,12 @@ export function createMessage(sequence: number, text = "message"): PublicMessage
       type: "channel",
       channelId: "channel-1",
     },
-    content: {
-      type: "text",
-      text,
-    },
+    text,
     createdAt: "2026-07-16T00:00:00.000Z",
   };
 }
 
-export function createLatestResponse(messages: PublicMessage[]): LatestStreamMessagesResponse {
+export function createLatestResponse(messages: ChatMessage[]): LatestStreamMessagesResponse {
   return {
     streamId: "channel:channel-1",
     throughSequence: messages.at(-1)?.sequence ?? 0,

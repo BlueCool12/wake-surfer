@@ -1,220 +1,104 @@
 import { describe, expect, it } from "vitest";
-import { parseSendMessageRequestBody, SendMessageResponseSchema } from "../src/index";
 
-describe("send message request body parser", () => {
-  it("accepts a channel target request body", () => {
+import { parseSendMessageRequest, SendMessageResponseSchema } from "../src/index";
+
+describe("send message request parser", () => {
+  it("accepts the idempotency key, target, and text owned by the client", () => {
     expect(
-      parseSendMessageRequestBody({
-        commandId: "cmd-1",
-        clientMessageId: "client-message-1",
+      parseSendMessageRequest({
+        idempotencyKey: "idempotency-1",
         target: {
           type: "channel",
           channelId: "channel-1",
         },
-        content: {
-          type: "text",
-          text: "hello",
-        },
+        text: " hello ",
       }),
     ).toEqual({
       ok: true,
       value: {
-        commandId: "cmd-1",
-        clientMessageId: "client-message-1",
+        idempotencyKey: "idempotency-1",
         target: {
           type: "channel",
           channelId: "channel-1",
         },
-        content: {
-          type: "text",
-          text: "hello",
-        },
+        text: " hello ",
       },
     });
   });
 
-  it("accepts DM and thread target request bodies", () => {
+  it("accepts every supported target variant", () => {
     expect(
-      parseSendMessageRequestBody({
-        clientMessageId: "client-message-1",
+      parseSendMessageRequest({
+        idempotencyKey: "idempotency-dm",
         target: {
           type: "dm",
           dmConversationId: "dm-1",
         },
-        content: {
-          type: "text",
-          text: "hello",
-        },
+        text: "hello",
       }).ok,
     ).toBe(true);
-
     expect(
-      parseSendMessageRequestBody({
-        clientMessageId: "client-message-2",
+      parseSendMessageRequest({
+        idempotencyKey: "idempotency-thread",
         target: {
           type: "thread",
           threadId: "thread-1",
         },
-        content: {
-          type: "text",
-          text: "hello",
-        },
+        text: "hello",
       }).ok,
     ).toBe(true);
   });
 
-  it("trims client-owned string values", () => {
+  it("leaves text validation to the send-message feature", () => {
     expect(
-      parseSendMessageRequestBody({
-        clientMessageId: " client-message-1 ",
-        target: {
-          type: "channel",
-          channelId: " channel-1 ",
-        },
-        content: {
-          type: "text",
-          text: " hello ",
-        },
-        sentAtClient: " 2026-07-11T00:00:00.000Z ",
-      }),
-    ).toEqual({
-      ok: true,
-      value: {
-        clientMessageId: "client-message-1",
+      parseSendMessageRequest({
+        idempotencyKey: "idempotency-1",
         target: {
           type: "channel",
           channelId: "channel-1",
         },
-        content: {
-          type: "text",
-          text: "hello",
-        },
-        sentAtClient: "2026-07-11T00:00:00.000Z",
+        text: " ",
+      }).ok,
+    ).toBe(true);
+  });
+
+  it("rejects malformed idempotency keys and server-owned fields", () => {
+    const baseRequest = {
+      idempotencyKey: "idempotency-1",
+      target: {
+        type: "channel",
+        channelId: "channel-1",
       },
-    });
-  });
+      text: "hello",
+    };
 
-  it("rejects server-owned fields from the client request body", () => {
     expect(
-      parseSendMessageRequestBody({
-        actorId: "actor-1",
-        streamId: "stream-1",
-        sequence: 1,
-        recipientUserIds: ["actor-2"],
-        clientMessageId: "client-message-1",
-        target: {
-          type: "channel",
-          channelId: "channel-1",
-        },
-        content: {
-          type: "text",
-          text: "hello",
-        },
-      }),
-    ).toEqual({
-      ok: false,
-      message: "메시지 전송 요청 본문이 올바르지 않습니다.",
-    });
-  });
-
-  it("rejects blank content", () => {
-    expect(
-      parseSendMessageRequestBody({
-        clientMessageId: "client-message-1",
-        target: {
-          type: "channel",
-          channelId: "channel-1",
-        },
-        content: {
-          type: "text",
-          text: " ",
-        },
-      }),
-    ).toEqual({
-      ok: false,
-      message: "메시지 전송 요청 본문이 올바르지 않습니다.",
-    });
-  });
-
-  it("rejects text that exceeds the UTF-8 byte limit", () => {
-    expect(
-      parseSendMessageRequestBody({
-        clientMessageId: "client-message-1",
-        target: {
-          type: "channel",
-          channelId: "channel-1",
-        },
-        content: {
-          type: "text",
-          text: `${"가".repeat(2_729)}😀aa`,
-        },
-      }),
-    ).toEqual({
-      ok: false,
-      message: "메시지 전송 요청 본문이 올바르지 않습니다.",
-    });
-  });
-
-  it("accepts text at the UTF-8 byte limit", () => {
-    expect(
-      parseSendMessageRequestBody({
-        clientMessageId: "client-message-1",
-        target: {
-          type: "channel",
-          channelId: "channel-1",
-        },
-        content: {
-          type: "text",
-          text: `${"가".repeat(2_729)}😀a`,
-        },
+      parseSendMessageRequest({
+        ...baseRequest,
+        idempotencyKey: " idempotency-1 ",
       }).ok,
-    ).toBe(true);
-  });
-
-  it("accepts an ISO datetime with an explicit timezone offset", () => {
+    ).toBe(false);
     expect(
-      parseSendMessageRequestBody({
-        clientMessageId: "client-message-1",
-        target: {
-          type: "channel",
-          channelId: "channel-1",
-        },
-        content: {
-          type: "text",
-          text: "hello",
-        },
-        sentAtClient: "2026-07-11T09:00:00+09:00",
+      parseSendMessageRequest({
+        ...baseRequest,
+        senderActorId: "actor-1",
       }).ok,
-    ).toBe(true);
-  });
-
-  it("rejects sentAtClient when it is not an ISO datetime", () => {
+    ).toBe(false);
     expect(
-      parseSendMessageRequestBody({
-        clientMessageId: "client-message-1",
-        target: {
-          type: "channel",
-          channelId: "channel-1",
-        },
-        content: {
-          type: "text",
-          text: "hello",
-        },
-        sentAtClient: "yesterday",
-      }),
-    ).toEqual({
-      ok: false,
-      message: "메시지 전송 요청 본문이 올바르지 않습니다.",
-    });
+      parseSendMessageRequest({
+        ...baseRequest,
+        sentAtClient: "2026-07-11T00:00:00.000Z",
+      }).ok,
+    ).toBe(false);
   });
 });
 
 describe("send message response schema", () => {
-  it("validates an accepted public message", () => {
+  it("validates an accepted ChatMessage correlated by idempotencyKey", () => {
     expect(
       SendMessageResponseSchema.parse({
         status: "accepted",
-        clientMessageId: "client-message-1",
+        idempotencyKey: "idempotency-1",
         message: {
           messageId: "message-1",
           streamId: "channel:channel-1",
@@ -224,25 +108,40 @@ describe("send message response schema", () => {
             type: "channel",
             channelId: "channel-1",
           },
-          content: {
-            type: "text",
-            text: "hello",
-          },
+          text: "hello",
           createdAt: "2026-07-25T06:00:00.000Z",
         },
       }),
     ).toMatchObject({
       status: "accepted",
-      clientMessageId: "client-message-1",
+      idempotencyKey: "idempotency-1",
     });
   });
 
-  it("rejects an unknown rejection reason", () => {
+  it("validates the idempotency conflict rejection", () => {
     expect(
       SendMessageResponseSchema.safeParse({
         status: "rejected",
-        clientMessageId: "client-message-1",
+        idempotencyKey: "idempotency-1",
+        reason: "idempotency_conflict",
+      }).success,
+    ).toBe(true);
+  });
+
+  it("rejects unknown rejection reasons and obsolete correlation fields", () => {
+    expect(
+      SendMessageResponseSchema.safeParse({
+        status: "rejected",
+        idempotencyKey: "idempotency-1",
         reason: "temporary_failure",
+      }).success,
+    ).toBe(false);
+    expect(
+      SendMessageResponseSchema.safeParse({
+        status: "rejected",
+        idempotencyKey: "idempotency-1",
+        commandId: "command-1",
+        reason: "invalid_text",
       }).success,
     ).toBe(false);
   });

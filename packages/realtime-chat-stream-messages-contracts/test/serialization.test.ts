@@ -1,4 +1,4 @@
-import type { PublicMessage } from "@wake-surfer/realtime-chat-message-contracts";
+import type { ChatMessage } from "@wake-surfer/realtime-chat-message-contracts";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -44,7 +44,7 @@ describe("canonical final envelopes", () => {
 
   it("measures the 49,152 and 49,153 byte older HTTP envelope boundaries", () => {
     const messages = Array.from({ length: 6 }, (_, index) => createMessage(index + 1, "x"));
-    const createOlderResponse = (page: PublicMessage[]) => ({
+    const createOlderResponse = (page: ChatMessage[]) => ({
       streamId: "channel:channel-1",
       beforeSequence: 7,
       messages: page,
@@ -56,7 +56,7 @@ describe("canonical final envelopes", () => {
 
     for (const message of messages) {
       const extra = Math.min(remaining, 8_191);
-      message.content.text += "x".repeat(extra);
+      message.text += "x".repeat(extra);
       remaining -= extra;
     }
 
@@ -72,10 +72,7 @@ describe("canonical final envelopes", () => {
         index === messages.length - 1
           ? {
               ...message,
-              content: {
-                ...message.content,
-                text: `${message.content.text}x`,
-              },
+              text: `${message.text}x`,
             }
           : message,
       ),

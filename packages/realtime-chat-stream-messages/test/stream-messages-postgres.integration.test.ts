@@ -93,10 +93,7 @@ describe("Stream Messages PostgreSQL queries", () => {
     expect(latest.page.messages[0]).toMatchObject({
       messageId: "message-history-channel-116",
       senderActorId: "actor-message-author",
-      content: {
-        type: "text",
-        text: "message 116",
-      },
+      text: "message 116",
     });
     expect(latest.page.messages[0]).not.toHaveProperty("streamId");
     expect(older.page.messages.map((message) => message.sequence)).toEqual(
@@ -259,10 +256,8 @@ describe("Stream Messages PostgreSQL queries", () => {
         sender_actor_id,
         target_type,
         target_id,
-        client_message_id,
-        content_type,
+        idempotency_key,
         content_text,
-        sent_at_client,
         created_at
       )
       VALUES (
@@ -272,10 +267,8 @@ describe("Stream Messages PostgreSQL queries", () => {
         ${"actor-message-author"},
         ${"channel"},
         ${channelId},
-        ${`client-${channelId}-${sequence}`},
-        ${"text"},
+        ${`idempotency-${channelId}-${sequence}`},
         ${contentText},
-        NULL,
         now()
       )
     `.execute(getDatabase().db);

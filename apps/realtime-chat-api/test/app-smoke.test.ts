@@ -198,8 +198,6 @@ describe("realtime chat api app", () => {
     const authenticationOrder: string[] = [];
     const send = vi.fn(async () => ({
       status: "accepted" as const,
-      commandId: "command-1",
-      clientMessageId: "client-message-1",
       message: {
         messageId: "message-1",
         streamId: "channel:channel-1",
@@ -209,11 +207,8 @@ describe("realtime chat api app", () => {
           type: "channel" as const,
           channelId: "channel-1",
         },
-        content: {
-          type: "text" as const,
-          text: "hello",
-        },
-        createdAt: "2026-07-25T00:00:00.000Z",
+        text: "hello",
+        createdAt: new Date("2026-07-25T00:00:00.000Z"),
       },
     }));
     const app = createRealtimeChatApiApp(
@@ -232,16 +227,12 @@ describe("realtime chat api app", () => {
 
     const response = await app.request("/internal/realtime-chat/messages", {
       body: JSON.stringify({
-        commandId: "command-1",
-        clientMessageId: "client-message-1",
+        idempotencyKey: "idempotency-1",
         target: {
           type: "channel",
           channelId: "channel-1",
         },
-        content: {
-          type: "text",
-          text: "hello",
-        },
+        text: "hello",
       }),
       headers: {
         authorization: `Bearer ${GATEWAY_API_TOKEN}`,
@@ -255,30 +246,60 @@ describe("realtime chat api app", () => {
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toMatchObject({
       status: "accepted",
-      clientMessageId: "client-message-1",
+      idempotencyKey: "idempotency-1",
       message: {
         messageId: "message-1",
         senderActorId: "asserted-actor",
       },
     });
     expect(authenticationOrder).toEqual(["gateway", "actor"]);
-    expect(send).toHaveBeenCalledWith(
-      {
-        commandId: "command-1",
-        clientMessageId: "client-message-1",
+    expect(send).toHaveBeenCalledWith({
+      senderActorId: "asserted-actor",
+      idempotencyKey: "idempotency-1",
+      target: {
+        type: "channel",
+        channelId: "channel-1",
+      },
+      text: "hello",
+    });
+  });
+
+  it("maps an idempotency conflict to the shared response contract", async () => {
+    const send = vi.fn(async () => ({
+      status: "rejected" as const,
+      reason: "idempotency_conflict" as const,
+    }));
+    const app = createRealtimeChatApiApp(
+      createDeps({
+        getAssertedActor: () => ({ actorId: "asserted-actor" }),
+        messageSend: { send },
+      }),
+    );
+
+    const response = await app.request("/internal/realtime-chat/messages", {
+      body: JSON.stringify({
+        idempotencyKey: "idempotency-conflict",
         target: {
           type: "channel",
           channelId: "channel-1",
         },
-        content: {
-          type: "text",
-          text: "hello",
-        },
+        text: "different payload",
+      }),
+      headers: {
+        authorization: `Bearer ${GATEWAY_API_TOKEN}`,
+        "content-type": "application/json",
+        "x-gateway-id": "gateway-1",
+        "x-realtime-chat-actor-id": "asserted-actor",
       },
-      {
-        actorId: "asserted-actor",
-      },
-    );
+      method: "POST",
+    });
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      status: "rejected",
+      idempotencyKey: "idempotency-conflict",
+      reason: "idempotency_conflict",
+    });
   });
 
   it("rejects server-owned message fields before persistence", async () => {
@@ -293,15 +314,12 @@ describe("realtime chat api app", () => {
     const response = await app.request("/internal/realtime-chat/messages", {
       body: JSON.stringify({
         actorId: "body-actor",
-        clientMessageId: "client-message-1",
+        idempotencyKey: "idempotency-1",
         target: {
           type: "channel",
           channelId: "channel-1",
         },
-        content: {
-          type: "text",
-          text: "hello",
-        },
+        text: "hello",
       }),
       headers: {
         authorization: `Bearer ${GATEWAY_API_TOKEN}`,
@@ -336,15 +354,12 @@ describe("realtime chat api app", () => {
 
     const response = await app.request("/internal/realtime-chat/messages", {
       body: JSON.stringify({
-        clientMessageId: "client-message-1",
+        idempotencyKey: "idempotency-1",
         target: {
           type: "channel",
           channelId: "channel-1",
         },
-        content: {
-          type: "text",
-          text: "hello",
-        },
+        text: "hello",
       }),
       headers: {
         authorization: `Bearer ${GATEWAY_API_TOKEN}`,

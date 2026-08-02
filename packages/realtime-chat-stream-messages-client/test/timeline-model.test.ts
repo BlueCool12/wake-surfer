@@ -100,7 +100,7 @@ function createMessage(sequence: number) {
     sequence,
     senderActorId: "actor-model",
     target: { type: "channel" as const, channelId: "channel-model" },
-    content: { type: "text" as const, text: `message ${sequence}` },
+    text: `message ${sequence}`,
     createdAt: "2026-07-18T00:00:00.000Z",
   };
 }
