@@ -3,9 +3,30 @@ import { useParams } from "react-router-dom";
 import { Send } from "lucide-react";
 
 import Loading from "../../components/Loading";
-import { useChatRoom } from "../../features/chat/useChatRoom";
+import ThemeToggle from "../../components/ThemeToggle";
+import { useChatRoom, type ChatMessageView } from "../../features/chat/useChatRoom";
+import MentionPicker from "./MentionPicker";
 import MessageBubble from "./MessageBubble";
+import type { MessageReactionsValue } from "./MessageReactions";
+import RoomListSidebar from "./RoomListSidebar";
+import ThreadPanel, { type RoomMember, type ThreadPanelTab, type ThreadReply } from "./ThreadPanel";
 import styles from "./ChatRoomPage.module.css";
+
+/** 커서 바로 앞에서 진행 중인 "@닉네임" 멘션 입력을 찾는다. 공백/줄바꿈이 나오면 멘션 입력이 끝난 것으로 본다. */
+function findMentionQuery(value: string, cursor: number): string | undefined {
+  const beforeCursor = value.slice(0, cursor);
+  const match = /(?:^|\s)@([^\s@]*)$/.exec(beforeCursor);
+  return match?.[1];
+}
+
+// 방 멤버 목록/인원수 API가 아직 없어(chat-backend-contract 참고) 고정값으로 mock한다.
+const ROOM_MEMBERS: RoomMember[] = [
+  { id: "user-me", name: "나", isOnline: true },
+  { id: "user-alice", name: "Alice", isOnline: true },
+  { id: "user-bob", name: "Bob", isOnline: false },
+  { id: "user-carol", name: "Carol", isOnline: true },
+  { id: "user-dan", name: "Dan", isOnline: false },
+];
 
 function ChatRoomPage() {
   const { channelId = "test" } = useParams();
@@ -25,6 +46,88 @@ function ChatRoomPage() {
   const scrollRef = useRef<HTMLDivElement>(null);
   const isAtBottomRef = useRef(true);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // "@"로 멘션할 멤버를 고르는 팝업. 백엔드에 멘션 개념이 없어 텍스트에 이름을 끼워 넣는 UI만 구현한다.
+  const [mentionQuery, setMentionQuery] = useState<string | undefined>(undefined);
+  const [mentionActiveIndex, setMentionActiveIndex] = useState(0);
+  const mentionMatches =
+    mentionQuery === undefined
+      ? []
+      : ROOM_MEMBERS.filter((member) =>
+          member.name.toLowerCase().startsWith(mentionQuery.toLowerCase()),
+        );
+  const isMentionOpen = mentionQuery !== undefined && mentionMatches.length > 0;
+
+  // 답글/스레드/수정/삭제는 백엔드에 개념이 없어(chat-backend-contract 참고) 이 화면 세션 안에서만 유지되는 로컬 상태다.
+  const [threadsByMessageKey, setThreadsByMessageKey] = useState<Record<string, ThreadReply[]>>({});
+  const [selectedThreadKey, setSelectedThreadKey] = useState<string | undefined>(undefined);
+  const [panelTab, setPanelTab] = useState<ThreadPanelTab>("thread");
+  const [isPanelCollapsed, setIsPanelCollapsed] = useState(false);
+  const [messageEdits, setMessageEdits] = useState<Record<string, string>>({});
+  const [deletedMessageKeys, setDeletedMessageKeys] = useState<Record<string, true>>({});
+  const [reactionsByMessageKey, setReactionsByMessageKey] = useState<
+    Record<string, MessageReactionsValue>
+  >({});
+
+  const resolveMessage = (message: ChatMessageView): ChatMessageView => {
+    const editedText = messageEdits[message.key];
+    return editedText === undefined ? message : { ...message, text: editedText };
+  };
+
+  const rawThreadParent = messages.find((message) => message.key === selectedThreadKey);
+  const selectedThreadParent =
+    rawThreadParent === undefined ? undefined : resolveMessage(rawThreadParent);
+  const isSelectedThreadParentDeleted =
+    selectedThreadKey !== undefined && Boolean(deletedMessageKeys[selectedThreadKey]);
+  const isSelectedThreadParentEdited =
+    selectedThreadKey !== undefined && messageEdits[selectedThreadKey] !== undefined;
+  const selectedThreadReplies =
+    selectedThreadKey !== undefined ? (threadsByMessageKey[selectedThreadKey] ?? []) : [];
+
+  const handleOpenThread = (messageKey: string) => {
+    setSelectedThreadKey(messageKey);
+    setPanelTab("thread");
+    setIsPanelCollapsed(false);
+  };
+
+  const handleAddReply = (text: string) => {
+    if (selectedThreadKey === undefined) return;
+
+    const reply: ThreadReply = {
+      id: crypto.randomUUID(),
+      text,
+      createdAt: new Date().toISOString(),
+    };
+    setThreadsByMessageKey((prev) => ({
+      ...prev,
+      [selectedThreadKey]: [...(prev[selectedThreadKey] ?? []), reply],
+    }));
+  };
+
+  const handleEditMessage = (messageKey: string, text: string) => {
+    setMessageEdits((prev) => ({ ...prev, [messageKey]: text }));
+  };
+
+  const handleDeleteMessage = (messageKey: string) => {
+    setDeletedMessageKeys((prev) => ({ ...prev, [messageKey]: true }));
+  };
+
+  const handleToggleReaction = (messageKey: string, emoji: string) => {
+    setReactionsByMessageKey((prev) => {
+      const current = prev[messageKey] ?? {};
+      const wasReacted = current[emoji]?.reactedByMe ?? false;
+      const nextCount = (current[emoji]?.count ?? 0) + (wasReacted ? -1 : 1);
+
+      const nextMessageReactions = { ...current };
+      if (nextCount <= 0) {
+        delete nextMessageReactions[emoji];
+      } else {
+        nextMessageReactions[emoji] = { count: nextCount, reactedByMe: !wasReacted };
+      }
+
+      return { ...prev, [messageKey]: nextMessageReactions };
+    });
+  };
 
   // 입력 내용에 따라 textarea 높이를 늘린다(최대 높이는 CSS max-height 가 제한).
   useEffect(() => {
@@ -53,9 +156,57 @@ function ChatRoomPage() {
     if (draft.trim() === "") return;
     sendMessage(draft);
     setDraft("");
+    setMentionQuery(undefined);
+  };
+
+  const handleDraftChange = (event: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const value = event.target.value;
+    setDraft(value);
+    setMentionQuery(findMentionQuery(value, event.target.selectionStart));
+    setMentionActiveIndex(0);
+  };
+
+  const handleSelectMention = (member: RoomMember) => {
+    const el = textareaRef.current;
+    const cursor = el?.selectionStart ?? draft.length;
+    const before = draft.slice(0, cursor).replace(/@([^\s@]*)$/, `@${member.name} `);
+    const after = draft.slice(cursor);
+    setDraft(before + after);
+    setMentionQuery(undefined);
+
+    requestAnimationFrame(() => {
+      el?.focus();
+      el?.setSelectionRange(before.length, before.length);
+    });
   };
 
   const handleKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (isMentionOpen) {
+      if (event.key === "ArrowDown") {
+        event.preventDefault();
+        setMentionActiveIndex((index) => (index + 1) % mentionMatches.length);
+        return;
+      }
+      if (event.key === "ArrowUp") {
+        event.preventDefault();
+        setMentionActiveIndex(
+          (index) => (index - 1 + mentionMatches.length) % mentionMatches.length,
+        );
+        return;
+      }
+      if (event.key === "Enter" || event.key === "Tab") {
+        event.preventDefault();
+        const activeMember = mentionMatches[mentionActiveIndex];
+        if (activeMember !== undefined) handleSelectMention(activeMember);
+        return;
+      }
+      if (event.key === "Escape") {
+        event.preventDefault();
+        setMentionQuery(undefined);
+        return;
+      }
+    }
+
     if (event.key === "Enter" && !event.shiftKey) {
       event.preventDefault();
       handleSend();
@@ -63,74 +214,126 @@ function ChatRoomPage() {
   };
 
   return (
-    <div className={styles.page}>
-      <header className={styles.header}>
-        <span className={styles.channelHash}>#</span>
-        <h1 className={styles.channelName}>{channelId}</h1>
-      </header>
+    <div className={styles.shell}>
+      <RoomListSidebar channelId={channelId} />
 
-      <div className={styles.messages} ref={scrollRef} onScroll={handleScroll}>
-        {isLoading ? (
-          <Loading />
-        ) : (
-          <>
-            {hasMoreBefore ? (
-              <button type="button" className={styles.loadOlder} onClick={loadOlder}>
-                {isLoadingOlder
-                  ? "이전 메시지 불러오는 중…"
-                  : olderFailed
-                    ? "이전 메시지 다시 불러오기"
-                    : "이전 메시지 불러오기"}
-              </button>
-            ) : null}
-            {recoveryPhase === "recovery_pending" ? (
-              <p className={styles.recoveryNotice}>누락된 메시지를 이어서 복구하고 있어요.</p>
-            ) : recoveryPhase === "retryable_failure" ? (
-              <button type="button" className={styles.recoveryNotice} onClick={retryRecovery}>
-                연결이 잠시 끊겼어요. 복구를 다시 시도하기
-              </button>
-            ) : recoveryPhase === "stream_unavailable" ||
-              recoveryPhase === "invalid_cursor" ||
-              recoveryPhase === "authentication_failure" ||
-              recoveryPhase === "protocol_failure" ? (
-              <p className={styles.recoveryError}>메시지 기록을 안전하게 불러오지 못했어요.</p>
-            ) : null}
-            {messages.length === 0 ? (
-              <p className={styles.placeholder}>아직 잔잔해요. 첫 파도를 일으켜보세요 🌊</p>
+      <div
+        className={
+          isPanelCollapsed ? `${styles.mainArea} ${styles.mainAreaPanelCollapsed}` : styles.mainArea
+        }
+      >
+        <header className={styles.header}>
+          <span className={styles.channelHash}>#</span>
+          <h1 className={styles.channelName}>{channelId}</h1>
+          <ThemeToggle className={styles.themeToggle} />
+        </header>
+
+        <div className={styles.page}>
+          <div className={styles.messages} ref={scrollRef} onScroll={handleScroll}>
+            {isLoading ? (
+              <Loading />
             ) : (
-              messages.map((message) => (
-                <MessageBubble
-                  key={message.key}
-                  message={message}
-                  onRetry={message.status === "failed" ? () => retryMessage(message) : undefined}
-                />
-              ))
+              <>
+                {hasMoreBefore ? (
+                  <button type="button" className={styles.loadOlder} onClick={loadOlder}>
+                    {isLoadingOlder
+                      ? "이전 메시지 불러오는 중…"
+                      : olderFailed
+                        ? "이전 메시지 다시 불러오기"
+                        : "이전 메시지 불러오기"}
+                  </button>
+                ) : null}
+                {recoveryPhase === "recovery_pending" ? (
+                  <p className={styles.recoveryNotice}>누락된 메시지를 이어서 복구하고 있어요.</p>
+                ) : recoveryPhase === "retryable_failure" ? (
+                  <button type="button" className={styles.recoveryNotice} onClick={retryRecovery}>
+                    연결이 잠시 끊겼어요. 복구 시도하기
+                  </button>
+                ) : recoveryPhase === "stream_unavailable" ||
+                  recoveryPhase === "invalid_cursor" ||
+                  recoveryPhase === "authentication_failure" ||
+                  recoveryPhase === "protocol_failure" ? (
+                  <p className={styles.recoveryError}>메시지 기록을 안전하게 불러오지 못했어요.</p>
+                ) : null}
+                {messages.length === 0 ? (
+                  <p className={styles.placeholder}>아직 잔잔해요. 첫 파도를 일으켜보세요 🌊</p>
+                ) : (
+                  messages.map((message) => (
+                    <MessageBubble
+                      key={message.key}
+                      message={resolveMessage(message)}
+                      onRetry={
+                        message.status === "failed" ? () => retryMessage(message) : undefined
+                      }
+                      onDelete={
+                        message.status === "failed"
+                          ? () => handleDeleteMessage(message.key)
+                          : undefined
+                      }
+                      isDeleted={Boolean(deletedMessageKeys[message.key])}
+                      isEdited={messageEdits[message.key] !== undefined}
+                      replyCount={threadsByMessageKey[message.key]?.length ?? 0}
+                      isThreadActive={message.key === selectedThreadKey}
+                      onOpenThread={() => handleOpenThread(message.key)}
+                      reactions={reactionsByMessageKey[message.key] ?? {}}
+                      onToggleReaction={(emoji) => handleToggleReaction(message.key, emoji)}
+                      unreadCount={Math.max(ROOM_MEMBERS.length - 1, 0)}
+                    />
+                  ))
+                )}
+              </>
             )}
-          </>
-        )}
-      </div>
+          </div>
 
-      <div className={styles.composer}>
-        <div className={styles.inputWrap}>
-          <textarea
-            ref={textareaRef}
-            className={styles.input}
-            value={draft}
-            onChange={(event) => setDraft(event.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder={`#${channelId}에 메시지 보내기`}
-            rows={1}
-          />
-          <button
-            type="button"
-            className={styles.sendButton}
-            onClick={handleSend}
-            disabled={draft.trim() === ""}
-            aria-label="전송"
-          >
-            <Send size={18} aria-hidden="true" />
-          </button>
+          <div className={styles.composer}>
+            {isMentionOpen ? (
+              <MentionPicker
+                members={mentionMatches}
+                activeIndex={mentionActiveIndex}
+                onSelect={handleSelectMention}
+              />
+            ) : null}
+            <div className={styles.inputWrap}>
+              <textarea
+                ref={textareaRef}
+                className={styles.input}
+                value={draft}
+                onChange={handleDraftChange}
+                onKeyDown={handleKeyDown}
+                placeholder={`#${channelId}에 메시지 보내기`}
+                rows={1}
+              />
+              <button
+                type="button"
+                className={styles.sendButton}
+                onClick={handleSend}
+                disabled={draft.trim() === ""}
+                aria-label="전송"
+              >
+                <Send size={18} aria-hidden="true" />
+              </button>
+            </div>
+          </div>
         </div>
+
+        <ThreadPanel
+          activeTab={panelTab}
+          onTabChange={setPanelTab}
+          parentMessage={selectedThreadParent}
+          isParentDeleted={isSelectedThreadParentDeleted}
+          isParentEdited={isSelectedThreadParentEdited}
+          onEditParent={(text) => {
+            if (selectedThreadKey !== undefined) handleEditMessage(selectedThreadKey, text);
+          }}
+          onDeleteParent={() => {
+            if (selectedThreadKey !== undefined) handleDeleteMessage(selectedThreadKey);
+          }}
+          replies={selectedThreadReplies}
+          onAddReply={handleAddReply}
+          members={ROOM_MEMBERS}
+          isCollapsed={isPanelCollapsed}
+          onCollapsedChange={setIsPanelCollapsed}
+        />
       </div>
     </div>
   );

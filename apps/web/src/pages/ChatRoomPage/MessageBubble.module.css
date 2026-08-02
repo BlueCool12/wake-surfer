@@ -1,5 +1,13 @@
+.wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
 .row {
   display: flex;
+  align-items: flex-end;
+  gap: var(--space-1);
   justify-content: flex-start;
 }
 
@@ -7,16 +15,25 @@
   justify-content: flex-end;
 }
 
+.reactionsRow {
+  display: flex;
+  justify-content: flex-start;
+}
+
+.reactionsRowMine {
+  justify-content: flex-end;
+}
+
 .bubble {
   display: flex;
   flex-direction: column;
-  gap: 0.15rem;
+  gap: var(--space-0-5);
   max-width: 75%;
-  padding: 0.45rem 0.75rem;
-  border-radius: 12px;
-  font-size: 0.9rem;
-  line-height: 1.4;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-lg);
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-normal);
+  box-shadow: var(--shadow-sm);
 }
 
 .bubbleOther {
@@ -34,29 +51,108 @@
 }
 
 .bubbleFailed {
-  background: var(--color-danger);
-  color: var(--color-accent-text);
+  background: var(--color-border);
+  color: var(--color-text);
 }
 
 .text {
+  padding: var(--space-1) 0;
   white-space: pre-wrap;
   word-break: break-word;
 }
 
-.meta {
+.metaRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-0-5);
   align-self: flex-end;
-  font-size: 0.7rem;
+}
+
+.metaText {
+  font-size: var(--font-size-2xs);
   opacity: 0.7;
 }
 
-.retry {
+.unreadCount {
+  flex-shrink: 0;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-2xs);
+  font-weight: 600;
+}
+
+.retryRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-0-5);
   align-self: flex-end;
-  padding: 0;
+  font-size: var(--font-size-2xs);
+}
+
+.retryDivider {
+  margin-left: var(--space-0-5);
+  opacity: 0.5;
+}
+
+.actionButton {
+  display: flex;
+  align-items: center;
+  padding: var(--space-0-5);
   border: none;
+  border-radius: var(--radius-sm);
   background: none;
   color: inherit;
-  font: inherit;
-  font-size: 0.7rem;
-  text-decoration: underline;
   cursor: pointer;
+  opacity: 0.7;
+}
+
+.actionButton:hover {
+  opacity: 1;
+  background: var(--color-overlay-hover);
+}
+
+.deletedText {
+  font-style: italic;
+  opacity: 0.6;
+}
+
+.bubbleDeleted {
+  box-shadow: none;
+}
+
+.bubbleThreadActive {
+  box-shadow:
+    var(--shadow-sm),
+    inset 0 0 0 2px var(--color-accent);
+}
+
+.bubbleMine.bubbleThreadActive {
+  box-shadow:
+    var(--shadow-sm),
+    inset 0 0 0 2px var(--color-accent-text);
+}
+
+.bubbleClickable {
+  cursor: pointer;
+}
+
+.bubbleClickable:hover {
+  filter: brightness(0.96);
+}
+
+.threadCount {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-0-5);
+  border: none;
+  background: none;
+  padding: 0;
+  color: inherit;
+  font: inherit;
+  font-size: var(--font-size-2xs);
+  opacity: 0.85;
+  cursor: pointer;
+}
+
+.threadCount:hover {
+  opacity: 1;
 }

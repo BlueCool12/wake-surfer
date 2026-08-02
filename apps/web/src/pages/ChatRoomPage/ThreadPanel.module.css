@@ -1,0 +1,337 @@
+.panel {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border-left: 1px solid var(--color-border);
+  background: var(--color-surface);
+}
+
+.tabs {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  height: 3rem;
+  box-sizing: border-box;
+  padding: 0 var(--space-3);
+}
+
+.rail {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-3) 0;
+}
+
+.tabsEnd {
+  margin-left: auto;
+}
+
+.tab {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: none;
+  padding: var(--space-2);
+  border-radius: var(--radius-sm);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+}
+
+.tab:hover {
+  background: var(--color-overlay-hover);
+}
+
+.tooltip {
+  position: absolute;
+  top: calc(100% + var(--space-1));
+  left: 50%;
+  transform: translateX(-50%) translateY(-4px);
+  padding: var(--space-0-5) var(--space-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-sm);
+  color: var(--color-text);
+  font-size: var(--font-size-2xs);
+  font-weight: 400;
+  white-space: nowrap;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition:
+    opacity 0.1s ease,
+    transform 0.1s ease;
+  z-index: 10;
+}
+
+.tab:hover .tooltip,
+.tab:focus-visible .tooltip {
+  opacity: 1;
+  visibility: visible;
+  transform: translateX(-50%) translateY(0);
+}
+
+.tabActive {
+  color: var(--color-text);
+  background: var(--color-bg);
+}
+
+.emptyState {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-5);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+  text-align: center;
+}
+
+.memberList {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--space-2);
+}
+
+.memberGroup:not(:last-child) {
+  margin-bottom: var(--space-2);
+}
+
+.memberGroupLabel {
+  margin: 0;
+  padding: var(--space-1) var(--space-2);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-2xs);
+  font-weight: 600;
+}
+
+.memberGroupList {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.member {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2);
+  border-radius: var(--radius-sm);
+}
+
+.member:hover {
+  background: var(--color-overlay-hover);
+}
+
+.memberAvatarWrap {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.memberAvatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--space-6);
+  height: var(--space-6);
+  border-radius: var(--radius-full);
+  background: var(--color-accent);
+  color: var(--color-accent-text);
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+}
+
+.memberStatusDot {
+  position: absolute;
+  right: -1px;
+  bottom: -1px;
+  width: var(--space-2);
+  height: var(--space-2);
+  border: 2px solid var(--color-surface);
+  border-radius: var(--radius-full);
+  background: var(--color-text-secondary);
+}
+
+.memberStatusDotOnline {
+  background: var(--color-online);
+}
+
+.memberName {
+  font-size: var(--font-size-sm);
+}
+
+.memberNameOffline {
+  color: var(--color-text-secondary);
+}
+
+.parentMessage {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-0-5);
+  padding: var(--space-3);
+  border-bottom: 1px solid var(--color-border);
+  font-size: var(--font-size-sm);
+}
+
+.parentMetaRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.parentText {
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.parentActions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-0-5);
+  flex-shrink: 0;
+}
+
+.parentMeta {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-2xs);
+}
+
+.deletedText {
+  font-style: italic;
+  color: var(--color-text-secondary);
+}
+
+.parentTextInput {
+  width: 100%;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  line-height: inherit;
+  white-space: pre-wrap;
+  resize: none;
+}
+
+.parentTextInput:focus {
+  outline: none;
+}
+
+.editButton {
+  display: flex;
+  align-items: center;
+  padding: var(--space-0-5);
+  border: none;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+}
+
+.editButton:hover {
+  background: var(--color-overlay-hover);
+  color: var(--color-text);
+}
+
+.replyList {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-3);
+}
+
+.replyPlaceholder {
+  margin: auto;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+}
+
+.reply {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-0-5);
+}
+
+.replyText {
+  font-size: var(--font-size-sm);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.replyMeta {
+  align-self: flex-end;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-2xs);
+}
+
+.composer {
+  height: 4.5rem;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  padding: 0 var(--space-3);
+  border-top: 1px solid var(--color-border);
+}
+
+.replyInputWrap {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  gap: var(--space-1);
+  padding: var(--space-1) 0;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.replyInputWrap:focus-within {
+  border-color: var(--color-accent);
+}
+
+.replyInput {
+  flex: 1;
+  resize: none;
+  box-sizing: border-box;
+  height: auto;
+  max-height: 8rem;
+  overflow-y: auto;
+  padding: var(--space-1) 0;
+  border: none;
+  background: transparent;
+  color: var(--color-text);
+  font: inherit;
+  font-size: var(--font-size-sm);
+}
+
+.replyInput:focus {
+  outline: none;
+}
+
+.replySendButton {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--space-8);
+  height: var(--space-8);
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--color-accent);
+  cursor: pointer;
+}
+
+.replySendButton:hover {
+  background: var(--color-overlay-hover);
+}
+
+.replySendButton:disabled {
+  color: var(--color-text-secondary);
+  opacity: 0.5;
+  cursor: not-allowed;
+}
