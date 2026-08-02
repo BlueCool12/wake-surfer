@@ -85,9 +85,7 @@ export async function readMessagesAfter<DB extends StreamMessagesDatabase>(
           "sender_actor_id as senderActorId",
           "target_type as targetType",
           "target_id as targetId",
-          "content_type as contentType",
           "content_text as contentText",
-          "sent_at_client as sentAtClient",
           "created_at as createdAt",
         ])
         .where("stream_id", "=", input.streamId)

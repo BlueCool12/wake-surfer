@@ -7,21 +7,17 @@ export {
   type MessageTargetResolver,
   type MessageWriteAuthorization,
   type MessageWriteAuthorizer,
-  type SendMessageCommand,
-  type SendMessageContext,
 } from "./message-send-module";
 export {
-  assertActorId,
-  assertClientMessageId,
-  assertMessageContent,
-  assertMessageId,
-  assertMessageTarget,
-  assertStreamId,
-  createAcceptedResponse,
   createDefaultMessageIdGenerator,
   createDefaultOutboundEventIdGenerator,
+  toChatMessage,
+  type AppendedTextMessage,
   type MessageIdGenerator,
   type OutboundEventIdGenerator,
+  type SendMessageIdempotencyKey,
+  type SendMessageInput,
+  type SendMessageResult,
 } from "./message-send";
 export {
   getCanonicalStreamId,

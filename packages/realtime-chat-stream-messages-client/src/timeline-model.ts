@@ -1,6 +1,6 @@
 import {
   getCanonicalStreamId,
-  type PublicMessage,
+  type ChatMessage,
 } from "@wake-surfer/realtime-chat-message-contracts";
 import type {
   LatestStreamMessagesResponse,
@@ -12,10 +12,10 @@ import { Emitter } from "./emitter.js";
 import { StreamMessageProtocolError } from "./errors.js";
 
 export class StreamMessagesTimelineModel extends Emitter {
-  readonly #messages: PublicMessage[] = [];
+  readonly #messages: ChatMessage[] = [];
   readonly #messageIdToSequence = new Map<string, number>();
   readonly #sequenceToMessageId = new Map<number, string>();
-  readonly #bufferedBySequence = new Map<number, PublicMessage>();
+  readonly #bufferedBySequence = new Map<number, ChatMessage>();
   readonly #bufferedMessageIdToSequence = new Map<string, number>();
 
   deliverySyncCursor: number | null = null;
@@ -30,7 +30,7 @@ export class StreamMessagesTimelineModel extends Emitter {
     return getCanonicalStreamId({ type: "channel", channelId: this.channelId });
   }
 
-  get messages(): readonly PublicMessage[] {
+  get messages(): readonly ChatMessage[] {
     return this.#messages;
   }
 
@@ -106,7 +106,7 @@ export class StreamMessagesTimelineModel extends Emitter {
     this.emit();
   }
 
-  applyLive(message: PublicMessage): void {
+  applyLive(message: ChatMessage): void {
     this.#assertMessageTarget(message);
     const cursor = this.deliverySyncCursor;
 
@@ -131,11 +131,11 @@ export class StreamMessagesTimelineModel extends Emitter {
     this.#bufferMessage(message);
   }
 
-  applyAccepted(message: PublicMessage): void {
+  applyAccepted(message: ChatMessage): void {
     this.applyLive(message);
   }
 
-  #insertLoadedMessage(message: PublicMessage): void {
+  #insertLoadedMessage(message: ChatMessage): void {
     this.#assertMessageTarget(message);
     this.#assertIdentity(message);
 
@@ -156,7 +156,7 @@ export class StreamMessagesTimelineModel extends Emitter {
     this.#removeBuffered(message);
   }
 
-  #bufferMessage(message: PublicMessage): void {
+  #bufferMessage(message: ChatMessage): void {
     this.#assertIdentity(message);
 
     if (this.#messageIdToSequence.has(message.messageId)) {
@@ -210,12 +210,12 @@ export class StreamMessagesTimelineModel extends Emitter {
     }
   }
 
-  #removeBuffered(message: PublicMessage): void {
+  #removeBuffered(message: ChatMessage): void {
     this.#bufferedBySequence.delete(message.sequence);
     this.#bufferedMessageIdToSequence.delete(message.messageId);
   }
 
-  #assertKnownIdentityOrDrop(message: PublicMessage): void {
+  #assertKnownIdentityOrDrop(message: ChatMessage): void {
     const knownMessageId = this.#sequenceToMessageId.get(message.sequence);
     const knownSequence = this.#messageIdToSequence.get(message.messageId);
 
@@ -227,7 +227,7 @@ export class StreamMessagesTimelineModel extends Emitter {
     }
   }
 
-  #assertIdentity(message: PublicMessage): void {
+  #assertIdentity(message: ChatMessage): void {
     const knownMessageId = this.#sequenceToMessageId.get(message.sequence);
     const knownSequence = this.#messageIdToSequence.get(message.messageId);
     const bufferedMessage = this.#bufferedBySequence.get(message.sequence);
@@ -243,7 +243,7 @@ export class StreamMessagesTimelineModel extends Emitter {
     }
   }
 
-  #throwIdentityConflict(message: PublicMessage): never {
+  #throwIdentityConflict(message: ChatMessage): never {
     throw new StreamMessageProtocolError("message_identity_conflict", {
       streamId: this.streamId,
       messageId: message.messageId,
@@ -260,7 +260,7 @@ export class StreamMessagesTimelineModel extends Emitter {
     }
   }
 
-  #assertMessageTarget(message: PublicMessage): void {
+  #assertMessageTarget(message: ChatMessage): void {
     if (
       message.streamId !== this.streamId ||
       message.target.type !== "channel" ||

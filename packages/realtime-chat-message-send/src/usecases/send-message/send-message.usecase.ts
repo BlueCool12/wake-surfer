@@ -1,32 +1,33 @@
-import type {
-  OutboundMessageDeliveryRequested,
-  PublicMessage,
-  SendMessageResponse,
-} from "@wake-surfer/realtime-chat-message-send-contracts";
 import {
-  getUtf8ByteLength,
-  MAX_TEXT_UTF8_BYTES,
+  getMessageTargetId,
+  getMessageTargetType,
 } from "@wake-surfer/realtime-chat-message-contracts";
+import type { OutboundMessageDeliveryRequested } from "@wake-surfer/realtime-chat-message-send-contracts";
 import type { Kysely } from "kysely";
 import {
   assertActorId,
-  assertClientMessageId,
-  assertMessageContent,
+  assertIdempotencyKey,
   assertMessageId,
   assertMessageTarget,
   assertStreamId,
-  createAcceptedResponse,
+  normalizeMessageText,
+  toChatMessage,
 } from "../../message-send";
-import type { MessageIdGenerator, OutboundEventIdGenerator } from "../../message-send";
+import type {
+  AppendedTextMessage,
+  MessageIdGenerator,
+  OutboundEventIdGenerator,
+  SendMessageIdempotencyKey,
+  SendMessageInput,
+  SendMessageResult,
+} from "../../message-send";
 import type {
   MessageTargetResolver,
   MessageWriteAuthorizer,
   OutboundDeliveryPublisher,
-  SendMessageCommand,
-  SendMessageContext,
 } from "../../message-send-module";
 import type { MessageSendDatabase } from "../../message-send-table";
-import type { MessageAppendInput, MessageAppendResult } from "./send-message.kysely";
+import type { AppendTextMessageParams, AppendTextMessageResult } from "./send-message.kysely";
 
 export type SendMessageDeps = {
   db: Kysely<MessageSendDatabase>;
@@ -36,139 +37,128 @@ export type SendMessageDeps = {
   publishDeliveryRequested?: OutboundDeliveryPublisher;
   messageIdGenerator: MessageIdGenerator;
   outboundEventIdGenerator: OutboundEventIdGenerator;
-  findAcceptedMessageByClientMessageId: (
+  findAppendedTextMessageByIdempotencyKey: (
     db: Kysely<MessageSendDatabase>,
-    input: {
-      senderActorId: string;
-      streamId: string;
-      clientMessageId: string;
-      target: SendMessageCommand["target"];
-    },
-  ) => Promise<PublicMessage | undefined>;
-  appendMessage: (
+    key: SendMessageIdempotencyKey,
+  ) => Promise<AppendedTextMessage | undefined>;
+  appendTextMessage: (
     db: Kysely<MessageSendDatabase>,
-    input: MessageAppendInput,
-  ) => Promise<MessageAppendResult>;
+    params: AppendTextMessageParams,
+  ) => Promise<AppendTextMessageResult>;
 };
 
 export async function sendMessage(
-  command: SendMessageCommand,
-  context: SendMessageContext,
+  input: SendMessageInput,
   deps: SendMessageDeps,
-): Promise<SendMessageResponse> {
-  assertActorId(context.actorId);
-  assertClientMessageId(command.clientMessageId);
-  assertMessageTarget(command.target);
+): Promise<SendMessageResult> {
+  assertActorId(input.senderActorId);
+  assertIdempotencyKey(input.idempotencyKey);
+  assertMessageTarget(input.target);
 
-  if (command.content.type !== "text") {
-    return createRejectedResponse(command, "invalid_content");
+  const text = normalizeMessageText(input.text);
+
+  if (text === undefined) {
+    return {
+      status: "rejected",
+      reason: "invalid_text",
+    };
   }
 
-  const contentText = command.content.text.trim();
-
-  if (contentText.length === 0 || getUtf8ByteLength(contentText) > MAX_TEXT_UTF8_BYTES) {
-    return createRejectedResponse(command, "invalid_content");
-  }
-
-  const content = {
-    type: "text" as const,
-    text: contentText,
+  const idempotencyKey: SendMessageIdempotencyKey = {
+    senderActorId: input.senderActorId,
+    idempotencyKey: input.idempotencyKey,
   };
+  const existing = await deps.findAppendedTextMessageByIdempotencyKey(deps.db, idempotencyKey);
 
-  assertMessageContent(content);
+  if (existing !== undefined) {
+    return resultForExistingMessage(input, text, existing);
+  }
 
   const resolvedTarget = await deps.resolveTarget({
-    actorId: context.actorId,
-    target: command.target,
+    actorId: input.senderActorId,
+    target: input.target,
   });
 
   if (resolvedTarget.status === "rejected") {
-    return createRejectedResponse(command, resolvedTarget.reason);
+    return {
+      status: "rejected",
+      reason: resolvedTarget.reason,
+    };
   }
 
   assertStreamId(resolvedTarget.streamId);
 
-  const existing = await deps.findAcceptedMessageByClientMessageId(deps.db, {
-    senderActorId: context.actorId,
-    streamId: resolvedTarget.streamId,
-    clientMessageId: command.clientMessageId,
-    target: command.target,
-  });
-
-  if (existing) {
-    return createAcceptedResponse({
-      command,
-      message: existing,
-    });
-  }
-
   const authorization = await deps.authorizeWrite({
-    actorId: context.actorId,
-    target: command.target,
+    actorId: input.senderActorId,
+    target: input.target,
     streamId: resolvedTarget.streamId,
   });
 
   if (authorization.status === "denied") {
-    return createRejectedResponse(command, "write_forbidden");
+    return {
+      status: "rejected",
+      reason: "write_forbidden",
+    };
   }
 
   const messageId = deps.messageIdGenerator.generate();
   assertMessageId(messageId);
 
-  const createdAt = deps.now().toISOString();
-  const appendInput: MessageAppendInput = {
-    messageId,
-    streamId: resolvedTarget.streamId,
-    senderActorId: context.actorId,
-    target: command.target,
-    clientMessageId: command.clientMessageId,
-    content,
-    createdAt,
-  };
+  const createdAt = deps.now();
 
-  if (command.sentAtClient !== undefined) {
-    appendInput.sentAtClient = command.sentAtClient;
+  if (Number.isNaN(createdAt.getTime())) {
+    throw new Error("message createdAt을 생성하는 server clock이 올바르지 않습니다.");
   }
 
-  const appendResult = await deps.appendMessage(deps.db, appendInput);
+  const appendResult = await deps.appendTextMessage(deps.db, {
+    ...idempotencyKey,
+    messageId,
+    streamId: resolvedTarget.streamId,
+    target: input.target,
+    text,
+    createdAt,
+  });
 
   if (appendResult.status === "existing") {
-    return createAcceptedResponse({
-      command,
-      message: appendResult.message,
-    });
+    return resultForExistingMessage(input, text, appendResult.message);
   }
 
   const savedMessage = appendResult.message;
 
   await publishDeliveryBestEffort(deps, {
     eventId: deps.outboundEventIdGenerator.generate(),
-    occurredAt: createdAt,
-    message: savedMessage,
+    occurredAt: savedMessage.createdAt.toISOString(),
+    message: toChatMessage(savedMessage),
     recipientActorIds: resolvedTarget.recipientActorIds,
   });
 
-  return createAcceptedResponse({
-    command,
+  return {
+    status: "accepted",
     message: savedMessage,
-  });
+  };
 }
 
-function createRejectedResponse(
-  command: SendMessageCommand,
-  reason: Extract<SendMessageResponse, { status: "rejected" }>["reason"],
-): SendMessageResponse {
-  const response: SendMessageResponse = {
-    status: "rejected",
-    clientMessageId: command.clientMessageId,
-    reason,
-  };
-
-  if (command.commandId !== undefined) {
-    response.commandId = command.commandId;
+function resultForExistingMessage(
+  input: SendMessageInput,
+  text: string,
+  existing: AppendedTextMessage,
+): SendMessageResult {
+  if (
+    existing.senderActorId !== input.senderActorId ||
+    getMessageTargetType(existing.target) !== getMessageTargetType(input.target) ||
+    getMessageTargetId(existing.target) !== getMessageTargetId(input.target) ||
+    existing.text !== text
+  ) {
+    return {
+      status: "rejected",
+      reason: "idempotency_conflict",
+    };
   }
 
-  return response;
+  return {
+    status: "accepted",
+    message: existing,
+  };
 }
 
 async function publishDeliveryBestEffort(

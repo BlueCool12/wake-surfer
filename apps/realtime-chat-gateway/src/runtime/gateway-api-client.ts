@@ -3,7 +3,7 @@ import {
   type ConsumeGatewayTicketResponse,
 } from "@wake-surfer/realtime-chat-gateway-ticket-contracts";
 import {
-  SendMessageRequestBodySchema,
+  SendMessageRequestSchema,
   SendMessageResponseSchema,
   type SendMessageRequest,
   type SendMessageResponse,
@@ -64,7 +64,7 @@ export function createGatewayApiClient(options: CreateGatewayApiClientOptions): 
       return parsed.data;
     },
     async sendMessage(request, context) {
-      const parsedRequest = SendMessageRequestBodySchema.parse(request);
+      const parsedRequest = SendMessageRequestSchema.parse(request);
       const value = await requestJson(new URL("internal/realtime-chat/messages", apiBaseUrl), {
         body: parsedRequest,
         context,
@@ -81,28 +81,8 @@ export function createGatewayApiClient(options: CreateGatewayApiClientOptions): 
         throw new Error("메시지 전송 응답 형식이 올바르지 않습니다.");
       }
 
-      return removeUndefinedCommandId(parsed.data);
+      return parsed.data;
     },
-  };
-}
-
-function removeUndefinedCommandId(
-  response: ReturnType<typeof SendMessageResponseSchema.parse>,
-): SendMessageResponse {
-  if (response.status === "accepted") {
-    return {
-      status: "accepted",
-      clientMessageId: response.clientMessageId,
-      message: response.message,
-      ...(response.commandId === undefined ? {} : { commandId: response.commandId }),
-    };
-  }
-
-  return {
-    status: "rejected",
-    clientMessageId: response.clientMessageId,
-    reason: response.reason,
-    ...(response.commandId === undefined ? {} : { commandId: response.commandId }),
   };
 }
 

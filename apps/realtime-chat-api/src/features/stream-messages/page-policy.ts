@@ -1,6 +1,6 @@
 import {
   getCanonicalStreamId,
-  type PublicMessage,
+  type ChatMessage,
 } from "@wake-surfer/realtime-chat-message-contracts";
 import type {
   FinalEnvelopeMeasurement,
@@ -45,7 +45,7 @@ export function fitLatestMessagesPage(
   page: LatestMessagesPage,
   measureFinalEnvelope: FinalEnvelopeMeasurer<LatestStreamMessagesResponse>,
 ): MeasuredPage<LatestStreamMessagesResponse> {
-  const transport = toPublicMessages(channelId, page.messages);
+  const transport = toChatMessages(channelId, page.messages);
 
   return fitNewestContiguousMessages({
     messages: transport.messages,
@@ -69,7 +69,7 @@ export function fitOlderMessagesPage(
   page: OlderMessagesPage,
   measureFinalEnvelope: FinalEnvelopeMeasurer<OlderStreamMessagesResponse>,
 ): MeasuredPage<OlderStreamMessagesResponse> {
-  const transport = toPublicMessages(channelId, page.messages);
+  const transport = toChatMessages(channelId, page.messages);
 
   return fitNewestContiguousMessages({
     messages: transport.messages,
@@ -93,7 +93,7 @@ export function fitSyncAfterMessagesPage(
   page: SyncAfterMessagesPage,
   measureFinalEnvelope: FinalEnvelopeMeasurer<SyncAfterStreamMessagesResponse>,
 ): MeasuredPage<SyncAfterStreamMessagesResponse> {
-  const transport = toPublicMessages(channelId, page.messages);
+  const transport = toChatMessages(channelId, page.messages);
 
   return fitOldestContiguousMessages({
     messages: transport.messages,
@@ -115,8 +115,8 @@ export function fitSyncAfterMessagesPage(
 }
 
 export function fitNewestContiguousMessages<Response>(input: {
-  messages: readonly PublicMessage[];
-  buildResponse: (messages: PublicMessage[]) => Response;
+  messages: readonly ChatMessage[];
+  buildResponse: (messages: ChatMessage[]) => Response;
   measureFinalEnvelope: FinalEnvelopeMeasurer<Response>;
 }): MeasuredPage<Response> {
   return fitContiguousMessages({
@@ -126,8 +126,8 @@ export function fitNewestContiguousMessages<Response>(input: {
 }
 
 export function fitOldestContiguousMessages<Response>(input: {
-  messages: readonly PublicMessage[];
-  buildResponse: (messages: PublicMessage[]) => Response;
+  messages: readonly ChatMessage[];
+  buildResponse: (messages: ChatMessage[]) => Response;
   measureFinalEnvelope: FinalEnvelopeMeasurer<Response>;
 }): MeasuredPage<Response> {
   return fitContiguousMessages({
@@ -137,10 +137,10 @@ export function fitOldestContiguousMessages<Response>(input: {
 }
 
 function fitContiguousMessages<Response>(input: {
-  messages: readonly PublicMessage[];
-  buildResponse: (messages: PublicMessage[]) => Response;
+  messages: readonly ChatMessage[];
+  buildResponse: (messages: ChatMessage[]) => Response;
   measureFinalEnvelope: FinalEnvelopeMeasurer<Response>;
-  removeMessage: (messages: PublicMessage[]) => PublicMessage[];
+  removeMessage: (messages: ChatMessage[]) => ChatMessage[];
 }): MeasuredPage<Response> {
   let messages = [...input.messages];
 
@@ -185,12 +185,12 @@ function assertValidMeasurement(measurement: FinalEnvelopeMeasurement): void {
   }
 }
 
-function toPublicMessages(
+function toChatMessages(
   channelId: string,
   messages: readonly StreamMessage[],
 ): {
   streamId: string;
-  messages: PublicMessage[];
+  messages: ChatMessage[];
 } {
   const target = {
     type: "channel" as const,
@@ -201,22 +201,17 @@ function toPublicMessages(
   return {
     streamId,
     messages: messages.map((message) => {
-      const publicMessage: PublicMessage = {
+      const chatMessage: ChatMessage = {
         messageId: message.messageId,
         streamId,
         sequence: message.sequence,
         senderActorId: message.senderActorId,
         target,
-        content: message.content,
+        text: message.text,
         createdAt: message.createdAt.toISOString(),
       };
 
-      return message.sentAtClient === undefined
-        ? publicMessage
-        : {
-            ...publicMessage,
-            sentAtClient: message.sentAtClient.toISOString(),
-          };
+      return chatMessage;
     }),
   };
 }

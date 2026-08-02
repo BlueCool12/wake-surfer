@@ -1,7 +1,4 @@
-import {
-  PublicMessageSchema,
-  type PublicMessage,
-} from "@wake-surfer/realtime-chat-message-contracts";
+import { ChatMessageSchema, type ChatMessage } from "@wake-surfer/realtime-chat-message-contracts";
 import { SendMessageResponseSchema } from "@wake-surfer/realtime-chat-message-send-contracts";
 import {
   createBrowserRealtimeEventSocket,
@@ -199,14 +196,13 @@ export function createBrowserChatMessageTransport(options: {
     isReady() {
       return options.realtimeSession.state === "ready";
     },
-    sendChannelMessage({ clientMessageId, content, sentAtClient }) {
+    sendChannelMessage({ idempotencyKey, text }) {
       options.realtimeSession.sendApplicationEvent(
         CHAT_MESSAGE_SEND_EVENT,
         JSON.stringify({
-          clientMessageId,
+          idempotencyKey,
           target: { type: "channel", channelId },
-          content,
-          sentAtClient,
+          text,
         }),
       );
     },
@@ -251,7 +247,7 @@ export function createBrowserChatMessageTransport(options: {
       return options.realtimeSession.onApplicationEvent(
         CHAT_MESSAGE_CREATED_EVENT,
         (rawPayload) => {
-          const message = parsePublicMessage(rawPayload);
+          const message = parseChatMessage(rawPayload);
 
           if (
             message !== null &&
@@ -279,18 +275,7 @@ function parseAcceptedResponse(rawPayload: string): MessageAcceptedResponse | nu
     return null;
   }
 
-  return parsed.data.commandId === undefined
-    ? {
-        status: "accepted",
-        clientMessageId: parsed.data.clientMessageId,
-        message: parsed.data.message,
-      }
-    : {
-        status: "accepted",
-        commandId: parsed.data.commandId,
-        clientMessageId: parsed.data.clientMessageId,
-        message: parsed.data.message,
-      };
+  return parsed.data;
 }
 
 function parseRejectedResponse(rawPayload: string): MessageRejectedResponse | null {
@@ -306,28 +291,17 @@ function parseRejectedResponse(rawPayload: string): MessageRejectedResponse | nu
     return null;
   }
 
-  return parsed.data.commandId === undefined
-    ? {
-        status: "rejected",
-        clientMessageId: parsed.data.clientMessageId,
-        reason: parsed.data.reason,
-      }
-    : {
-        status: "rejected",
-        commandId: parsed.data.commandId,
-        clientMessageId: parsed.data.clientMessageId,
-        reason: parsed.data.reason,
-      };
+  return parsed.data;
 }
 
-function parsePublicMessage(rawPayload: string): PublicMessage | null {
+function parseChatMessage(rawPayload: string): ChatMessage | null {
   const value = parseJson(rawPayload);
 
   if (value === null) {
     return null;
   }
 
-  const parsed = PublicMessageSchema.safeParse(value);
+  const parsed = ChatMessageSchema.safeParse(value);
   return parsed.success ? parsed.data : null;
 }
 

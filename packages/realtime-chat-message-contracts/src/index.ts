@@ -25,20 +25,14 @@ export type MessageTarget =
       threadId: ThreadId;
     };
 
-export type TextMessageContent = {
-  type: "text";
-  text: string;
-};
-
-export type PublicMessage = {
+export type ChatMessage = {
   messageId: MessageId;
   streamId: StreamId;
   sequence: Sequence;
   senderActorId: ActorId;
   target: MessageTarget;
-  content: TextMessageContent;
+  text: string;
   createdAt: ISODateTime;
-  sentAtClient?: ISODateTime;
 };
 
 const NonBlankStringSchema = z.string().trim().min(1);
@@ -62,29 +56,19 @@ export const MessageTargetSchema = z.discriminatedUnion("type", [
   }),
 ]);
 
-export const TextMessageContentSchema = z.strictObject({
-  type: z.literal("text"),
-  text: NonBlankStringSchema.refine(
-    (text) => getUtf8ByteLength(text) <= MAX_TEXT_UTF8_BYTES,
-    `메시지 text는 UTF-8 ${MAX_TEXT_UTF8_BYTES} byte 이하여야 합니다.`,
-  ),
-});
+export const MessageTextSchema = NonBlankStringSchema.refine(
+  (text) => getUtf8ByteLength(text) <= MAX_TEXT_UTF8_BYTES,
+  `메시지 text는 UTF-8 ${MAX_TEXT_UTF8_BYTES} byte 이하여야 합니다.`,
+);
 
-const PublicMessageShapeSchema = z.strictObject({
+export const ChatMessageSchema = z.strictObject({
   messageId: NonBlankStringSchema,
   streamId: NonBlankStringSchema,
   sequence: z.number().int().safe().positive(),
   senderActorId: NonBlankStringSchema,
   target: MessageTargetSchema,
-  content: TextMessageContentSchema,
+  text: MessageTextSchema,
   createdAt: ISODateTimeSchema,
-  sentAtClient: ISODateTimeSchema.optional(),
-});
-
-export const PublicMessageSchema = PublicMessageShapeSchema.transform((input): PublicMessage => {
-  const { sentAtClient, ...message } = input;
-
-  return sentAtClient === undefined ? message : { ...message, sentAtClient };
 });
 
 export function getUtf8ByteLength(value: string): number {

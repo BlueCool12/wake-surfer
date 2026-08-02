@@ -1,40 +1,28 @@
+import { getCanonicalStreamId } from "@wake-surfer/realtime-chat-message-contracts";
 import type {
   ActorId,
-  ClientMessageId,
-  CommandId,
-  ISODateTime,
-  OutboundMessageDeliveryRequested,
-  SendMessageContent,
-  SendMessageResponse,
-  SendMessageTarget,
+  MessageTarget,
   StreamId,
-} from "@wake-surfer/realtime-chat-message-send-contracts";
-import { getCanonicalStreamId } from "@wake-surfer/realtime-chat-message-contracts";
+} from "@wake-surfer/realtime-chat-message-contracts";
+import type { OutboundMessageDeliveryRequested } from "@wake-surfer/realtime-chat-message-send-contracts";
 import type { Kysely } from "kysely";
 import {
   assertMessageTarget,
   createDefaultMessageIdGenerator,
   createDefaultOutboundEventIdGenerator,
 } from "./message-send";
-import type { MessageIdGenerator, OutboundEventIdGenerator } from "./message-send";
+import type {
+  MessageIdGenerator,
+  OutboundEventIdGenerator,
+  SendMessageInput,
+  SendMessageResult,
+} from "./message-send";
 import type { MessageSendDatabase } from "./message-send-table";
 import {
-  appendMessage,
-  findAcceptedMessageByClientMessageId,
+  appendTextMessage,
+  findAppendedTextMessageByIdempotencyKey,
 } from "./usecases/send-message/send-message.kysely";
 import { sendMessage } from "./usecases/send-message/send-message.usecase";
-
-export type SendMessageContext = {
-  actorId: ActorId;
-};
-
-export type SendMessageCommand = {
-  commandId?: CommandId;
-  clientMessageId: ClientMessageId;
-  target: SendMessageTarget;
-  content: SendMessageContent;
-  sentAtClient?: ISODateTime;
-};
 
 export type MessageTargetResolution =
   | {
@@ -49,7 +37,7 @@ export type MessageTargetResolution =
 
 export type MessageTargetResolver = (input: {
   actorId: ActorId;
-  target: SendMessageTarget;
+  target: MessageTarget;
 }) => MessageTargetResolution | Promise<MessageTargetResolution>;
 
 export type MessageWriteAuthorization =
@@ -62,7 +50,7 @@ export type MessageWriteAuthorization =
 
 export type MessageWriteAuthorizer = (input: {
   actorId: ActorId;
-  target: SendMessageTarget;
+  target: MessageTarget;
   streamId: StreamId;
 }) => MessageWriteAuthorization | Promise<MessageWriteAuthorization>;
 
@@ -81,7 +69,7 @@ export type CreateMessageSendModuleConfig<DB extends MessageSendDatabase = Messa
 };
 
 export type MessageSendModule = {
-  send: (command: SendMessageCommand, context: SendMessageContext) => Promise<SendMessageResponse>;
+  send: (input: SendMessageInput) => Promise<SendMessageResult>;
 };
 
 export function createDefaultMessageTargetResolver(): MessageTargetResolver {
@@ -107,7 +95,7 @@ export function createMessageSendModule<DB extends MessageSendDatabase = Message
   const now = config.now ?? createNow;
 
   return {
-    send(command, context) {
+    send(input) {
       const deps = {
         db,
         now,
@@ -115,18 +103,18 @@ export function createMessageSendModule<DB extends MessageSendDatabase = Message
         authorizeWrite: config.authorizeWrite,
         messageIdGenerator,
         outboundEventIdGenerator,
-        findAcceptedMessageByClientMessageId,
-        appendMessage,
+        findAppendedTextMessageByIdempotencyKey,
+        appendTextMessage,
       };
 
       if (config.publishDeliveryRequested !== undefined) {
-        return sendMessage(command, context, {
+        return sendMessage(input, {
           ...deps,
           publishDeliveryRequested: config.publishDeliveryRequested,
         });
       }
 
-      return sendMessage(command, context, deps);
+      return sendMessage(input, deps);
     },
   };
 }
