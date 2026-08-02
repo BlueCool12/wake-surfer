@@ -155,7 +155,11 @@ function MessageBubble({
 
       {reactionsNode ? (
         <div
-          className={message.isMine ? `${styles.reactionsRow} ${styles.reactionsRowMine}` : styles.reactionsRow}
+          className={
+            message.isMine
+              ? `${styles.reactionsRow} ${styles.reactionsRowMine}`
+              : styles.reactionsRow
+          }
         >
           {reactionsNode}
         </div>

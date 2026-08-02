@@ -89,7 +89,10 @@ function ThreadPanel({
   };
 
   const canModifyParent =
-    parentMessage !== undefined && parentMessage.isMine && parentMessage.status === "sent" && !isParentDeleted;
+    parentMessage !== undefined &&
+    parentMessage.isMine &&
+    parentMessage.status === "sent" &&
+    !isParentDeleted;
 
   const handleEditParentStart = () => {
     if (parentMessage === undefined) return;
@@ -234,7 +237,11 @@ function ThreadPanel({
                         />
                       </span>
                       <span
-                        className={member.isOnline ? styles.memberName : `${styles.memberName} ${styles.memberNameOffline}`}
+                        className={
+                          member.isOnline
+                            ? styles.memberName
+                            : `${styles.memberName} ${styles.memberNameOffline}`
+                        }
                       >
                         {member.name}
                       </span>
