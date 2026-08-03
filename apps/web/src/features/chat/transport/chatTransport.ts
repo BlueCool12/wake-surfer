@@ -1,4 +1,7 @@
-import type { ChatMessage } from "@wake-surfer/realtime-chat-message-contracts";
+import type {
+  PublicMessage,
+  TextMessageContent,
+} from "@wake-surfer/realtime-chat-message-contracts";
 import type { SendMessageResponse } from "@wake-surfer/realtime-chat-message-send-contracts";
 import type { StreamMessagesTransport } from "@wake-surfer/realtime-chat-stream-messages-client";
 
@@ -9,10 +12,14 @@ export interface ChatMessageTransport {
   connect(): Promise<void>;
   disconnect(): void;
   isReady(): boolean;
-  sendChannelMessage(params: { idempotencyKey: string; text: string }): void;
+  sendChannelMessage(params: {
+    clientMessageId: string;
+    content: TextMessageContent;
+    sentAtClient: string;
+  }): void;
   onConnectionGenerationChanged(listener: (connectionGeneration: string) => void): () => void;
   onDisconnected(listener: () => void): () => void;
-  onMessageCreated(listener: (message: ChatMessage) => void): () => void;
+  onMessageCreated(listener: (message: PublicMessage) => void): () => void;
   onMessageAccepted(listener: (response: MessageAcceptedResponse) => void): () => void;
   onMessageRejected(listener: (response: MessageRejectedResponse) => void): () => void;
 }

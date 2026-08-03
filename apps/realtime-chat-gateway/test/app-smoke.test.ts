@@ -76,9 +76,9 @@ describe("realtime chat gateway app", () => {
     first.socket.send(
       JSON.stringify({
         type: "chat.message.send",
-        idempotencyKey: "idempotency-1",
+        clientMessageId: "client-message-1",
         target: { type: "channel", channelId: "room-1" },
-        text: "안녕하세요",
+        content: { type: "text", text: "안녕하세요" },
       }),
     );
 
@@ -86,7 +86,7 @@ describe("realtime chat gateway app", () => {
       expect.objectContaining({
         type: "chat.message.accepted",
         status: "accepted",
-        idempotencyKey: "idempotency-1",
+        clientMessageId: "client-message-1",
       }),
     );
     const expectedMessage = expect.objectContaining({
@@ -100,9 +100,9 @@ describe("realtime chat gateway app", () => {
     await expect(secondCreated).resolves.toEqual(expectedMessage);
     expect(fixture.gatewayApiClient.sendMessage).toHaveBeenCalledWith(
       {
-        idempotencyKey: "idempotency-1",
+        clientMessageId: "client-message-1",
         target: { type: "channel", channelId: "room-1" },
-        text: "안녕하세요",
+        content: { type: "text", text: "안녕하세요" },
       },
       {
         actorId: "actor-ticket-a",
@@ -142,9 +142,9 @@ describe("realtime chat gateway app", () => {
     first.socket.send(
       JSON.stringify({
         type: "chat.message.send",
-        idempotencyKey: "idempotency-disconnect",
+        clientMessageId: "client-message-disconnect",
         target: { type: "channel", channelId: "room-1" },
-        text: "계속 전달",
+        content: { type: "text", text: "계속 전달" },
       }),
     );
     await vi.waitFor(() => {
@@ -157,14 +157,14 @@ describe("realtime chat gateway app", () => {
     expect(sendSignal?.aborted).toBe(false);
     resolveSend?.({
       status: "accepted",
-      idempotencyKey: "idempotency-disconnect",
+      clientMessageId: "client-message-disconnect",
       message: {
         messageId: "message-disconnect",
         streamId: "channel:room-1",
         sequence: 2,
         senderActorId: "actor-ticket-a",
         target: { type: "channel", channelId: "room-1" },
-        text: "계속 전달",
+        content: { type: "text", text: "계속 전달" },
         createdAt: "2026-07-25T00:00:02.000Z",
       },
     });
@@ -234,14 +234,14 @@ async function createFixture(): Promise<{
     })),
     sendMessage: vi.fn<GatewayApiClient["sendMessage"]>(async (request, context) => ({
       status: "accepted",
-      idempotencyKey: request.idempotencyKey,
+      clientMessageId: request.clientMessageId,
       message: {
         messageId: "message-1",
         streamId: "channel:room-1",
         sequence: 1,
         senderActorId: context.actorId,
         target: request.target,
-        text: request.text,
+        content: request.content,
         createdAt: "2026-07-25T00:00:01.000Z",
       },
     })),

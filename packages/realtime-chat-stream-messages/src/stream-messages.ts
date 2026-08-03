@@ -15,8 +15,12 @@ export type StreamMessage = {
   messageId: string;
   sequence: number;
   senderActorId: string;
-  text: string;
+  content: {
+    type: "text";
+    text: string;
+  };
   createdAt: Date;
+  sentAtClient?: Date;
 };
 
 export type StreamMessagesFailureCode = "stream_unavailable" | "invalid_cursor";
@@ -36,7 +40,9 @@ export type RawStreamMessageRow = {
   senderActorId: unknown;
   targetType: unknown;
   targetId: unknown;
+  contentType: unknown;
   contentText: unknown;
+  sentAtClient: unknown;
   createdAt: unknown;
 };
 
@@ -157,13 +163,19 @@ export function parseStreamMessageRow(
   const senderActorId = parseNonBlankString(row.senderActorId);
   const contentText = parseNonBlankString(row.contentText);
   const createdAt = parseDate(row.createdAt);
+  const sentAtClient =
+    row.sentAtClient === null || row.sentAtClient === undefined
+      ? undefined
+      : parseDate(row.sentAtClient);
 
   if (
     messageId === undefined ||
     sequence === undefined ||
     senderActorId === undefined ||
+    row.contentType !== "text" ||
     contentText === undefined ||
-    createdAt === undefined
+    createdAt === undefined ||
+    (row.sentAtClient !== null && row.sentAtClient !== undefined && sentAtClient === undefined)
   ) {
     throw new StreamMessagesDataIntegrityError("invalid_storage_row", metadata);
   }
@@ -172,9 +184,16 @@ export function parseStreamMessageRow(
     messageId,
     sequence,
     senderActorId,
-    text: contentText,
+    content: {
+      type: "text",
+      text: contentText,
+    },
     createdAt,
   };
+
+  if (sentAtClient !== undefined) {
+    message.sentAtClient = sentAtClient;
+  }
 
   return message;
 }

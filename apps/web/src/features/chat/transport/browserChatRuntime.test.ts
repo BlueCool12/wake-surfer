@@ -61,37 +61,39 @@ describe("browser chat runtime", () => {
     expect(connectionGenerations).toHaveBeenCalledWith("generation-1");
 
     transport.sendChannelMessage({
-      idempotencyKey: "idempotency-1",
-      text: "파도",
+      clientMessageId: "client-1",
+      content: { type: "text", text: "파도" },
+      sentAtClient: "2026-07-25T06:00:00.000Z",
     });
     expect(session.sent[1]).toEqual({
       eventName: "chat.message.send",
       rawPayload: JSON.stringify({
-        idempotencyKey: "idempotency-1",
+        clientMessageId: "client-1",
         target: { type: "channel", channelId: "channel-runtime" },
-        text: "파도",
+        content: { type: "text", text: "파도" },
+        sentAtClient: "2026-07-25T06:00:00.000Z",
       }),
     });
 
     const message = createMessage("channel-runtime");
     session.serverEmit("chat.message.accepted", {
       status: "accepted",
-      idempotencyKey: "idempotency-1",
+      clientMessageId: "client-1",
       message,
     });
     session.serverEmit("chat.message.rejected", {
       status: "rejected",
-      idempotencyKey: "idempotency-2",
+      clientMessageId: "client-2",
       reason: "write_forbidden",
     });
     session.serverEmit("chat.message.created", message);
     session.serverEmit("chat.message.created", createMessage("another-channel"));
     expect(accepted).toHaveBeenCalledWith(
-      expect.objectContaining({ status: "accepted", idempotencyKey: "idempotency-1" }),
+      expect.objectContaining({ status: "accepted", clientMessageId: "client-1" }),
     );
     expect(rejected).toHaveBeenCalledWith({
       status: "rejected",
-      idempotencyKey: "idempotency-2",
+      clientMessageId: "client-2",
       reason: "write_forbidden",
     });
     expect(created).toHaveBeenCalledTimes(1);
@@ -182,7 +184,7 @@ function createMessage(channelId: string) {
     sequence: 1,
     senderActorId: "actor-wave",
     target: { type: "channel" as const, channelId },
-    text: "파도",
+    content: { type: "text" as const, text: "파도" },
     createdAt: "2026-07-25T00:00:00.000Z",
   };
 }

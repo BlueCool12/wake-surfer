@@ -1,4 +1,4 @@
-import type { ChatMessage } from "@wake-surfer/realtime-chat-message-contracts";
+import type { PublicMessage } from "@wake-surfer/realtime-chat-message-contracts";
 import type { StreamMessage } from "@wake-surfer/realtime-chat-stream-messages";
 import { describe, expect, it } from "vitest";
 
@@ -13,7 +13,7 @@ import {
 describe("Stream Messages final envelope page policy", () => {
   it("keeps the closest newest contiguous range for latest and older pages", () => {
     const result = fitNewestContiguousMessages({
-      messages: createChatMessages(1, 4),
+      messages: createPublicMessages(1, 4),
       buildResponse: (messages) => ({ messages }),
       measureFinalEnvelope: ({ messages }) => ({
         utf8ByteLength: messages.length * 20_000,
@@ -27,7 +27,7 @@ describe("Stream Messages final envelope page policy", () => {
 
   it("keeps the closest oldest contiguous range for sync-after pages", () => {
     const result = fitOldestContiguousMessages({
-      messages: createChatMessages(11, 14),
+      messages: createPublicMessages(11, 14),
       buildResponse: (messages) => ({ messages }),
       measureFinalEnvelope: ({ messages }) => ({
         utf8ByteLength: messages.length * 20_000,
@@ -142,7 +142,7 @@ describe("Stream Messages final envelope page policy", () => {
   });
 });
 
-function createChatMessages(firstSequence: number, lastSequence: number): ChatMessage[] {
+function createPublicMessages(firstSequence: number, lastSequence: number): PublicMessage[] {
   return Array.from({ length: lastSequence - firstSequence + 1 }, (_, index) =>
     createMessage(firstSequence + index, `message ${firstSequence + index}`),
   );
@@ -153,12 +153,15 @@ function createStreamMessages(firstSequence: number, lastSequence: number): Stre
     messageId: `message-${firstSequence + index}`,
     sequence: firstSequence + index,
     senderActorId: "actor-page-policy",
-    text: `message ${firstSequence + index}`,
+    content: {
+      type: "text",
+      text: `message ${firstSequence + index}`,
+    },
     createdAt: new Date("2026-07-18T00:00:00.000Z"),
   }));
 }
 
-function createMessage(sequence: number, text: string): ChatMessage {
+function createMessage(sequence: number, text: string): PublicMessage {
   return {
     messageId: `message-${sequence}`,
     streamId: "channel:channel-page-policy",
@@ -168,7 +171,10 @@ function createMessage(sequence: number, text: string): ChatMessage {
       type: "channel",
       channelId: "channel-page-policy",
     },
-    text,
+    content: {
+      type: "text",
+      text,
+    },
     createdAt: "2026-07-18T00:00:00.000Z",
   };
 }

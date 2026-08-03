@@ -11,13 +11,9 @@ import type {
   IssueGatewayTicketResponse,
   RealtimeChatErrorCode,
 } from "@wake-surfer/realtime-chat-gateway-ticket-contracts";
+import type { MessageSendModule } from "@wake-surfer/realtime-chat-message-send";
 import {
-  toChatMessage,
-  type MessageSendModule,
-  type SendMessageResult,
-} from "@wake-surfer/realtime-chat-message-send";
-import {
-  parseSendMessageRequest,
+  parseSendMessageRequestBody,
   type SendMessageResponse,
 } from "@wake-surfer/realtime-chat-message-send-contracts";
 import type {
@@ -230,20 +226,17 @@ export function createRealtimeChatApiApp(deps: RealtimeChatApiAppDeps): Hono {
       await authenticateGateway(context.req.raw);
       const actor = await getAssertedActor(context.req.raw);
       const body = await readRequiredJsonBody(context.req.raw);
-      const parsed = parseSendMessageRequest(body);
+      const parsed = parseSendMessageRequestBody(body);
 
       if (!parsed.ok) {
         throw new AppHttpError(400, "bad_request", parsed.message);
       }
 
-      let result: SendMessageResult;
+      let result: SendMessageResponse;
 
       try {
-        result = await messageSend.send({
-          senderActorId: actor.actorId,
-          idempotencyKey: parsed.value.idempotencyKey,
-          target: parsed.value.target,
-          text: parsed.value.text,
+        result = await messageSend.send(parsed.value, {
+          actorId: actor.actorId,
         });
       } catch (error) {
         throw new AppHttpError(503, "internal_error", "message send service unavailable", {
@@ -251,7 +244,7 @@ export function createRealtimeChatApiApp(deps: RealtimeChatApiAppDeps): Hono {
         });
       }
 
-      return context.json(toSendMessageResponse(parsed.value.idempotencyKey, result));
+      return context.json(result);
     });
   }
 
@@ -347,25 +340,6 @@ export function createRealtimeChatApiApp(deps: RealtimeChatApiAppDeps): Hono {
   });
 
   return app;
-}
-
-function toSendMessageResponse(
-  idempotencyKey: string,
-  result: SendMessageResult,
-): SendMessageResponse {
-  if (result.status === "rejected") {
-    return {
-      status: "rejected",
-      idempotencyKey,
-      reason: result.reason,
-    };
-  }
-
-  return {
-    status: "accepted",
-    idempotencyKey,
-    message: toChatMessage(result.message),
-  };
 }
 
 function getHttpExceptionResponse(error: unknown): Response | undefined {

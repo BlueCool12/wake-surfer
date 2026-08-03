@@ -1,5 +1,5 @@
 import { getUtf8ByteLength } from "@wake-surfer/realtime-chat-message-contracts";
-import type { MessageTarget, ChatMessage } from "@wake-surfer/realtime-chat-message-contracts";
+import type { MessageTarget, PublicMessage } from "@wake-surfer/realtime-chat-message-contracts";
 
 import { MAX_STREAM_MESSAGES_PAGE_ENVELOPE_UTF8_BYTES } from "./common.js";
 import {
@@ -27,7 +27,7 @@ export function serializeLatestStreamMessagesHttpResponse(
   return JSON.stringify({
     streamId: response.streamId,
     throughSequence: response.throughSequence,
-    messages: response.messages.map(toCanonicalChatMessage),
+    messages: response.messages.map(toCanonicalPublicMessage),
     nextBeforeSequence: response.nextBeforeSequence,
     hasMoreBefore: response.hasMoreBefore,
   });
@@ -53,7 +53,7 @@ export function serializeOlderStreamMessagesHttpResponse(
   return JSON.stringify({
     streamId: response.streamId,
     beforeSequence: response.beforeSequence,
-    messages: response.messages.map(toCanonicalChatMessage),
+    messages: response.messages.map(toCanonicalPublicMessage),
     nextBeforeSequence: response.nextBeforeSequence,
     hasMoreBefore: response.hasMoreBefore,
   });
@@ -79,7 +79,7 @@ export function serializeChatStreamSyncedEvent(value: ChatStreamSyncedEvent): st
     streamId: event.streamId,
     afterSequence: event.afterSequence,
     throughSequence: event.throughSequence,
-    messages: event.messages.map(toCanonicalChatMessage),
+    messages: event.messages.map(toCanonicalPublicMessage),
     nextAfterSequence: event.nextAfterSequence,
     hasMoreAfter: event.hasMoreAfter,
   });
@@ -102,16 +102,26 @@ function measureSerializedEnvelope(utf8ByteLength: number): FinalEnvelopeMeasure
   };
 }
 
-function toCanonicalChatMessage(message: ChatMessage): ChatMessage {
-  return {
+function toCanonicalPublicMessage(message: PublicMessage): PublicMessage {
+  const canonical: PublicMessage = {
     messageId: message.messageId,
     streamId: message.streamId,
     sequence: message.sequence,
     senderActorId: message.senderActorId,
     target: toCanonicalMessageTarget(message.target),
-    text: message.text,
+    content: {
+      type: "text",
+      text: message.content.text,
+    },
     createdAt: message.createdAt,
   };
+
+  return message.sentAtClient === undefined
+    ? canonical
+    : {
+        ...canonical,
+        sentAtClient: message.sentAtClient,
+      };
 }
 
 function toCanonicalMessageTarget(target: MessageTarget): MessageTarget {

@@ -363,7 +363,10 @@ function createLatestResponse(): LatestStreamMessagesResponse {
           type: "channel",
           channelId: "channel-http",
         },
-        text: "hello",
+        content: {
+          type: "text",
+          text: "hello",
+        },
         createdAt: "2026-07-18T00:00:00.000Z",
       },
     ],
@@ -389,7 +392,10 @@ function createStreamMessage(sequence: number) {
     messageId: `message-http-${sequence}`,
     sequence,
     senderActorId: "actor-message-author",
-    text: "hello",
+    content: {
+      type: "text" as const,
+      text: "hello",
+    },
     createdAt: new Date("2026-07-18T00:00:00.000Z"),
   };
 }

@@ -1,4 +1,4 @@
-import { ChatMessageSchema } from "@wake-surfer/realtime-chat-message-contracts";
+import { PublicMessageSchema } from "@wake-surfer/realtime-chat-message-contracts";
 import { z } from "zod";
 
 import {
@@ -23,7 +23,7 @@ export const OlderStreamMessagesResponseSchema = z
   .strictObject({
     streamId: ChannelStreamIdSchema,
     beforeSequence: BeforeSequenceSchema,
-    messages: z.array(ChatMessageSchema).max(MAX_STREAM_MESSAGES_PAGE_LIMIT),
+    messages: z.array(PublicMessageSchema).max(MAX_STREAM_MESSAGES_PAGE_LIMIT),
     nextBeforeSequence: BeforeSequenceSchema.nullable(),
     hasMoreBefore: z.boolean(),
   })

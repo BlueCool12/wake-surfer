@@ -1,7 +1,7 @@
 import { getCanonicalStreamId } from "@wake-surfer/realtime-chat-message-contracts";
 import type {
   ChannelId,
-  ChatMessage,
+  PublicMessage,
   StreamId,
 } from "@wake-surfer/realtime-chat-message-contracts";
 import { z } from "zod";
@@ -44,7 +44,7 @@ export const ThroughSequenceSchema = NonNegativeSafeIntegerSchema;
 
 export function validatePageMessages(
   context: z.RefinementCtx,
-  messages: ChatMessage[],
+  messages: PublicMessage[],
   streamId: StreamId,
 ): void {
   let previousSequence: number | undefined;

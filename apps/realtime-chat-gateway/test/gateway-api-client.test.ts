@@ -22,14 +22,14 @@ describe("gateway API client", () => {
         new Response(
           JSON.stringify({
             status: "accepted",
-            idempotencyKey: "idempotency-1",
+            clientMessageId: "client-message-1",
             message: {
               messageId: "message-1",
               streamId: "channel:room-1",
               sequence: 1,
               senderActorId: "actor-1",
               target: { type: "channel", channelId: "room-1" },
-              text: "hello",
+              content: { type: "text", text: "hello" },
               createdAt: "2026-07-25T00:00:01.000Z",
             },
           }),
@@ -54,9 +54,9 @@ describe("gateway API client", () => {
     });
     await client.sendMessage(
       {
-        idempotencyKey: "idempotency-1",
+        clientMessageId: "client-message-1",
         target: { type: "channel", channelId: "room-1" },
-        text: "hello",
+        content: { type: "text", text: "hello" },
       },
       {
         actorId: "actor-1",

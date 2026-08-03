@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import type { ChatMessage } from "@wake-surfer/realtime-chat-message-contracts";
+import type { PublicMessage } from "@wake-surfer/realtime-chat-message-contracts";
 import type {
   KeyValueStorage,
   StreamMessagesTransport,
@@ -61,13 +61,13 @@ describe("ChatRoomModel", () => {
 
     model.sendMessage(" hello ");
     expect(model.messages.at(-1)).toMatchObject({
-      idempotencyKey: "idempotency-model-3",
+      clientMessageId: "client-model-3",
       status: "pending",
       text: "hello",
     });
     runtime.emitRejected({
       status: "rejected",
-      idempotencyKey: "idempotency-model-3",
+      clientMessageId: "client-model-3",
       reason: "write_forbidden",
     });
     expect(model.messages.at(-1)?.status).toBe("failed");
@@ -76,14 +76,15 @@ describe("ChatRoomModel", () => {
     expect(model.messages.at(-1)?.status).toBe("pending");
     expect(runtime.messageTransport.sendChannelMessage).toHaveBeenCalledTimes(2);
     expect(runtime.messageTransport.sendChannelMessage).toHaveBeenNthCalledWith(2, {
-      idempotencyKey: "idempotency-model-3",
-      text: "hello",
+      clientMessageId: "client-model-3",
+      content: { type: "text", text: "hello" },
+      sentAtClient: "2026-07-18T00:00:00.000Z",
     });
 
     const acceptedMessage = message(1, "channel-model-3");
     runtime.emitAccepted({
       status: "accepted",
-      idempotencyKey: "idempotency-model-3",
+      clientMessageId: "client-model-3",
       message: acceptedMessage,
     });
     runtime.emitCreated(acceptedMessage);
@@ -103,7 +104,7 @@ describe("ChatRoomModel", () => {
     model.sendMessage("연결 전송 실패");
 
     expect(model.messages.at(-1)).toMatchObject({
-      idempotencyKey: "idempotency-model-4",
+      clientMessageId: "client-model-4",
       status: "failed",
       text: "연결 전송 실패",
     });
@@ -175,11 +176,13 @@ describe("ChatRoomModel", () => {
     );
   });
 
-  it("retries with the same idempotency key after recovery replaces a lost accepted frame", async () => {
-    const recoveredMessage: ChatMessage = {
+  it("reconciles an optimistic message when reconnect recovery replaces a lost accepted frame", async () => {
+    const sentAtClient = "2026-07-18T00:00:00.000Z";
+    const recoveredMessage: PublicMessage = {
       ...message(1, "channel-model-7"),
       senderActorId: "model-7",
-      text: "수락 응답 유실",
+      content: { type: "text", text: "수락 응답 유실" },
+      sentAtClient,
     };
     const syncAfter = vi.fn(async () =>
       measured(syncResponse("channel-model-7", 0, 1, [recoveredMessage])),
@@ -196,18 +199,6 @@ describe("ChatRoomModel", () => {
     await vi.waitFor(() => expect(model.recoveryPhase).toBe("ready"));
 
     expect(model.messages).toEqual([
-      expect.objectContaining({ messageId: "message-1", status: "sent" }),
-      expect.objectContaining({ idempotencyKey: "idempotency-model-7", status: "failed" }),
-    ]);
-
-    model.retryMessage(model.messages.at(-1)!);
-    runtime.emitAccepted({
-      status: "accepted",
-      idempotencyKey: "idempotency-model-7",
-      message: recoveredMessage,
-    });
-
-    expect(model.messages).toEqual([
       expect.objectContaining({
         messageId: "message-1",
         status: "sent",
@@ -215,8 +206,9 @@ describe("ChatRoomModel", () => {
       }),
     ]);
     expect(runtime.messageTransport.sendChannelMessage).toHaveBeenCalledWith({
-      idempotencyKey: "idempotency-model-7",
-      text: "수락 응답 유실",
+      clientMessageId: "client-model-7",
+      content: { type: "text", text: "수락 응답 유실" },
+      sentAtClient,
     });
   });
 
@@ -246,7 +238,7 @@ function createModel(actorId: string, channelId: string, runtime: ChatRoomRuntim
   return new ChatRoomModel({
     actorId,
     channelId,
-    createIdempotencyKey: () => `idempotency-${actorId}`,
+    createClientMessageId: () => `client-${actorId}`,
     now: () => "2026-07-18T00:00:00.000Z",
     runtime,
     storage: createMemoryStorage(),
@@ -259,11 +251,11 @@ function createRuntime(
 ): ChatRoomRuntime & {
   emitAccepted: (response: MessageAcceptedResponse) => void;
   emitConnectionGeneration: (connectionGeneration: string) => void;
-  emitCreated: (message: ChatMessage) => void;
+  emitCreated: (message: PublicMessage) => void;
   emitDisconnected: () => void;
   emitRejected: (response: MessageRejectedResponse) => void;
 } {
-  const created = createEmitter<ChatMessage>();
+  const created = createEmitter<PublicMessage>();
   const accepted = createEmitter<MessageAcceptedResponse>();
   const rejected = createEmitter<MessageRejectedResponse>();
   const connectionGenerations = createEmitter<string>();
@@ -329,7 +321,7 @@ function createEmitter<Value>() {
   };
 }
 
-function latestResponse(channelId: string, messages: ChatMessage[]) {
+function latestResponse(channelId: string, messages: PublicMessage[]) {
   const oldest = messages[0];
   const newest = messages.at(-1);
   return {
@@ -341,14 +333,14 @@ function latestResponse(channelId: string, messages: ChatMessage[]) {
   };
 }
 
-function message(sequence: number, channelId: string): ChatMessage {
+function message(sequence: number, channelId: string): PublicMessage {
   return {
     messageId: `message-${sequence}`,
     streamId: `channel:${channelId}`,
     sequence,
     senderActorId: "actor-other",
     target: { type: "channel", channelId },
-    text: `message ${sequence}`,
+    content: { type: "text", text: `message ${sequence}` },
     createdAt: "2026-07-18T00:00:00.000Z",
   };
 }
@@ -357,7 +349,7 @@ function syncResponse(
   channelId: string,
   afterSequence: number,
   throughSequence: number,
-  messages: ChatMessage[],
+  messages: PublicMessage[],
 ) {
   return {
     streamId: `channel:${channelId}`,

@@ -193,13 +193,12 @@ describe("stream message response contracts", () => {
     ).toBe(false);
   });
 
-  it("rejects the obsolete nested content shape", () => {
-    const nestedContentMessage = {
+  it("rejects unsupported SYSTEM message fixtures", () => {
+    const systemMessage = {
       ...createMessage(1),
-      text: undefined,
       content: {
-        type: "text",
-        text: "nested fixture",
+        type: "system",
+        text: "system fixture",
       },
     };
 
@@ -207,7 +206,7 @@ describe("stream message response contracts", () => {
       LatestStreamMessagesResponseSchema.safeParse({
         streamId: "channel:channel-1",
         throughSequence: 1,
-        messages: [nestedContentMessage],
+        messages: [systemMessage],
         nextBeforeSequence: 1,
         hasMoreBefore: false,
       }).success,
