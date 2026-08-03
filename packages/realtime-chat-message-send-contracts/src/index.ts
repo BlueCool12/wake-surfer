@@ -1,21 +1,11 @@
-import {
-  ChatMessageSchema,
-  MessageTargetSchema,
-} from "@wake-surfer/realtime-chat-message-contracts";
-import type {
-  ActorId,
-  ChatMessage,
-  ISODateTime,
-  MessageTarget,
-} from "@wake-surfer/realtime-chat-message-contracts";
 import { z } from "zod";
 
-export type SendMessageRequest = {
-  idempotencyKey: string;
-  target: MessageTarget;
-  text: string;
-};
-
+const MAX_TEXT_UTF8_BYTES = 8_192;
+const NonBlankStringSchema = z.string().trim().min(1);
+const ISODateTimeSchema = z
+  .string()
+  .trim()
+  .pipe(z.iso.datetime({ offset: true }));
 const IdempotencyKeySchema = z
   .string()
   .min(1)
@@ -23,10 +13,49 @@ const IdempotencyKeySchema = z
     (idempotencyKey) => idempotencyKey.trim() === idempotencyKey,
     "idempotencyKey 앞뒤에는 공백을 사용할 수 없습니다.",
   );
+const AcceptedMessageTextSchema = NonBlankStringSchema.refine(
+  (text) => getUtf8ByteLength(text) <= MAX_TEXT_UTF8_BYTES,
+  `메시지 text는 UTF-8 ${MAX_TEXT_UTF8_BYTES} byte 이하여야 합니다.`,
+);
+
+export type SendMessageTarget =
+  | {
+      type: "channel";
+      channelId: string;
+    }
+  | {
+      type: "dm";
+      dmConversationId: string;
+    }
+  | {
+      type: "thread";
+      threadId: string;
+    };
+
+export const SendMessageTargetSchema = z.discriminatedUnion("type", [
+  z.strictObject({
+    type: z.literal("channel"),
+    channelId: NonBlankStringSchema,
+  }),
+  z.strictObject({
+    type: z.literal("dm"),
+    dmConversationId: NonBlankStringSchema,
+  }),
+  z.strictObject({
+    type: z.literal("thread"),
+    threadId: NonBlankStringSchema,
+  }),
+]);
+
+export type SendMessageRequest = {
+  idempotencyKey: string;
+  target: SendMessageTarget;
+  text: string;
+};
 
 export const SendMessageRequestSchema = z.strictObject({
   idempotencyKey: IdempotencyKeySchema,
-  target: MessageTargetSchema,
+  target: SendMessageTargetSchema,
   text: z.string(),
 });
 
@@ -56,14 +85,37 @@ export function parseSendMessageRequest(body: unknown): SendMessageRequestParseR
   };
 }
 
+export type AcceptedTextMessage = {
+  messageId: string;
+  streamId: string;
+  sequence: number;
+  senderActorId: string;
+  target: SendMessageTarget;
+  text: string;
+  createdAt: string;
+};
+
+export const AcceptedTextMessageSchema = z.strictObject({
+  messageId: NonBlankStringSchema,
+  streamId: NonBlankStringSchema,
+  sequence: z.number().int().safe().positive(),
+  senderActorId: NonBlankStringSchema,
+  target: SendMessageTargetSchema,
+  text: AcceptedMessageTextSchema,
+  createdAt: ISODateTimeSchema,
+});
+
 export type SendMessageRejectedReason =
-  "invalid_text" | "target_not_found" | "write_forbidden" | "idempotency_conflict";
+  | "invalid_text"
+  | "target_not_found"
+  | "write_forbidden"
+  | "idempotency_conflict";
 
 export type SendMessageResponse =
   | {
       status: "accepted";
       idempotencyKey: string;
-      message: ChatMessage;
+      message: AcceptedTextMessage;
     }
   | {
       status: "rejected";
@@ -75,7 +127,7 @@ export const SendMessageResponseSchema = z.discriminatedUnion("status", [
   z.strictObject({
     status: z.literal("accepted"),
     idempotencyKey: IdempotencyKeySchema,
-    message: ChatMessageSchema,
+    message: AcceptedTextMessageSchema,
   }),
   z.strictObject({
     status: z.literal("rejected"),
@@ -86,7 +138,11 @@ export const SendMessageResponseSchema = z.discriminatedUnion("status", [
 
 export type OutboundMessageDeliveryRequested = {
   eventId: string;
-  occurredAt: ISODateTime;
-  message: ChatMessage;
-  recipientActorIds: ActorId[];
+  occurredAt: string;
+  message: AcceptedTextMessage;
+  recipientActorIds: string[];
 };
+
+function getUtf8ByteLength(value: string): number {
+  return new TextEncoder().encode(value).byteLength;
+}

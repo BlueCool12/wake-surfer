@@ -94,7 +94,7 @@ describe("send message request parser", () => {
 });
 
 describe("send message response schema", () => {
-  it("validates an accepted ChatMessage correlated by idempotencyKey", () => {
+  it("validates an AcceptedTextMessage correlated by idempotencyKey", () => {
     expect(
       SendMessageResponseSchema.parse({
         status: "accepted",
