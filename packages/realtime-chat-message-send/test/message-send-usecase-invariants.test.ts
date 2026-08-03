@@ -141,7 +141,7 @@ describe("send message usecase invariants", () => {
   it("derives the default resolved stream ID from the shared canonical helper", () => {
     expect(
       createDefaultMessageTargetResolver()({
-        actorId: "actor-1",
+        senderActorId: "actor-1",
         target: {
           type: "channel",
           channelId: "channel-1",
@@ -278,7 +278,7 @@ describe("send message usecase invariants", () => {
     expect(publishCount).toBe(0);
   });
 
-  it("publishes the created ChatMessage exactly once", async () => {
+  it("publishes the created AcceptedTextMessage exactly once", async () => {
     const published: unknown[] = [];
 
     await expect(

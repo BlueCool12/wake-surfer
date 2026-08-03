@@ -1,22 +1,17 @@
-import type {
-  MessageId,
-  MessageTarget,
-  Sequence,
-  StreamId,
-} from "@wake-surfer/realtime-chat-message-contracts";
-import {
-  getMessageTargetId,
-  getMessageTargetType,
-} from "@wake-surfer/realtime-chat-message-contracts";
+import type { SendMessageTarget } from "@wake-surfer/realtime-chat-message-send-contracts";
 import { sql, type Kysely } from "kysely";
-import { normalizeMessageText } from "../../message-send";
-import type { AppendedTextMessage, SendMessageIdempotencyKey } from "../../message-send";
+import {
+  getSendMessageTargetId,
+  getSendMessageTargetType,
+  normalizeMessageText,
+} from "../../message-send";
+import type { AppendedTextMessage, SenderScopedIdempotencyKey } from "../../message-send";
 import type { MessageSendDatabase } from "../../message-send-table";
 
-export type AppendTextMessageParams = SendMessageIdempotencyKey & {
-  messageId: MessageId;
-  streamId: StreamId;
-  target: MessageTarget;
+export type AppendTextMessageInput = SenderScopedIdempotencyKey & {
+  messageId: string;
+  streamId: string;
+  target: SendMessageTarget;
   text: string;
   createdAt: Date;
 };
@@ -46,7 +41,7 @@ type MessageRow = {
 
 export async function findAppendedTextMessageByIdempotencyKey(
   db: Kysely<MessageSendDatabase>,
-  key: SendMessageIdempotencyKey,
+  key: SenderScopedIdempotencyKey,
 ): Promise<AppendedTextMessage | undefined> {
   const row = await db
     .selectFrom("messages")
@@ -73,12 +68,12 @@ export async function findAppendedTextMessageByIdempotencyKey(
 
 export async function appendTextMessage(
   db: Kysely<MessageSendDatabase>,
-  params: AppendTextMessageParams,
+  input: AppendTextMessageInput,
 ): Promise<AppendTextMessageResult> {
   return db.transaction().execute(async (trx) => {
-    await acquireIdempotencyLock(trx, params);
+    await acquireIdempotencyLock(trx, input);
 
-    const existing = await findAppendedTextMessageByIdempotencyKey(trx, params);
+    const existing = await findAppendedTextMessageByIdempotencyKey(trx, input);
 
     if (existing !== undefined) {
       return {
@@ -87,17 +82,17 @@ export async function appendTextMessage(
       };
     }
 
-    const targetType = getMessageTargetType(params.target);
-    const targetId = getMessageTargetId(params.target);
+    const targetType = getSendMessageTargetType(input.target);
+    const targetId = getSendMessageTargetId(input.target);
 
     await trx
       .insertInto("message_streams")
       .values({
-        stream_id: params.streamId,
+        stream_id: input.streamId,
         target_type: targetType,
         target_id: targetId,
         last_sequence: 0,
-        created_at: params.createdAt,
+        created_at: input.createdAt,
       })
       .onConflict((oc) => oc.column("stream_id").doNothing())
       .executeTakeFirstOrThrow();
@@ -105,19 +100,19 @@ export async function appendTextMessage(
     const stream = await trx
       .selectFrom("message_streams")
       .select(["target_type as targetType", "target_id as targetId"])
-      .where("stream_id", "=", params.streamId)
+      .where("stream_id", "=", input.streamId)
       .forUpdate()
       .$castTo<{ targetType?: unknown; targetId?: unknown }>()
       .executeTakeFirstOrThrow();
 
-    assertStreamTargetMatches(stream.targetType, stream.targetId, params.target);
+    assertStreamTargetMatches(stream.targetType, stream.targetId, input.target);
 
     const sequenceRow = await trx
       .updateTable("message_streams")
       .set({
         last_sequence: sql<number>`last_sequence + 1`,
       })
-      .where("stream_id", "=", params.streamId)
+      .where("stream_id", "=", input.streamId)
       .returning("last_sequence as sequence")
       .$castTo<{ sequence?: unknown }>()
       .executeTakeFirstOrThrow();
@@ -127,15 +122,15 @@ export async function appendTextMessage(
     const row = await trx
       .insertInto("messages")
       .values({
-        message_id: params.messageId,
-        stream_id: params.streamId,
+        message_id: input.messageId,
+        stream_id: input.streamId,
         sequence,
-        sender_actor_id: params.senderActorId,
+        sender_actor_id: input.senderActorId,
         target_type: targetType,
         target_id: targetId,
-        idempotency_key: params.idempotencyKey,
-        content_text: params.text,
-        created_at: params.createdAt,
+        idempotency_key: input.idempotencyKey,
+        content_text: input.text,
+        created_at: input.createdAt,
       })
       .returning([
         "message_id as messageId",
@@ -159,7 +154,7 @@ export async function appendTextMessage(
 
 async function acquireIdempotencyLock(
   db: Kysely<MessageSendDatabase>,
-  key: SendMessageIdempotencyKey,
+  key: SenderScopedIdempotencyKey,
 ): Promise<void> {
   await sql`
     SELECT pg_advisory_xact_lock(
@@ -196,17 +191,17 @@ function rowToAppendedTextMessage(row: MessageRow): AppendedTextMessage {
 function assertStreamTargetMatches(
   streamTargetType: unknown,
   streamTargetId: unknown,
-  target: MessageTarget,
+  target: SendMessageTarget,
 ): void {
   if (
-    streamTargetType !== getMessageTargetType(target) ||
-    streamTargetId !== getMessageTargetId(target)
+    streamTargetType !== getSendMessageTargetType(target) ||
+    streamTargetId !== getSendMessageTargetId(target)
   ) {
     throw new Error("기존 message stream의 target이 message target과 일치하지 않습니다.");
   }
 }
 
-function parseTarget(targetType: unknown, targetId: unknown): MessageTarget {
+function parseTarget(targetType: unknown, targetId: unknown): SendMessageTarget {
   const parsedTargetId = parseString(targetId, "targetId");
 
   if (targetType === "channel") {
@@ -233,12 +228,12 @@ function parseTarget(targetType: unknown, targetId: unknown): MessageTarget {
   throw new Error("메시지 쿼리가 올바르지 않은 targetType을 반환했습니다.");
 }
 
-function parseSequence(value: unknown): Sequence {
+function parseSequence(value: unknown): number {
   if (!Number.isSafeInteger(value) || (value as number) <= 0) {
     throw new Error("메시지 쿼리가 올바르지 않은 sequence를 반환했습니다.");
   }
 
-  return value as Sequence;
+  return value as number;
 }
 
 function parseString(value: unknown, fieldName: string): string {

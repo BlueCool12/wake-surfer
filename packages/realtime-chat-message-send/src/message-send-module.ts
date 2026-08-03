@@ -1,15 +1,13 @@
-import { getCanonicalStreamId } from "@wake-surfer/realtime-chat-message-contracts";
 import type {
-  ActorId,
-  MessageTarget,
-  StreamId,
-} from "@wake-surfer/realtime-chat-message-contracts";
-import type { OutboundMessageDeliveryRequested } from "@wake-surfer/realtime-chat-message-send-contracts";
+  OutboundMessageDeliveryRequested,
+  SendMessageTarget,
+} from "@wake-surfer/realtime-chat-message-send-contracts";
 import type { Kysely } from "kysely";
 import {
-  assertMessageTarget,
+  assertSendMessageTarget,
   createDefaultMessageIdGenerator,
   createDefaultOutboundEventIdGenerator,
+  getSendMessageStreamId,
 } from "./message-send";
 import type {
   MessageIdGenerator,
@@ -27,8 +25,8 @@ import { sendMessage } from "./usecases/send-message/send-message.usecase";
 export type MessageTargetResolution =
   | {
       status: "resolved";
-      streamId: StreamId;
-      recipientActorIds: ActorId[];
+      streamId: string;
+      recipientActorIds: string[];
     }
   | {
       status: "rejected";
@@ -36,8 +34,8 @@ export type MessageTargetResolution =
     };
 
 export type MessageTargetResolver = (input: {
-  actorId: ActorId;
-  target: MessageTarget;
+  senderActorId: string;
+  target: SendMessageTarget;
 }) => MessageTargetResolution | Promise<MessageTargetResolution>;
 
 export type MessageWriteAuthorization =
@@ -49,9 +47,9 @@ export type MessageWriteAuthorization =
     };
 
 export type MessageWriteAuthorizer = (input: {
-  actorId: ActorId;
-  target: MessageTarget;
-  streamId: StreamId;
+  senderActorId: string;
+  target: SendMessageTarget;
+  streamId: string;
 }) => MessageWriteAuthorization | Promise<MessageWriteAuthorization>;
 
 export type OutboundDeliveryPublisher = (
@@ -74,11 +72,11 @@ export type MessageSendModule = {
 
 export function createDefaultMessageTargetResolver(): MessageTargetResolver {
   return ({ target }) => {
-    assertMessageTarget(target);
+    assertSendMessageTarget(target);
 
     return {
       status: "resolved",
-      streamId: getCanonicalStreamId(target),
+      streamId: getSendMessageStreamId(target),
       recipientActorIds: [],
     };
   };

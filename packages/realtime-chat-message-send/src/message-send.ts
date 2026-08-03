@@ -1,34 +1,28 @@
-import {
-  getUtf8ByteLength,
-  MAX_TEXT_UTF8_BYTES,
-  MessageTargetSchema,
-} from "@wake-surfer/realtime-chat-message-contracts";
+import { SendMessageTargetSchema } from "@wake-surfer/realtime-chat-message-send-contracts";
 import type {
-  ActorId,
-  ChatMessage,
-  MessageId,
-  MessageTarget,
-  Sequence,
-  StreamId,
-} from "@wake-surfer/realtime-chat-message-contracts";
+  AcceptedTextMessage,
+  SendMessageTarget,
+} from "@wake-surfer/realtime-chat-message-send-contracts";
 
-export type SendMessageIdempotencyKey = Readonly<{
-  senderActorId: ActorId;
+const MAX_TEXT_UTF8_BYTES = 8_192;
+
+export type SenderScopedIdempotencyKey = Readonly<{
+  senderActorId: string;
   idempotencyKey: string;
 }>;
 
-export type SendMessageInput = SendMessageIdempotencyKey &
+export type SendMessageInput = SenderScopedIdempotencyKey &
   Readonly<{
-    target: MessageTarget;
+    target: SendMessageTarget;
     text: string;
   }>;
 
 export type AppendedTextMessage = Readonly<{
-  messageId: MessageId;
-  streamId: StreamId;
-  sequence: Sequence;
-  senderActorId: ActorId;
-  target: MessageTarget;
+  messageId: string;
+  streamId: string;
+  sequence: number;
+  senderActorId: string;
+  target: SendMessageTarget;
   text: string;
   createdAt: Date;
 }>;
@@ -44,14 +38,14 @@ export type SendMessageResult =
     };
 
 export type MessageIdGenerator = {
-  generate: () => MessageId;
+  generate: () => string;
 };
 
 export type OutboundEventIdGenerator = {
   generate: () => string;
 };
 
-export function assertActorId(actorId: ActorId): void {
+export function assertActorId(actorId: string): void {
   assertNonBlankString(actorId, "actorId");
 }
 
@@ -63,17 +57,17 @@ export function assertIdempotencyKey(idempotencyKey: string): void {
   }
 }
 
-export function assertMessageId(messageId: MessageId): void {
+export function assertMessageId(messageId: string): void {
   assertNonBlankString(messageId, "messageId");
 }
 
-export function assertStreamId(streamId: StreamId): void {
+export function assertStreamId(streamId: string): void {
   assertNonBlankString(streamId, "streamId");
 }
 
-export function assertMessageTarget(target: unknown): asserts target is MessageTarget {
-  if (!MessageTargetSchema.safeParse(target).success) {
-    throw new Error("message target이 올바르지 않습니다.");
+export function assertSendMessageTarget(target: unknown): asserts target is SendMessageTarget {
+  if (!SendMessageTargetSchema.safeParse(target).success) {
+    throw new Error("send message target이 올바르지 않습니다.");
   }
 }
 
@@ -87,7 +81,28 @@ export function normalizeMessageText(text: string): string | undefined {
   return normalized;
 }
 
-export function toChatMessage(message: AppendedTextMessage): ChatMessage {
+export function getSendMessageTargetType(
+  target: SendMessageTarget,
+): SendMessageTarget["type"] {
+  return target.type;
+}
+
+export function getSendMessageTargetId(target: SendMessageTarget): string {
+  switch (target.type) {
+    case "channel":
+      return target.channelId;
+    case "dm":
+      return target.dmConversationId;
+    case "thread":
+      return target.threadId;
+  }
+}
+
+export function getSendMessageStreamId(target: SendMessageTarget): string {
+  return `${getSendMessageTargetType(target)}:${getSendMessageTargetId(target)}`;
+}
+
+export function toAcceptedTextMessage(message: AppendedTextMessage): AcceptedTextMessage {
   return {
     messageId: message.messageId,
     streamId: message.streamId,
@@ -110,6 +125,10 @@ export const createDefaultOutboundEventIdGenerator = (): OutboundEventIdGenerato
     return `evt_${globalThis.crypto.randomUUID()}`;
   },
 });
+
+function getUtf8ByteLength(value: string): number {
+  return new TextEncoder().encode(value).byteLength;
+}
 
 function assertNonBlankString(value: unknown, fieldName: string): asserts value is string {
   if (typeof value !== "string" || value.trim().length === 0) {

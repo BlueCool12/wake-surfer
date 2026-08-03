@@ -1,25 +1,23 @@
-import {
-  getMessageTargetId,
-  getMessageTargetType,
-} from "@wake-surfer/realtime-chat-message-contracts";
 import type { OutboundMessageDeliveryRequested } from "@wake-surfer/realtime-chat-message-send-contracts";
 import type { Kysely } from "kysely";
 import {
   assertActorId,
   assertIdempotencyKey,
   assertMessageId,
-  assertMessageTarget,
+  assertSendMessageTarget,
   assertStreamId,
+  getSendMessageTargetId,
+  getSendMessageTargetType,
   normalizeMessageText,
-  toChatMessage,
+  toAcceptedTextMessage,
 } from "../../message-send";
 import type {
   AppendedTextMessage,
   MessageIdGenerator,
   OutboundEventIdGenerator,
-  SendMessageIdempotencyKey,
   SendMessageInput,
   SendMessageResult,
+  SenderScopedIdempotencyKey,
 } from "../../message-send";
 import type {
   MessageTargetResolver,
@@ -27,7 +25,7 @@ import type {
   OutboundDeliveryPublisher,
 } from "../../message-send-module";
 import type { MessageSendDatabase } from "../../message-send-table";
-import type { AppendTextMessageParams, AppendTextMessageResult } from "./send-message.kysely";
+import type { AppendTextMessageInput, AppendTextMessageResult } from "./send-message.kysely";
 
 export type SendMessageDeps = {
   db: Kysely<MessageSendDatabase>;
@@ -39,11 +37,11 @@ export type SendMessageDeps = {
   outboundEventIdGenerator: OutboundEventIdGenerator;
   findAppendedTextMessageByIdempotencyKey: (
     db: Kysely<MessageSendDatabase>,
-    key: SendMessageIdempotencyKey,
+    key: SenderScopedIdempotencyKey,
   ) => Promise<AppendedTextMessage | undefined>;
   appendTextMessage: (
     db: Kysely<MessageSendDatabase>,
-    params: AppendTextMessageParams,
+    input: AppendTextMessageInput,
   ) => Promise<AppendTextMessageResult>;
 };
 
@@ -53,7 +51,7 @@ export async function sendMessage(
 ): Promise<SendMessageResult> {
   assertActorId(input.senderActorId);
   assertIdempotencyKey(input.idempotencyKey);
-  assertMessageTarget(input.target);
+  assertSendMessageTarget(input.target);
 
   const text = normalizeMessageText(input.text);
 
@@ -64,18 +62,21 @@ export async function sendMessage(
     };
   }
 
-  const idempotencyKey: SendMessageIdempotencyKey = {
+  const scopedIdempotencyKey: SenderScopedIdempotencyKey = {
     senderActorId: input.senderActorId,
     idempotencyKey: input.idempotencyKey,
   };
-  const existing = await deps.findAppendedTextMessageByIdempotencyKey(deps.db, idempotencyKey);
+  const existing = await deps.findAppendedTextMessageByIdempotencyKey(
+    deps.db,
+    scopedIdempotencyKey,
+  );
 
   if (existing !== undefined) {
     return resultForExistingMessage(input, text, existing);
   }
 
   const resolvedTarget = await deps.resolveTarget({
-    actorId: input.senderActorId,
+    senderActorId: input.senderActorId,
     target: input.target,
   });
 
@@ -89,7 +90,7 @@ export async function sendMessage(
   assertStreamId(resolvedTarget.streamId);
 
   const authorization = await deps.authorizeWrite({
-    actorId: input.senderActorId,
+    senderActorId: input.senderActorId,
     target: input.target,
     streamId: resolvedTarget.streamId,
   });
@@ -111,7 +112,7 @@ export async function sendMessage(
   }
 
   const appendResult = await deps.appendTextMessage(deps.db, {
-    ...idempotencyKey,
+    ...scopedIdempotencyKey,
     messageId,
     streamId: resolvedTarget.streamId,
     target: input.target,
@@ -128,7 +129,7 @@ export async function sendMessage(
   await publishDeliveryBestEffort(deps, {
     eventId: deps.outboundEventIdGenerator.generate(),
     occurredAt: savedMessage.createdAt.toISOString(),
-    message: toChatMessage(savedMessage),
+    message: toAcceptedTextMessage(savedMessage),
     recipientActorIds: resolvedTarget.recipientActorIds,
   });
 
@@ -145,8 +146,8 @@ function resultForExistingMessage(
 ): SendMessageResult {
   if (
     existing.senderActorId !== input.senderActorId ||
-    getMessageTargetType(existing.target) !== getMessageTargetType(input.target) ||
-    getMessageTargetId(existing.target) !== getMessageTargetId(input.target) ||
+    getSendMessageTargetType(existing.target) !== getSendMessageTargetType(input.target) ||
+    getSendMessageTargetId(existing.target) !== getSendMessageTargetId(input.target) ||
     existing.text !== text
   ) {
     return {
