@@ -3,47 +3,9 @@ import type {
   AcceptedTextMessage,
   MessageTarget,
 } from "@wake-surfer/realtime-chat-message-send-contracts";
+import type { AppendedTextMessage } from "./send-message.types";
 
 const MAX_TEXT_UTF8_BYTES = 8_192;
-
-export type SenderScopedIdempotencyKey = Readonly<{
-  senderActorId: string;
-  idempotencyKey: string;
-}>;
-
-export type SendMessageInput = SenderScopedIdempotencyKey &
-  Readonly<{
-    target: MessageTarget;
-    text: string;
-  }>;
-
-export type AppendedTextMessage = Readonly<{
-  messageId: string;
-  streamId: string;
-  sequence: number;
-  senderActorId: string;
-  target: MessageTarget;
-  text: string;
-  createdAt: Date;
-}>;
-
-export type SendMessageResult =
-  | {
-      status: "accepted";
-      message: AppendedTextMessage;
-    }
-  | {
-      status: "rejected";
-      reason: "invalid_text" | "target_not_found" | "write_forbidden" | "idempotency_conflict";
-    };
-
-export type MessageIdGenerator = {
-  generate: () => string;
-};
-
-export type OutboundEventIdGenerator = {
-  generate: () => string;
-};
 
 export function assertActorId(actorId: string): void {
   assertNonBlankString(actorId, "actorId");
@@ -114,17 +76,9 @@ export function toAcceptedTextMessage(message: AppendedTextMessage): AcceptedTex
   };
 }
 
-export const createDefaultMessageIdGenerator = (): MessageIdGenerator => ({
-  generate() {
-    return `msg_${globalThis.crypto.randomUUID()}`;
-  },
-});
-
-export const createDefaultOutboundEventIdGenerator = (): OutboundEventIdGenerator => ({
-  generate() {
-    return `evt_${globalThis.crypto.randomUUID()}`;
-  },
-});
+export function generateDefaultMessageId(): string {
+  return `msg_${globalThis.crypto.randomUUID()}`;
+}
 
 function getUtf8ByteLength(value: string): number {
   return new TextEncoder().encode(value).byteLength;

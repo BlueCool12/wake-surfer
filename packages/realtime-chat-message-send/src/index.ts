@@ -1,21 +1,14 @@
-export {
-  createDefaultMessageTargetResolver,
-  createMessageSendModule,
-  type CreateMessageSendModuleConfig,
-  type MessageSendModule,
-  type MessageTargetResolution,
-  type MessageTargetResolver,
-  type MessageWriteAuthorization,
-  type MessageWriteAuthorizer,
-} from "./message-send-module";
-export {
-  createDefaultMessageIdGenerator,
-  createDefaultOutboundEventIdGenerator,
-  toAcceptedTextMessage,
-  type AppendedTextMessage,
-  type MessageIdGenerator,
-  type OutboundEventIdGenerator,
-  type SendMessageInput,
-  type SendMessageResult,
-  type SenderScopedIdempotencyKey,
-} from "./message-send";
+export { createSendMessage } from "./usecases/send-message/send-message.usecase";
+export type {
+  AppendedTextMessage,
+  MessageTargetResolution,
+  MessageTargetResolver,
+  MessageWriteAuthorization,
+  MessageWriteAuthorizer,
+  SendMessage,
+  SendMessageDependencies,
+  SendMessageInput,
+  SendMessageResult,
+  SenderScopedIdempotencyKey,
+} from "./send-message.types";
+export { toAcceptedTextMessage } from "./message-send";

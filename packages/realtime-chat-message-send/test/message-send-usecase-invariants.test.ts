@@ -1,15 +1,11 @@
 import type { Kysely } from "kysely";
 import { describe, expect, it } from "vitest";
 
-import {
-  createDefaultMessageTargetResolver,
-  type AppendedTextMessage,
-  type SendMessageInput,
-} from "../src";
+import { type AppendedTextMessage, type SendMessageInput } from "../src";
 import type { MessageSendDatabase } from "../src/message-send-table";
 import {
-  sendMessage,
-  type SendMessageDeps,
+  executeSendMessage,
+  type SendMessageExecutionDependencies,
 } from "../src/usecases/send-message/send-message.usecase";
 
 const db = {} as Kysely<MessageSendDatabase>;
@@ -35,23 +31,17 @@ const savedMessage: AppendedTextMessage = {
   createdAt: new Date("2026-07-11T00:00:00.000Z"),
 };
 
-const baseDeps: SendMessageDeps = {
+const baseDeps: SendMessageExecutionDependencies = {
   db,
   now: () => new Date("2026-07-11T00:00:00.000Z"),
   resolveTarget: () => ({
     status: "resolved",
     streamId: "channel:channel-1",
-    recipientActorIds: ["actor-2"],
   }),
   authorizeWrite: () => ({
     status: "allowed",
   }),
-  messageIdGenerator: {
-    generate: () => "message-1",
-  },
-  outboundEventIdGenerator: {
-    generate: () => "event-1",
-  },
+  generateMessageId: () => "message-1",
   findAppendedTextMessageByIdempotencyKey: async () => undefined,
   appendTextMessage: async () => ({
     status: "created",
@@ -62,7 +52,7 @@ const baseDeps: SendMessageDeps = {
 describe("send message usecase invariants", () => {
   it("rejects blank sender and idempotency values before persistence", async () => {
     let lookupCount = 0;
-    const deps: SendMessageDeps = {
+    const deps: SendMessageExecutionDependencies = {
       ...baseDeps,
       findAppendedTextMessageByIdempotencyKey: async () => {
         lookupCount += 1;
@@ -71,7 +61,7 @@ describe("send message usecase invariants", () => {
     };
 
     await expect(
-      sendMessage(
+      executeSendMessage(
         {
           ...input,
           senderActorId: " ",
@@ -80,7 +70,7 @@ describe("send message usecase invariants", () => {
       ),
     ).rejects.toThrow("actorId");
     await expect(
-      sendMessage(
+      executeSendMessage(
         {
           ...input,
           idempotencyKey: " ",
@@ -99,7 +89,7 @@ describe("send message usecase invariants", () => {
       let appendCount = 0;
 
       await expect(
-        sendMessage(
+        executeSendMessage(
           {
             ...input,
             text,
@@ -115,7 +105,6 @@ describe("send message usecase invariants", () => {
               return {
                 status: "resolved",
                 streamId: "channel:channel-1",
-                recipientActorIds: [],
               };
             },
             appendTextMessage: async () => {
@@ -138,25 +127,9 @@ describe("send message usecase invariants", () => {
     },
   );
 
-  it("derives the default resolved stream ID from the shared canonical helper", () => {
-    expect(
-      createDefaultMessageTargetResolver()({
-        senderActorId: "actor-1",
-        target: {
-          type: "channel",
-          channelId: "channel-1",
-        },
-      }),
-    ).toEqual({
-      status: "resolved",
-      streamId: "channel:channel-1",
-      recipientActorIds: [],
-    });
-  });
-
   it("returns target and authorization rejections as feature results", async () => {
     await expect(
-      sendMessage(input, {
+      executeSendMessage(input, {
         ...baseDeps,
         resolveTarget: () => ({
           status: "rejected",
@@ -169,7 +142,7 @@ describe("send message usecase invariants", () => {
     });
 
     await expect(
-      sendMessage(input, {
+      executeSendMessage(input, {
         ...baseDeps,
         authorizeWrite: () => ({ status: "denied" }),
       }),
@@ -181,7 +154,7 @@ describe("send message usecase invariants", () => {
 
   it("returns the existing message for the same sender, key, target, and normalized text", async () => {
     await expect(
-      sendMessage(
+      executeSendMessage(
         {
           ...input,
           text: " hello ",
@@ -227,7 +200,7 @@ describe("send message usecase invariants", () => {
     },
   ])("rejects an existing key used with different $name", async ({ existing }) => {
     await expect(
-      sendMessage(input, {
+      executeSendMessage(input, {
         ...baseDeps,
         findAppendedTextMessageByIdempotencyKey: async () => existing,
       }),
@@ -237,28 +210,21 @@ describe("send message usecase invariants", () => {
     });
   });
 
-  it("checks a concurrently appended message without publishing delivery again", async () => {
-    let publishCount = 0;
-
+  it("checks a concurrently appended message against the original payload", async () => {
     await expect(
-      sendMessage(input, {
+      executeSendMessage(input, {
         ...baseDeps,
         appendTextMessage: async () => ({
           status: "existing",
           message: savedMessage,
         }),
-        publishDeliveryRequested: () => {
-          publishCount += 1;
-        },
       }),
     ).resolves.toEqual({
       status: "accepted",
       message: savedMessage,
     });
-    expect(publishCount).toBe(0);
-
     await expect(
-      sendMessage(input, {
+      executeSendMessage(input, {
         ...baseDeps,
         appendTextMessage: async () => ({
           status: "existing",
@@ -267,63 +233,10 @@ describe("send message usecase invariants", () => {
             text: "different",
           },
         }),
-        publishDeliveryRequested: () => {
-          publishCount += 1;
-        },
       }),
     ).resolves.toEqual({
       status: "rejected",
       reason: "idempotency_conflict",
-    });
-    expect(publishCount).toBe(0);
-  });
-
-  it("publishes the created AcceptedTextMessage exactly once", async () => {
-    const published: unknown[] = [];
-
-    await expect(
-      sendMessage(input, {
-        ...baseDeps,
-        publishDeliveryRequested: (event) => {
-          published.push(event);
-        },
-      }),
-    ).resolves.toEqual({
-      status: "accepted",
-      message: savedMessage,
-    });
-    expect(published).toEqual([
-      {
-        eventId: "event-1",
-        occurredAt: "2026-07-11T00:00:00.000Z",
-        message: {
-          messageId: "message-1",
-          streamId: "channel:channel-1",
-          sequence: 1,
-          senderActorId: "actor-1",
-          target: {
-            type: "channel",
-            channelId: "channel-1",
-          },
-          text: "hello",
-          createdAt: "2026-07-11T00:00:00.000Z",
-        },
-        recipientActorIds: ["actor-2"],
-      },
-    ]);
-  });
-
-  it("keeps the accepted result when delivery publish fails", async () => {
-    await expect(
-      sendMessage(input, {
-        ...baseDeps,
-        publishDeliveryRequested: () => {
-          throw new Error("broker unavailable");
-        },
-      }),
-    ).resolves.toEqual({
-      status: "accepted",
-      message: savedMessage,
     });
   });
 });

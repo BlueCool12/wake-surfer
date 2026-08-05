@@ -1,4 +1,3 @@
-import type { OutboundMessageDeliveryRequested } from "@wake-surfer/realtime-chat-message-send-contracts";
 import type { Kysely } from "kysely";
 import {
   assertActorId,
@@ -8,33 +7,32 @@ import {
   assertStreamId,
   getSendMessageTargetId,
   getSendMessageTargetType,
+  generateDefaultMessageId,
   normalizeMessageText,
-  toAcceptedTextMessage,
 } from "../../message-send";
 import type {
   AppendedTextMessage,
-  MessageIdGenerator,
-  OutboundEventIdGenerator,
+  MessageTargetResolver,
+  MessageWriteAuthorizer,
+  SendMessage,
+  SendMessageDependencies,
   SendMessageInput,
   SendMessageResult,
   SenderScopedIdempotencyKey,
-} from "../../message-send";
-import type {
-  MessageTargetResolver,
-  MessageWriteAuthorizer,
-  OutboundDeliveryPublisher,
-} from "../../message-send-module";
+} from "../../send-message.types";
 import type { MessageSendDatabase } from "../../message-send-table";
+import {
+  appendTextMessage,
+  findAppendedTextMessageByIdempotencyKey,
+} from "./send-message.kysely";
 import type { AppendTextMessageInput, AppendTextMessageResult } from "./send-message.kysely";
 
-export type SendMessageDeps = {
+export type SendMessageExecutionDependencies = {
   db: Kysely<MessageSendDatabase>;
   now: () => Date;
   resolveTarget: MessageTargetResolver;
   authorizeWrite: MessageWriteAuthorizer;
-  publishDeliveryRequested?: OutboundDeliveryPublisher;
-  messageIdGenerator: MessageIdGenerator;
-  outboundEventIdGenerator: OutboundEventIdGenerator;
+  generateMessageId: () => string;
   findAppendedTextMessageByIdempotencyKey: (
     db: Kysely<MessageSendDatabase>,
     key: SenderScopedIdempotencyKey,
@@ -45,9 +43,26 @@ export type SendMessageDeps = {
   ) => Promise<AppendTextMessageResult>;
 };
 
-export async function sendMessage(
+export function createSendMessage<DB extends MessageSendDatabase>(
+  dependencies: SendMessageDependencies<DB>,
+): SendMessage {
+  const db = dependencies.db as Kysely<MessageSendDatabase>;
+  const executionDependencies: SendMessageExecutionDependencies = {
+    db,
+    authorizeWrite: dependencies.authorizeWrite,
+    resolveTarget: dependencies.resolveTarget,
+    generateMessageId: dependencies.generateMessageId ?? generateDefaultMessageId,
+    now: dependencies.now ?? createNow,
+    findAppendedTextMessageByIdempotencyKey,
+    appendTextMessage,
+  };
+
+  return (input) => executeSendMessage(input, executionDependencies);
+}
+
+export async function executeSendMessage(
   input: SendMessageInput,
-  deps: SendMessageDeps,
+  dependencies: SendMessageExecutionDependencies,
 ): Promise<SendMessageResult> {
   assertActorId(input.senderActorId);
   assertIdempotencyKey(input.idempotencyKey);
@@ -66,8 +81,8 @@ export async function sendMessage(
     senderActorId: input.senderActorId,
     idempotencyKey: input.idempotencyKey,
   };
-  const existing = await deps.findAppendedTextMessageByIdempotencyKey(
-    deps.db,
+  const existing = await dependencies.findAppendedTextMessageByIdempotencyKey(
+    dependencies.db,
     scopedIdempotencyKey,
   );
 
@@ -75,7 +90,7 @@ export async function sendMessage(
     return resultForExistingMessage(input, text, existing);
   }
 
-  const resolvedTarget = await deps.resolveTarget({
+  const resolvedTarget = await dependencies.resolveTarget({
     senderActorId: input.senderActorId,
     target: input.target,
   });
@@ -89,7 +104,7 @@ export async function sendMessage(
 
   assertStreamId(resolvedTarget.streamId);
 
-  const authorization = await deps.authorizeWrite({
+  const authorization = await dependencies.authorizeWrite({
     senderActorId: input.senderActorId,
     target: input.target,
     streamId: resolvedTarget.streamId,
@@ -102,16 +117,16 @@ export async function sendMessage(
     };
   }
 
-  const messageId = deps.messageIdGenerator.generate();
+  const messageId = dependencies.generateMessageId();
   assertMessageId(messageId);
 
-  const createdAt = deps.now();
+  const createdAt = dependencies.now();
 
   if (Number.isNaN(createdAt.getTime())) {
     throw new Error("message createdAt을 생성하는 server clock이 올바르지 않습니다.");
   }
 
-  const appendResult = await deps.appendTextMessage(deps.db, {
+  const appendResult = await dependencies.appendTextMessage(dependencies.db, {
     ...scopedIdempotencyKey,
     messageId,
     streamId: resolvedTarget.streamId,
@@ -124,18 +139,9 @@ export async function sendMessage(
     return resultForExistingMessage(input, text, appendResult.message);
   }
 
-  const savedMessage = appendResult.message;
-
-  await publishDeliveryBestEffort(deps, {
-    eventId: deps.outboundEventIdGenerator.generate(),
-    occurredAt: savedMessage.createdAt.toISOString(),
-    message: toAcceptedTextMessage(savedMessage),
-    recipientActorIds: resolvedTarget.recipientActorIds,
-  });
-
   return {
     status: "accepted",
-    message: savedMessage,
+    message: appendResult.message,
   };
 }
 
@@ -162,17 +168,6 @@ function resultForExistingMessage(
   };
 }
 
-async function publishDeliveryBestEffort(
-  deps: SendMessageDeps,
-  event: OutboundMessageDeliveryRequested,
-): Promise<void> {
-  if (!deps.publishDeliveryRequested) {
-    return;
-  }
-
-  try {
-    await deps.publishDeliveryRequested(event);
-  } catch {
-    // 메시지 저장 성공과 실시간 delivery 성공은 분리한다.
-  }
+function createNow(): Date {
+  return new Date();
 }
