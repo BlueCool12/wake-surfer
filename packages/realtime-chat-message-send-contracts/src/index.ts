@@ -18,7 +18,7 @@ const AcceptedMessageTextSchema = NonBlankStringSchema.refine(
   `메시지 text는 UTF-8 ${MAX_TEXT_UTF8_BYTES} byte 이하여야 합니다.`,
 );
 
-export type SendMessageTarget =
+export type MessageTarget =
   | {
       type: "channel";
       channelId: string;
@@ -32,7 +32,7 @@ export type SendMessageTarget =
       threadId: string;
     };
 
-export const SendMessageTargetSchema = z.discriminatedUnion("type", [
+export const MessageTargetSchema = z.discriminatedUnion("type", [
   z.strictObject({
     type: z.literal("channel"),
     channelId: NonBlankStringSchema,
@@ -49,13 +49,13 @@ export const SendMessageTargetSchema = z.discriminatedUnion("type", [
 
 export type SendMessageRequest = {
   idempotencyKey: string;
-  target: SendMessageTarget;
+  target: MessageTarget;
   text: string;
 };
 
 export const SendMessageRequestSchema = z.strictObject({
   idempotencyKey: IdempotencyKeySchema,
-  target: SendMessageTargetSchema,
+  target: MessageTargetSchema,
   text: z.string(),
 });
 
@@ -90,7 +90,7 @@ export type AcceptedTextMessage = {
   streamId: string;
   sequence: number;
   senderActorId: string;
-  target: SendMessageTarget;
+  target: MessageTarget;
   text: string;
   createdAt: string;
 };
@@ -100,7 +100,7 @@ export const AcceptedTextMessageSchema = z.strictObject({
   streamId: NonBlankStringSchema,
   sequence: z.number().int().safe().positive(),
   senderActorId: NonBlankStringSchema,
-  target: SendMessageTargetSchema,
+  target: MessageTargetSchema,
   text: AcceptedMessageTextSchema,
   createdAt: ISODateTimeSchema,
 });

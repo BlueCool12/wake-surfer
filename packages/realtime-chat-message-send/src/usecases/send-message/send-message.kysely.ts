@@ -1,4 +1,4 @@
-import type { SendMessageTarget } from "@wake-surfer/realtime-chat-message-send-contracts";
+import type { MessageTarget } from "@wake-surfer/realtime-chat-message-send-contracts";
 import { sql, type Kysely } from "kysely";
 import {
   getSendMessageTargetId,
@@ -11,7 +11,7 @@ import type { MessageSendDatabase } from "../../message-send-table";
 export type AppendTextMessageInput = SenderScopedIdempotencyKey & {
   messageId: string;
   streamId: string;
-  target: SendMessageTarget;
+  target: MessageTarget;
   text: string;
   createdAt: Date;
 };
@@ -191,7 +191,7 @@ function rowToAppendedTextMessage(row: MessageRow): AppendedTextMessage {
 function assertStreamTargetMatches(
   streamTargetType: unknown,
   streamTargetId: unknown,
-  target: SendMessageTarget,
+  target: MessageTarget,
 ): void {
   if (
     streamTargetType !== getSendMessageTargetType(target) ||
@@ -201,7 +201,7 @@ function assertStreamTargetMatches(
   }
 }
 
-function parseTarget(targetType: unknown, targetId: unknown): SendMessageTarget {
+function parseTarget(targetType: unknown, targetId: unknown): MessageTarget {
   const parsedTargetId = parseString(targetId, "targetId");
 
   if (targetType === "channel") {

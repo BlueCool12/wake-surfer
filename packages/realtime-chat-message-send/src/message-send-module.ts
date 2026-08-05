@@ -1,6 +1,6 @@
 import type {
   OutboundMessageDeliveryRequested,
-  SendMessageTarget,
+  MessageTarget,
 } from "@wake-surfer/realtime-chat-message-send-contracts";
 import type { Kysely } from "kysely";
 import {
@@ -35,7 +35,7 @@ export type MessageTargetResolution =
 
 export type MessageTargetResolver = (input: {
   senderActorId: string;
-  target: SendMessageTarget;
+  target: MessageTarget;
 }) => MessageTargetResolution | Promise<MessageTargetResolution>;
 
 export type MessageWriteAuthorization =
@@ -48,7 +48,7 @@ export type MessageWriteAuthorization =
 
 export type MessageWriteAuthorizer = (input: {
   senderActorId: string;
-  target: SendMessageTarget;
+  target: MessageTarget;
   streamId: string;
 }) => MessageWriteAuthorization | Promise<MessageWriteAuthorization>;
 

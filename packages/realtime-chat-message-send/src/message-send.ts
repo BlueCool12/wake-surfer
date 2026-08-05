@@ -1,7 +1,7 @@
-import { SendMessageTargetSchema } from "@wake-surfer/realtime-chat-message-send-contracts";
+import { MessageTargetSchema } from "@wake-surfer/realtime-chat-message-send-contracts";
 import type {
   AcceptedTextMessage,
-  SendMessageTarget,
+  MessageTarget,
 } from "@wake-surfer/realtime-chat-message-send-contracts";
 
 const MAX_TEXT_UTF8_BYTES = 8_192;
@@ -13,7 +13,7 @@ export type SenderScopedIdempotencyKey = Readonly<{
 
 export type SendMessageInput = SenderScopedIdempotencyKey &
   Readonly<{
-    target: SendMessageTarget;
+    target: MessageTarget;
     text: string;
   }>;
 
@@ -22,7 +22,7 @@ export type AppendedTextMessage = Readonly<{
   streamId: string;
   sequence: number;
   senderActorId: string;
-  target: SendMessageTarget;
+  target: MessageTarget;
   text: string;
   createdAt: Date;
 }>;
@@ -65,8 +65,8 @@ export function assertStreamId(streamId: string): void {
   assertNonBlankString(streamId, "streamId");
 }
 
-export function assertSendMessageTarget(target: unknown): asserts target is SendMessageTarget {
-  if (!SendMessageTargetSchema.safeParse(target).success) {
+export function assertSendMessageTarget(target: unknown): asserts target is MessageTarget {
+  if (!MessageTargetSchema.safeParse(target).success) {
     throw new Error("send message target이 올바르지 않습니다.");
   }
 }
@@ -82,12 +82,12 @@ export function normalizeMessageText(text: string): string | undefined {
 }
 
 export function getSendMessageTargetType(
-  target: SendMessageTarget,
-): SendMessageTarget["type"] {
+  target: MessageTarget,
+): MessageTarget["type"] {
   return target.type;
 }
 
-export function getSendMessageTargetId(target: SendMessageTarget): string {
+export function getSendMessageTargetId(target: MessageTarget): string {
   switch (target.type) {
     case "channel":
       return target.channelId;
@@ -98,7 +98,7 @@ export function getSendMessageTargetId(target: SendMessageTarget): string {
   }
 }
 
-export function getSendMessageStreamId(target: SendMessageTarget): string {
+export function getSendMessageStreamId(target: MessageTarget): string {
   return `${getSendMessageTargetType(target)}:${getSendMessageTargetId(target)}`;
 }
 
