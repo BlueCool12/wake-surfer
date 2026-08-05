@@ -26,17 +26,17 @@ export type AppendTextMessageResult =
       message: AppendedTextMessage;
     };
 
-type MessageRow = {
-  messageId?: unknown;
-  streamId?: unknown;
-  streamTargetType?: unknown;
-  streamTargetId?: unknown;
-  sequence?: unknown;
-  senderActorId?: unknown;
-  targetType?: unknown;
-  targetId?: unknown;
-  text?: unknown;
-  createdAt?: unknown;
+type AppendedTextMessageRow = {
+  messageId: string;
+  streamId: string;
+  streamTargetType?: string;
+  streamTargetId?: string;
+  sequence: number;
+  senderActorId: string;
+  targetType: string;
+  targetId: string;
+  text: string;
+  createdAt: Date;
 };
 
 export async function findAppendedTextMessageByIdempotencyKey(
@@ -60,7 +60,6 @@ export async function findAppendedTextMessageByIdempotencyKey(
     ])
     .where("messages.sender_actor_id", "=", key.senderActorId)
     .where("messages.idempotency_key", "=", key.idempotencyKey)
-    .$castTo<MessageRow>()
     .executeTakeFirst();
 
   return row === undefined ? undefined : rowToAppendedTextMessage(row);
@@ -102,7 +101,6 @@ export async function appendTextMessage(
       .select(["target_type as targetType", "target_id as targetId"])
       .where("stream_id", "=", input.streamId)
       .forUpdate()
-      .$castTo<{ targetType?: unknown; targetId?: unknown }>()
       .executeTakeFirstOrThrow();
 
     assertStreamTargetMatches(stream.targetType, stream.targetId, input.target);
@@ -114,7 +112,6 @@ export async function appendTextMessage(
       })
       .where("stream_id", "=", input.streamId)
       .returning("last_sequence as sequence")
-      .$castTo<{ sequence?: unknown }>()
       .executeTakeFirstOrThrow();
 
     const sequence = parseSequence(sequenceRow.sequence);
@@ -142,7 +139,6 @@ export async function appendTextMessage(
         "content_text as text",
         "created_at as createdAt",
       ])
-      .$castTo<MessageRow>()
       .executeTakeFirstOrThrow();
 
     return {
@@ -164,7 +160,7 @@ async function acquireIdempotencyLock(
   `.execute(db);
 }
 
-function rowToAppendedTextMessage(row: MessageRow): AppendedTextMessage {
+function rowToAppendedTextMessage(row: AppendedTextMessageRow): AppendedTextMessage {
   const target = parseTarget(row.targetType, row.targetId);
 
   if (row.streamTargetType !== undefined || row.streamTargetId !== undefined) {
@@ -229,11 +225,11 @@ function parseTarget(targetType: unknown, targetId: unknown): MessageTarget {
 }
 
 function parseSequence(value: unknown): number {
-  if (!Number.isSafeInteger(value) || (value as number) <= 0) {
+  if (typeof value !== "number" || !Number.isSafeInteger(value) || value <= 0) {
     throw new Error("메시지 쿼리가 올바르지 않은 sequence를 반환했습니다.");
   }
 
-  return value as number;
+  return value;
 }
 
 function parseString(value: unknown, fieldName: string): string {
