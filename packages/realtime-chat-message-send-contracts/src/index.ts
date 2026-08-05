@@ -136,13 +136,6 @@ export const SendMessageResponseSchema = z.discriminatedUnion("status", [
   }),
 ]);
 
-export type OutboundMessageDeliveryRequested = {
-  eventId: string;
-  occurredAt: string;
-  message: AcceptedTextMessage;
-  recipientActorIds: string[];
-};
-
 function getUtf8ByteLength(value: string): number {
   return new TextEncoder().encode(value).byteLength;
 }
