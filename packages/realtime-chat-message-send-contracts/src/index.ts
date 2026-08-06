@@ -106,10 +106,7 @@ export const AcceptedTextMessageSchema = z.strictObject({
 });
 
 export type SendMessageRejectedReason =
-  | "invalid_text"
-  | "target_not_found"
-  | "write_forbidden"
-  | "idempotency_conflict";
+  "invalid_text" | "target_not_found" | "write_forbidden" | "idempotency_conflict";
 
 export type SendMessageResponse =
   | {

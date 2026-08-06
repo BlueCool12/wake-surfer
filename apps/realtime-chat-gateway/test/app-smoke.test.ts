@@ -76,9 +76,9 @@ describe("realtime chat gateway app", () => {
     first.socket.send(
       JSON.stringify({
         type: "chat.message.send",
-        clientMessageId: "client-message-1",
+        idempotencyKey: "client-message-1",
         target: { type: "channel", channelId: "room-1" },
-        content: { type: "text", text: "안녕하세요" },
+        text: "안녕하세요",
       }),
     );
 
@@ -86,7 +86,7 @@ describe("realtime chat gateway app", () => {
       expect.objectContaining({
         type: "chat.message.accepted",
         status: "accepted",
-        clientMessageId: "client-message-1",
+        idempotencyKey: "client-message-1",
       }),
     );
     const expectedMessage = expect.objectContaining({
@@ -100,9 +100,9 @@ describe("realtime chat gateway app", () => {
     await expect(secondCreated).resolves.toEqual(expectedMessage);
     expect(fixture.gatewayApiClient.sendMessage).toHaveBeenCalledWith(
       {
-        clientMessageId: "client-message-1",
+        idempotencyKey: "client-message-1",
         target: { type: "channel", channelId: "room-1" },
-        content: { type: "text", text: "안녕하세요" },
+        text: "안녕하세요",
       },
       {
         actorId: "actor-ticket-a",
@@ -110,6 +110,35 @@ describe("realtime chat gateway app", () => {
         signal: expect.any(AbortSignal),
       },
     );
+  });
+
+  it("relays an idempotency conflict as a correlated command rejection", async () => {
+    const fixture = await createFixture();
+    vi.mocked(fixture.gatewayApiClient.sendMessage).mockResolvedValueOnce({
+      status: "rejected",
+      idempotencyKey: "idempotency-conflict-1",
+      reason: "idempotency_conflict",
+    });
+    const connection = await connectClient(fixture.websocketUrl, "ticket-a");
+    connection.socket.send(JSON.stringify({ type: "chat.channel.join", channelId: "room-1" }));
+    await waitForSocketTurn();
+
+    const rejected = waitForFrame(connection.socket, "chat.message.rejected");
+    connection.socket.send(
+      JSON.stringify({
+        type: "chat.message.send",
+        idempotencyKey: "idempotency-conflict-1",
+        target: { type: "channel", channelId: "room-1" },
+        text: "different payload",
+      }),
+    );
+
+    await expect(rejected).resolves.toEqual({
+      type: "chat.message.rejected",
+      status: "rejected",
+      idempotencyKey: "idempotency-conflict-1",
+      reason: "idempotency_conflict",
+    });
   });
 
   it("fans out a persisted message when the sender disconnects before accepted delivery", async () => {
@@ -142,9 +171,9 @@ describe("realtime chat gateway app", () => {
     first.socket.send(
       JSON.stringify({
         type: "chat.message.send",
-        clientMessageId: "client-message-disconnect",
+        idempotencyKey: "client-message-disconnect",
         target: { type: "channel", channelId: "room-1" },
-        content: { type: "text", text: "계속 전달" },
+        text: "계속 전달",
       }),
     );
     await vi.waitFor(() => {
@@ -157,14 +186,14 @@ describe("realtime chat gateway app", () => {
     expect(sendSignal?.aborted).toBe(false);
     resolveSend?.({
       status: "accepted",
-      clientMessageId: "client-message-disconnect",
+      idempotencyKey: "client-message-disconnect",
       message: {
         messageId: "message-disconnect",
         streamId: "channel:room-1",
         sequence: 2,
         senderActorId: "actor-ticket-a",
         target: { type: "channel", channelId: "room-1" },
-        content: { type: "text", text: "계속 전달" },
+        text: "계속 전달",
         createdAt: "2026-07-25T00:00:02.000Z",
       },
     });
@@ -234,14 +263,14 @@ async function createFixture(): Promise<{
     })),
     sendMessage: vi.fn<GatewayApiClient["sendMessage"]>(async (request, context) => ({
       status: "accepted",
-      clientMessageId: request.clientMessageId,
+      idempotencyKey: request.idempotencyKey,
       message: {
         messageId: "message-1",
         streamId: "channel:room-1",
         sequence: 1,
         senderActorId: context.actorId,
         target: request.target,
-        content: request.content,
+        text: request.text,
         createdAt: "2026-07-25T00:00:01.000Z",
       },
     })),

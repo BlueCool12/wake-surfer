@@ -259,7 +259,7 @@ describe("Stream Messages PostgreSQL queries", () => {
         sender_actor_id,
         target_type,
         target_id,
-        client_message_id,
+        idempotency_key,
         content_type,
         content_text,
         sent_at_client,

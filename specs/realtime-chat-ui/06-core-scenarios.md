@@ -153,7 +153,7 @@
 | 필드 | 내용 |
 | --- | --- |
 | 주/보조 actor | 발신자 / Gateway, API |
-| 사전·시작 상태 | 같은 `clientMessageId`의 optimistic item이 `PENDING` |
+| 사전·시작 상태 | 같은 `idempotencyKey`의 optimistic item이 `PENDING` |
 | 사용자 행동 | 별도 행동 없음 |
 | Client 변화 | accepted면 optimistic item을 서버 `messageId/sequence` item으로 대체해 `SENT`; rejected면 `FAILED` |
 | Gateway 처리 | API accepted/rejected union을 wire event로 변환 |
@@ -291,6 +291,21 @@
 | 권한·실패 | `conversation:view`, `history:read` / FS-SUB-003, FS-SYNC-007 |
 | 근거·구현 | channel history 조회와 pagination은 `현행`이지만 capability 집행은 `P`이며 미구현 |
 
+### SC-MSG-012 — Commit ACK 유실 뒤 같은 명령 재시도
+
+| 필드 | 내용 |
+| --- | --- |
+| 주/보조 actor | 발신자 / Gateway, API |
+| 사전·시작 상태 | optimistic item이 `FAILED`이고 최초 commit 여부는 불명 |
+| 사용자 행동 | 실패한 메시지의 재시도를 선택한다. |
+| Client 변화 | 같은 optimistic item을 `PENDING`으로 되돌리고 기존 `idempotencyKey`, target, text로 재전송 |
+| Gateway 처리 | 새 connection generation에서도 같은 send request를 API로 전달 |
+| API 처리 | 같은 sender+key의 기존 row가 같은 target/text면 기존 canonical message를 accepted로 반환하고, payload가 다르면 `idempotency_conflict`로 거절 |
+| 사실·제어 | 새 `MessageCreated` commit 없음. 기존 결과의 `chat.message.accepted` 또는 `chat.message.rejected` |
+| 종료 상태 | accepted면 optimistic item 제거 후 canonical identity 하나로 수렴; conflict면 failed item 유지 |
+| 권한·실패 | 최초 commit 결과 조회는 같은 key로 수행 / FS-MSG-004, 005, 011 |
+| 근거·구현 | `P`, sender-scoped DB 멱등성과 Web retry는 현행 |
+
 ## 임시 상태와 읽음
 
 ### SC-EPH-001 — 입력 시작
@@ -394,7 +409,7 @@ sequenceDiagram
   participant DB as PostgreSQL
   participant O as Local Subscribers
 
-  C->>G: chat.message.send(clientMessageId, channel, text)
+  C->>G: chat.message.send(idempotencyKey, channel, text)
   G->>G: ready + local join + schema 확인
   G->>A: POST /internal/realtime-chat/messages<br/>service auth + asserted actor
   A->>DB: idempotency 조회

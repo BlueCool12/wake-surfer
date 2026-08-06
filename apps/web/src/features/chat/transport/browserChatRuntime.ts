@@ -199,14 +199,13 @@ export function createBrowserChatMessageTransport(options: {
     isReady() {
       return options.realtimeSession.state === "ready";
     },
-    sendChannelMessage({ clientMessageId, content, sentAtClient }) {
+    sendChannelMessage({ idempotencyKey, text }) {
       options.realtimeSession.sendApplicationEvent(
         CHAT_MESSAGE_SEND_EVENT,
         JSON.stringify({
-          clientMessageId,
+          idempotencyKey,
           target: { type: "channel", channelId },
-          content,
-          sentAtClient,
+          text,
         }),
       );
     },
@@ -279,18 +278,16 @@ function parseAcceptedResponse(rawPayload: string): MessageAcceptedResponse | nu
     return null;
   }
 
-  return parsed.data.commandId === undefined
-    ? {
-        status: "accepted",
-        clientMessageId: parsed.data.clientMessageId,
-        message: parsed.data.message,
-      }
-    : {
-        status: "accepted",
-        commandId: parsed.data.commandId,
-        clientMessageId: parsed.data.clientMessageId,
-        message: parsed.data.message,
-      };
+  const { text, ...message } = parsed.data.message;
+
+  return {
+    status: "accepted",
+    idempotencyKey: parsed.data.idempotencyKey,
+    message: {
+      ...message,
+      content: { type: "text", text },
+    },
+  };
 }
 
 function parseRejectedResponse(rawPayload: string): MessageRejectedResponse | null {
@@ -306,18 +303,7 @@ function parseRejectedResponse(rawPayload: string): MessageRejectedResponse | nu
     return null;
   }
 
-  return parsed.data.commandId === undefined
-    ? {
-        status: "rejected",
-        clientMessageId: parsed.data.clientMessageId,
-        reason: parsed.data.reason,
-      }
-    : {
-        status: "rejected",
-        commandId: parsed.data.commandId,
-        clientMessageId: parsed.data.clientMessageId,
-        reason: parsed.data.reason,
-      };
+  return parsed.data;
 }
 
 function parsePublicMessage(rawPayload: string): PublicMessage | null {

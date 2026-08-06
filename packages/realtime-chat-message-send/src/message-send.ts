@@ -43,9 +43,7 @@ export function normalizeMessageText(text: string): string | undefined {
   return normalized;
 }
 
-export function getSendMessageTargetType(
-  target: MessageTarget,
-): MessageTarget["type"] {
+export function getSendMessageTargetType(target: MessageTarget): MessageTarget["type"] {
   return target.type;
 }
 

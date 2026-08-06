@@ -204,13 +204,14 @@ Slack Socket Mode 문서는 **Slack 앱용 Events API 전송 방식**이다. `en
   - API 저장 성공 응답이 오면 canonical message로 바뀌고 UI 상태는 `sent`가 된다.
   - 거절 또는 연결 오류이면 `failed`가 되고 재시도할 수 있다.
 - 프로젝트 처리:
-  - client는 UUID `clientMessageId`와 `sentAtClient`를 생성한다.
-  - wire content는 `{ type: "text", text }`이며 최대 8,192 UTF-8 byte다.
+  - client는 UUID `idempotencyKey`를 생성하고 retry가 끝날 때까지 유지한다.
+  - wire request는 `{ idempotencyKey, target, text }`이며 text는 최대 8,192 UTF-8 byte다.
   - API는 stream sequence를 발급하고 저장한 뒤 `chat.message.accepted` 결과를 돌려준다.
   - accepted는 모든 recipient가 message를 받았다는 delivery ACK가 아니다.
 - 근거:
   - `현행`: web model의 상태는 `pending | sent | failed`다.
-  - `현행`: `clientMessageId`는 저장 멱등성 key이고 `messageId`는 저장 후 생기는 canonical ID다.
+  - `현행`: `idempotencyKey`는 sender 범위의 저장 멱등성 key이고 `messageId`는 저장 후 생기는
+    canonical ID다.
   - `P`: `chat.message.accepted`는 recipient delivery가 아니라 Commit ACK이며, canonical identity는
     ACK와 live event의 도착 순서와 무관하게 병합한다(`P-ACK-001`, `P-ORD-004`).
   - `I`: 현재 UI의 `sent`는 “서버 저장 결과를 timeline에 반영함”에 가깝고 recipient delivery를
@@ -233,7 +234,7 @@ Slack Socket Mode 문서는 **Slack 앱용 Events API 전송 방식**이다. `en
     달라질 수 있다.
 - 열린 항목: 다중 Gateway fan-out, recipient 계산, broker/outbox는 현재 구현이 아니며 별도 결정이다.
 
-### BH-MSG-003 — ACK 유실 후 같은 clientMessageId로 재시도한다
+### BH-MSG-003 — ACK 유실 후 같은 idempotencyKey로 재시도한다
 
 - 상태: `현행`
 - 사전조건: 최초 요청이 저장됐지만 client가 accepted를 받지 못했거나 pending message가 실패로
@@ -241,14 +242,18 @@ Slack Socket Mode 문서는 **Slack 앱용 Events API 전송 방식**이다. `en
 - 사용자 행동: 실패한 message의 재시도를 선택한다.
 - 사용자 가시 결과: 새 message가 하나 더 생기지 않고 기존 canonical message로 수렴한다.
 - 프로젝트 처리:
-  - retry는 최초 값과 같은 `clientMessageId`, text, `sentAtClient`를 사용한다.
-  - DB unique key는 `senderActorId + streamId + clientMessageId`다.
+  - retry는 최초 값과 같은 `idempotencyKey`, target, text를 사용한다.
+  - DB unique key는 `senderActorId + idempotencyKey`다. 같은 key를 다른 target이나 text에
+    재사용하면 `idempotency_conflict`로 거절한다.
   - API는 기존 message를 accepted로 반환한다.
+  - history/catch-up의 `PublicMessage`에는 `idempotencyKey`가 없으므로 canonical message를 먼저
+    발견한 것만으로 optimistic item을 임의 제거하지 않는다. 사용자가 같은 key로 재시도해 받은
+    accepted 결과가 optimistic item을 확정한다.
   - 현재 Gateway는 duplicate accepted도 local `chat.message.created`로 다시 fan-out할 수 있으며
     client timeline이 중복을 제거한다.
 - 근거:
   - `현행`: 저장 중복은 방지되지만 wire event 중복 가능성은 남아 있다.
-  - `P`: ACK 유실은 `UNKNOWN_COMMIT`으로 분류하고 같은 `clientMessageId`와 같은 payload로 재시도하며,
+  - `P`: ACK 유실은 `UNKNOWN_COMMIT`으로 분류하고 같은 `idempotencyKey`와 같은 payload로 재시도하며,
     live 중복은 canonical identity로 한 번만 적용한다(`P-ACK-002`, `P-IDEM-002`, `P-IDEM-003`).
   - `I`: exactly-once delivery가 아니라 idempotent storage와 client dedup으로 수렴하는 모델이다.
 - 열린 항목: duplicate 결과에 `duplicate` 표식을 줄지, delivery를 재발행할지 결정해야 한다.

@@ -17,7 +17,7 @@ describe("realtime-chat Atlas PostgreSQL migration", () => {
     await database?.close();
   });
 
-  it("applies the initial schema and records the Atlas revision", async () => {
+  it("applies the versioned schema and records every Atlas revision", async () => {
     const relations = await sql<{
       gatewayTickets: string | null;
       messageStreams: string | null;
@@ -44,7 +44,63 @@ describe("realtime-chat Atlas PostgreSQL migration", () => {
       SELECT count(*)::text AS count
       FROM atlas_schema_revisions
     `.execute(getDatabase().db);
-    expect(revisions.rows).toEqual([{ count: "1" }]);
+    expect(revisions.rows).toEqual([{ count: "2" }]);
+  });
+
+  it("migrates message correlation to sender-scoped idempotency keys", async () => {
+    const columns = await sql<{ columnName: string }>`
+      SELECT column_name AS "columnName"
+      FROM information_schema.columns
+      WHERE table_schema = current_schema()
+        AND table_name = 'messages'
+        AND column_name IN ('client_message_id', 'idempotency_key')
+      ORDER BY column_name
+    `.execute(getDatabase().db);
+
+    expect(columns.rows).toEqual([{ columnName: "idempotency_key" }]);
+
+    await sql`
+      INSERT INTO message_streams (stream_id, target_type, target_id, last_sequence, created_at)
+      VALUES (${"channel:idempotency-default"}, ${"channel"}, ${"idempotency-default"}, 1, now())
+    `.execute(getDatabase().db);
+    await sql`
+      INSERT INTO messages (
+        message_id,
+        stream_id,
+        sequence,
+        sender_actor_id,
+        target_type,
+        target_id,
+        idempotency_key,
+        content_text,
+        created_at
+      )
+      VALUES (
+        ${"message-idempotency-default"},
+        ${"channel:idempotency-default"},
+        ${1},
+        ${"actor-idempotency-default"},
+        ${"channel"},
+        ${"idempotency-default"},
+        ${"key-idempotency-default"},
+        ${"hello"},
+        now()
+      )
+    `.execute(getDatabase().db);
+
+    const messages = await sql<{ contentType: string; idempotencyKey: string }>`
+      SELECT
+        content_type AS "contentType",
+        idempotency_key AS "idempotencyKey"
+      FROM messages
+      WHERE message_id = ${"message-idempotency-default"}
+    `.execute(getDatabase().db);
+    expect(messages.rows).toEqual([
+      {
+        contentType: "text",
+        idempotencyKey: "key-idempotency-default",
+      },
+    ]);
   });
 
   it("enforces the message content type and UTF-8 8KiB constraints", async () => {
@@ -94,7 +150,7 @@ describe("realtime-chat Atlas PostgreSQL migration", () => {
         sender_actor_id,
         target_type,
         target_id,
-        client_message_id,
+        idempotency_key,
         content_type,
         content_text,
         sent_at_client,

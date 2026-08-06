@@ -6,10 +6,7 @@ import {
   normalizeMessageText,
 } from "../../message-send";
 import type { MessageSendDatabase } from "../../message-send-table";
-import type {
-  AppendedTextMessage,
-  SenderScopedIdempotencyKey,
-} from "../../send-message.types";
+import type { AppendedTextMessage, SenderScopedIdempotencyKey } from "../../send-message.types";
 
 export type AppendTextMessageInput = SenderScopedIdempotencyKey & {
   messageId: string;

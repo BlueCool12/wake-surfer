@@ -21,10 +21,7 @@ import type {
   SenderScopedIdempotencyKey,
 } from "../../send-message.types";
 import type { MessageSendDatabase } from "../../message-send-table";
-import {
-  appendTextMessage,
-  findAppendedTextMessageByIdempotencyKey,
-} from "./send-message.kysely";
+import { appendTextMessage, findAppendedTextMessageByIdempotencyKey } from "./send-message.kysely";
 import type { AppendTextMessageInput, AppendTextMessageResult } from "./send-message.kysely";
 
 export type SendMessageExecutionDependencies = {

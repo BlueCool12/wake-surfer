@@ -75,10 +75,11 @@ pnpm db:migrate:realtime-chat
 
 ## 테이블 타입 합성
 
-현재 전체 DB 타입은 gateway ticket과 message send feature의 테이블 타입을 합성한다.
+현재 전체 DB 타입은 gateway ticket, message send, stream messages feature의 테이블 타입을 합성한다.
 
 ```ts
-export type RealtimeChatDatabase = GatewayTicketDatabase & MessageSendDatabase;
+export type RealtimeChatDatabase =
+  GatewayTicketDatabase & MessageSendDatabase & StreamMessagesDatabase;
 ```
 
 새 feature가 추가되면 각 feature가 자기 테이블 타입을 제공하고, 이 패키지가 교차 타입으로 합성한다.

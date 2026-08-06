@@ -175,6 +175,9 @@ importers:
       '@wake-surfer/realtime-chat-message-send':
         specifier: workspace:*
         version: link:../realtime-chat-message-send
+      '@wake-surfer/realtime-chat-stream-messages':
+        specifier: workspace:*
+        version: link:../realtime-chat-stream-messages
       kysely:
         specifier: 0.28.8
         version: 0.28.8

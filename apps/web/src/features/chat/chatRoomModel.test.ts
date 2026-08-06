@@ -61,13 +61,13 @@ describe("ChatRoomModel", () => {
 
     model.sendMessage(" hello ");
     expect(model.messages.at(-1)).toMatchObject({
-      clientMessageId: "client-model-3",
+      idempotencyKey: "client-model-3",
       status: "pending",
       text: "hello",
     });
     runtime.emitRejected({
       status: "rejected",
-      clientMessageId: "client-model-3",
+      idempotencyKey: "client-model-3",
       reason: "write_forbidden",
     });
     expect(model.messages.at(-1)?.status).toBe("failed");
@@ -76,15 +76,14 @@ describe("ChatRoomModel", () => {
     expect(model.messages.at(-1)?.status).toBe("pending");
     expect(runtime.messageTransport.sendChannelMessage).toHaveBeenCalledTimes(2);
     expect(runtime.messageTransport.sendChannelMessage).toHaveBeenNthCalledWith(2, {
-      clientMessageId: "client-model-3",
-      content: { type: "text", text: "hello" },
-      sentAtClient: "2026-07-18T00:00:00.000Z",
+      idempotencyKey: "client-model-3",
+      text: "hello",
     });
 
     const acceptedMessage = message(1, "channel-model-3");
     runtime.emitAccepted({
       status: "accepted",
-      clientMessageId: "client-model-3",
+      idempotencyKey: "client-model-3",
       message: acceptedMessage,
     });
     runtime.emitCreated(acceptedMessage);
@@ -104,7 +103,7 @@ describe("ChatRoomModel", () => {
     model.sendMessage("연결 전송 실패");
 
     expect(model.messages.at(-1)).toMatchObject({
-      clientMessageId: "client-model-4",
+      idempotencyKey: "client-model-4",
       status: "failed",
       text: "연결 전송 실패",
     });
@@ -176,13 +175,11 @@ describe("ChatRoomModel", () => {
     );
   });
 
-  it("reconciles an optimistic message when reconnect recovery replaces a lost accepted frame", async () => {
-    const sentAtClient = "2026-07-18T00:00:00.000Z";
+  it("reconciles an unknown commit by retrying the same idempotency key after recovery", async () => {
     const recoveredMessage: PublicMessage = {
       ...message(1, "channel-model-7"),
       senderActorId: "model-7",
       content: { type: "text", text: "수락 응답 유실" },
-      sentAtClient,
     };
     const syncAfter = vi.fn(async () =>
       measured(syncResponse("channel-model-7", 0, 1, [recoveredMessage])),
@@ -198,6 +195,23 @@ describe("ChatRoomModel", () => {
     runtime.emitConnectionGeneration("generation-after-accepted-loss");
     await vi.waitFor(() => expect(model.recoveryPhase).toBe("ready"));
 
+    const failedOptimistic = model.messages.find((item) => item.status === "failed");
+    expect(failedOptimistic).toMatchObject({
+      idempotencyKey: "client-model-7",
+      text: "수락 응답 유실",
+    });
+
+    model.retryMessage(failedOptimistic!);
+    expect(runtime.messageTransport.sendChannelMessage).toHaveBeenNthCalledWith(2, {
+      idempotencyKey: "client-model-7",
+      text: "수락 응답 유실",
+    });
+    runtime.emitAccepted({
+      status: "accepted",
+      idempotencyKey: "client-model-7",
+      message: recoveredMessage,
+    });
+
     expect(model.messages).toEqual([
       expect.objectContaining({
         messageId: "message-1",
@@ -205,11 +219,6 @@ describe("ChatRoomModel", () => {
         text: "수락 응답 유실",
       }),
     ]);
-    expect(runtime.messageTransport.sendChannelMessage).toHaveBeenCalledWith({
-      clientMessageId: "client-model-7",
-      content: { type: "text", text: "수락 응답 유실" },
-      sentAtClient,
-    });
   });
 
   it("keeps recovery retryable when latest loading finishes after the connection is lost", async () => {
@@ -238,7 +247,7 @@ function createModel(actorId: string, channelId: string, runtime: ChatRoomRuntim
   return new ChatRoomModel({
     actorId,
     channelId,
-    createClientMessageId: () => `client-${actorId}`,
+    createIdempotencyKey: () => `client-${actorId}`,
     now: () => "2026-07-18T00:00:00.000Z",
     runtime,
     storage: createMemoryStorage(),

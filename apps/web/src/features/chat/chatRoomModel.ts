@@ -14,7 +14,7 @@ export type ChatMessageStatus = "pending" | "sent" | "failed";
 
 export type ChatMessageView = {
   key: string;
-  clientMessageId?: string;
+  idempotencyKey?: string;
   messageId?: string;
   sequence?: number;
   senderId?: string;
@@ -25,7 +25,7 @@ export type ChatMessageView = {
 };
 
 type OptimisticMessage = {
-  clientMessageId: string;
+  idempotencyKey: string;
   text: string;
   createdAt: string;
   status: "pending" | "failed";
@@ -36,7 +36,7 @@ export type ChatRoomModelOptions = {
   channelId: string;
   runtime: ChatRoomRuntime;
   storage: KeyValueStorage;
-  createClientMessageId?: () => string;
+  createIdempotencyKey?: () => string;
   now?: () => string;
 };
 
@@ -44,9 +44,8 @@ export class ChatRoomModel extends Emitter {
   readonly options: ChatRoomModelOptions;
   readonly #optimistic = new Map<string, OptimisticMessage>();
   readonly #runtime: ChatRoomRuntime;
-  readonly #createClientMessageId: () => string;
+  readonly #createIdempotencyKey: () => string;
   readonly #now: () => string;
-  readonly #processedOwnMessageIds = new Set<string>();
   readonly #subscriptions: Array<() => void> = [];
   readonly streamSession;
   #connectionRecoveryAttemptVersion = 0;
@@ -62,7 +61,7 @@ export class ChatRoomModel extends Emitter {
     super();
     this.options = options;
     this.#runtime = options.runtime;
-    this.#createClientMessageId = options.createClientMessageId ?? (() => crypto.randomUUID());
+    this.#createIdempotencyKey = options.createIdempotencyKey ?? (() => crypto.randomUUID());
     this.#now = options.now ?? (() => new Date().toISOString());
     this.streamSession = getStreamMessagesSession({
       actorId: options.actorId,
@@ -79,8 +78,8 @@ export class ChatRoomModel extends Emitter {
     return [
       ...this.streamSession.timeline.messages.map((message) => this.#toView(message)),
       ...[...this.#optimistic.values()].map((message) => ({
-        key: message.clientMessageId,
-        clientMessageId: message.clientMessageId,
+        key: message.idempotencyKey,
+        idempotencyKey: message.idempotencyKey,
         isMine: true,
         text: message.text,
         createdAt: message.createdAt,
@@ -114,7 +113,6 @@ export class ChatRoomModel extends Emitter {
   }
 
   readonly emitViewChange = (): void => {
-    this.#reconcileOptimisticMessages();
     this.emit();
   };
 
@@ -159,23 +157,22 @@ export class ChatRoomModel extends Emitter {
       return;
     }
 
-    const clientMessageId = this.#createClientMessageId();
-    const sentAtClient = this.#now();
-    this.#optimistic.set(clientMessageId, {
-      clientMessageId,
+    const idempotencyKey = this.#createIdempotencyKey();
+    const createdAt = this.#now();
+    this.#optimistic.set(idempotencyKey, {
+      idempotencyKey,
       text: trimmed,
-      createdAt: sentAtClient,
+      createdAt,
       status: "pending",
     });
     this.emit();
     try {
       this.#runtime.messageTransport.sendChannelMessage({
-        clientMessageId,
-        content: { type: "text", text: trimmed },
-        sentAtClient,
+        idempotencyKey,
+        text: trimmed,
       });
     } catch {
-      const optimistic = this.#optimistic.get(clientMessageId);
+      const optimistic = this.#optimistic.get(idempotencyKey);
 
       if (optimistic !== undefined) {
         optimistic.status = "failed";
@@ -185,11 +182,11 @@ export class ChatRoomModel extends Emitter {
   }
 
   retryMessage(message: ChatMessageView): void {
-    if (message.clientMessageId === undefined) {
+    if (message.idempotencyKey === undefined) {
       return;
     }
 
-    const optimistic = this.#optimistic.get(message.clientMessageId);
+    const optimistic = this.#optimistic.get(message.idempotencyKey);
 
     if (optimistic === undefined || optimistic.status !== "failed") {
       return;
@@ -199,9 +196,8 @@ export class ChatRoomModel extends Emitter {
     this.emit();
     try {
       this.#runtime.messageTransport.sendChannelMessage({
-        clientMessageId: optimistic.clientMessageId,
-        content: { type: "text", text: optimistic.text },
-        sentAtClient: optimistic.createdAt,
+        idempotencyKey: optimistic.idempotencyKey,
+        text: optimistic.text,
       });
     } catch {
       optimistic.status = "failed";
@@ -265,12 +261,12 @@ export class ChatRoomModel extends Emitter {
         this.streamSession.timeline.applyLive(message);
       }),
       this.#runtime.messageTransport.onMessageAccepted((response) => {
-        this.#optimistic.delete(response.clientMessageId);
+        this.#optimistic.delete(response.idempotencyKey);
         this.streamSession.timeline.applyAccepted(response.message);
         this.emit();
       }),
       this.#runtime.messageTransport.onMessageRejected((response) => {
-        const optimistic = this.#optimistic.get(response.clientMessageId);
+        const optimistic = this.#optimistic.get(response.idempotencyKey);
 
         if (optimistic !== undefined) {
           optimistic.status = "failed";
@@ -331,33 +327,6 @@ export class ChatRoomModel extends Emitter {
       } catch (error) {
         if (this.#pendingConnectionGeneration === undefined) {
           throw error;
-        }
-      }
-    }
-  }
-
-  #reconcileOptimisticMessages(): void {
-    for (const message of this.streamSession.timeline.messages) {
-      if (
-        message.senderActorId !== this.options.actorId ||
-        this.#processedOwnMessageIds.has(message.messageId)
-      ) {
-        continue;
-      }
-
-      this.#processedOwnMessageIds.add(message.messageId);
-
-      if (message.sentAtClient === undefined) {
-        continue;
-      }
-
-      for (const [clientMessageId, optimistic] of this.#optimistic) {
-        if (
-          optimistic.createdAt === message.sentAtClient &&
-          optimistic.text === message.content.text
-        ) {
-          this.#optimistic.delete(clientMessageId);
-          break;
         }
       }
     }
