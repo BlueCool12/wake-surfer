@@ -125,8 +125,8 @@ afterAll(async () => {
 });
 ```
 
-마이그레이션 업그레이드 경로를 검증할 때는 `toVersion`으로 중간 revision까지만 적용하고 fixture를
-삽입한 뒤 `applyPendingMigrations()`로 남은 revision을 적용한다.
+마이그레이션 업그레이드 경로를 검증할 때는 `maxMigrations`로 처음 적용할 revision 개수를 제한하고
+fixture를 삽입한 뒤 `applyPendingMigrations()`로 남은 revision을 적용한다.
 
 두 test URL은 필수다. 첫 URL은 host test process가, 두 번째 URL은 Compose network 내부의 Atlas
 container가 사용하므로 hostname이 다를 수 있다. Atlas migration이 실패하면 helper는 성공한 database

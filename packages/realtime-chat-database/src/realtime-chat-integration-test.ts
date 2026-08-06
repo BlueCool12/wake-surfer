@@ -13,7 +13,7 @@ export type RealtimeChatIntegrationTestDatabase = {
 };
 
 export type CreateRealtimeChatIntegrationTestDatabaseOptions = {
-  toVersion?: string;
+  maxMigrations?: number;
 };
 
 /**
@@ -41,7 +41,7 @@ export async function createRealtimeChatIntegrationTestDatabase(
       atlasDatabaseUrl,
       schemaName,
     );
-    await applyAtlasMigrations(schemaScopedAtlasDatabaseUrl, options.toVersion);
+    await applyAtlasMigrations(schemaScopedAtlasDatabaseUrl, options.maxMigrations);
 
     database = createRealtimeChatDatabase({
       databaseUrl: createSchemaScopedDatabaseUrl(databaseUrl, schemaName),
@@ -120,8 +120,18 @@ function createAtlasSchemaScopedDatabaseUrl(databaseUrl: string, schemaName: str
   return parsed.toString();
 }
 
-async function applyAtlasMigrations(databaseUrl: string, toVersion?: string): Promise<void> {
+async function applyAtlasMigrations(databaseUrl: string, maxMigrations?: number): Promise<void> {
   const repositoryRoot = resolve(__dirname, "../../..");
+  let migrationAmount: string | undefined;
+
+  if (maxMigrations !== undefined) {
+    if (!Number.isSafeInteger(maxMigrations) || maxMigrations <= 0) {
+      throw new Error("maxMigrations는 1 이상의 안전한 정수여야 합니다.");
+    }
+
+    migrationAmount = String(maxMigrations);
+  }
+
   const args = [
     "compose",
     "run",
@@ -133,15 +143,12 @@ async function applyAtlasMigrations(databaseUrl: string, toVersion?: string): Pr
     "realtime-chat-migrate",
     "migrate",
     "apply",
+    ...(migrationAmount === undefined ? [] : [migrationAmount]),
     "--env",
     "runtime",
     "--config",
     "file:///workspace/atlas.hcl",
   ];
-
-  if (toVersion !== undefined) {
-    args.push("--to-version", toVersion);
-  }
 
   await new Promise<void>((resolvePromise, reject) => {
     const child = spawn("docker", args, {

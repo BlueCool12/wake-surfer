@@ -105,7 +105,7 @@ describe("realtime-chat Atlas PostgreSQL migration", () => {
 
   it("upgrades legacy cross-stream keys without dropping messages", async () => {
     const legacyDatabase = await createRealtimeChatIntegrationTestDatabase({
-      toVersion: "20260719000000",
+      maxMigrations: 1,
     });
 
     try {
