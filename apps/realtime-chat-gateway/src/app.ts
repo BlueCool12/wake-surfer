@@ -345,8 +345,9 @@ export function createRealtimeChatGatewayApp(
 
     const channelId = response.message.target.channelId;
     const { text, ...createdMessage } = response.message;
+    const { persistence, ...acceptedResponse } = response;
     const acceptedDelivery = sendWireEvent(session.socket, "chat.message.accepted", {
-      ...response,
+      ...acceptedResponse,
     }).catch((error: unknown) => {
       deps.logger.warn(
         {
@@ -356,6 +357,12 @@ export function createRealtimeChatGatewayApp(
         "실시간 채팅 메시지 accepted 전달 실패",
       );
     });
+
+    if (persistence === "existing") {
+      await acceptedDelivery;
+      return;
+    }
+
     const deliveries = [...sessionsById.values()]
       .filter(
         (candidate) =>

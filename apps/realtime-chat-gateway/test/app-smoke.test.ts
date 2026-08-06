@@ -141,6 +141,59 @@ describe("realtime chat gateway app", () => {
     });
   });
 
+  it("acknowledges an existing message without re-fanning out created", async () => {
+    const fixture = await createFixture();
+    vi.mocked(fixture.gatewayApiClient.sendMessage).mockResolvedValueOnce({
+      status: "accepted",
+      persistence: "existing",
+      idempotencyKey: "idempotency-retry-1",
+      message: {
+        messageId: "message-existing",
+        streamId: "channel:room-1",
+        sequence: 1,
+        senderActorId: "actor-ticket-a",
+        target: { type: "channel", channelId: "room-1" },
+        text: "재시도",
+        createdAt: "2026-07-25T00:00:01.000Z",
+      },
+    });
+    const first = await connectClient(fixture.websocketUrl, "ticket-a");
+    const second = await connectClient(fixture.websocketUrl, "ticket-b");
+    first.socket.send(JSON.stringify({ type: "chat.channel.join", channelId: "room-1" }));
+    second.socket.send(JSON.stringify({ type: "chat.channel.join", channelId: "room-1" }));
+    await waitForSocketTurn();
+
+    const firstFrames = recordFrames(first.socket);
+    const secondFrames = recordFrames(second.socket);
+    const accepted = waitForFrame(first.socket, "chat.message.accepted");
+    first.socket.send(
+      JSON.stringify({
+        type: "chat.message.send",
+        idempotencyKey: "idempotency-retry-1",
+        target: { type: "channel", channelId: "room-1" },
+        text: "재시도",
+      }),
+    );
+
+    const acceptedFrame = await accepted;
+    await waitForSocketTurn();
+    firstFrames.stop();
+    secondFrames.stop();
+
+    expect(acceptedFrame).toEqual(
+      expect.objectContaining({
+        type: "chat.message.accepted",
+        status: "accepted",
+        idempotencyKey: "idempotency-retry-1",
+      }),
+    );
+    expect(acceptedFrame).not.toHaveProperty("persistence");
+    expect(firstFrames.frames.filter((frame) => frame.type === "chat.message.created")).toEqual([]);
+    expect(secondFrames.frames.filter((frame) => frame.type === "chat.message.created")).toEqual(
+      [],
+    );
+  });
+
   it("fans out a persisted message when the sender disconnects before accepted delivery", async () => {
     const fixture = await createFixture();
     const first = await connectClient(fixture.websocketUrl, "ticket-a");
@@ -186,6 +239,7 @@ describe("realtime chat gateway app", () => {
     expect(sendSignal?.aborted).toBe(false);
     resolveSend?.({
       status: "accepted",
+      persistence: "created",
       idempotencyKey: "client-message-disconnect",
       message: {
         messageId: "message-disconnect",
@@ -263,6 +317,7 @@ async function createFixture(): Promise<{
     })),
     sendMessage: vi.fn<GatewayApiClient["sendMessage"]>(async (request, context) => ({
       status: "accepted",
+      persistence: "created",
       idempotencyKey: request.idempotencyKey,
       message: {
         messageId: "message-1",
@@ -392,6 +447,22 @@ function waitForFrame(socket: WebSocket, type: string): Promise<Record<string, u
     socket.on("message", onMessage);
     socket.once("close", onClose);
   });
+}
+
+function recordFrames(socket: WebSocket): {
+  frames: Record<string, unknown>[];
+  stop: () => void;
+} {
+  const frames: Record<string, unknown>[] = [];
+  const onMessage = (data: RawData): void => {
+    frames.push(JSON.parse(data.toString()) as Record<string, unknown>);
+  };
+  socket.on("message", onMessage);
+
+  return {
+    frames,
+    stop: () => socket.off("message", onMessage),
+  };
 }
 
 function waitForClose(socket: WebSocket): Promise<{ code: number; reason: string }> {

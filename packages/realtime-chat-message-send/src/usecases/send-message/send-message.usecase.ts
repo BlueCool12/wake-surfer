@@ -138,6 +138,7 @@ export async function executeSendMessage(
 
   return {
     status: "accepted",
+    persistence: "created",
     message: appendResult.message,
   };
 }
@@ -161,6 +162,7 @@ function resultForExistingMessage(
 
   return {
     status: "accepted",
+    persistence: "existing",
     message: existing,
   };
 }

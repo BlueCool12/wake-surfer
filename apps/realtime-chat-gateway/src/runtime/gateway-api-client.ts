@@ -3,10 +3,10 @@ import {
   type ConsumeGatewayTicketResponse,
 } from "@wake-surfer/realtime-chat-gateway-ticket-contracts";
 import {
+  InternalSendMessageResponseSchema,
   SendMessageRequestSchema,
-  SendMessageResponseSchema,
+  type InternalSendMessageResponse,
   type SendMessageRequest,
-  type SendMessageResponse,
 } from "@wake-surfer/realtime-chat-message-send-contracts";
 
 export type GatewayApiClient = {
@@ -22,7 +22,7 @@ export type GatewayApiClient = {
       requestId: string;
       signal: AbortSignal;
     },
-  ) => Promise<SendMessageResponse>;
+  ) => Promise<InternalSendMessageResponse>;
 };
 
 export type CreateGatewayApiClientOptions = {
@@ -75,7 +75,7 @@ export function createGatewayApiClient(options: CreateGatewayApiClientOptions): 
         },
         timeoutMilliseconds: options.timeoutMilliseconds,
       });
-      const parsed = SendMessageResponseSchema.safeParse(value);
+      const parsed = InternalSendMessageResponseSchema.safeParse(value);
 
       if (!parsed.success) {
         throw new Error("메시지 전송 응답 형식이 올바르지 않습니다.");

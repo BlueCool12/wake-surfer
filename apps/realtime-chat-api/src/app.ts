@@ -18,7 +18,7 @@ import {
 } from "@wake-surfer/realtime-chat-message-send";
 import {
   parseSendMessageRequest,
-  type SendMessageResponse,
+  type InternalSendMessageResponse,
 } from "@wake-surfer/realtime-chat-message-send-contracts";
 import type {
   LoadLatestMessages,
@@ -256,14 +256,15 @@ export function createRealtimeChatApiApp(deps: RealtimeChatApiAppDeps): Hono {
           status: "rejected",
           idempotencyKey: parsed.value.idempotencyKey,
           reason: result.reason,
-        } satisfies SendMessageResponse);
+        } satisfies InternalSendMessageResponse);
       }
 
       return context.json({
         status: "accepted",
+        persistence: result.persistence,
         idempotencyKey: parsed.value.idempotencyKey,
         message: toAcceptedTextMessage(result.message),
-      } satisfies SendMessageResponse);
+      } satisfies InternalSendMessageResponse);
     });
   }
 

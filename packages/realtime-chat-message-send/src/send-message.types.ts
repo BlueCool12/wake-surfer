@@ -26,6 +26,7 @@ export type AppendedTextMessage = Readonly<{
 export type SendMessageResult =
   | {
       status: "accepted";
+      persistence: "created" | "existing";
       message: AppendedTextMessage;
     }
   | {

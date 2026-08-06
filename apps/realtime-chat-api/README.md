@@ -61,8 +61,9 @@ matched against `REALTIME_CHAT_GATEWAY_ID`.
 `POST /internal/realtime-chat/messages` accepts the strict
 `@wake-surfer/realtime-chat-message-send-contracts` request body. The Gateway and asserted actor are resolved from
 trusted headers, so `actorId` and other server-owned fields are rejected from the body. Accepted and domain-rejected
-commands both return the shared `SendMessageResponse` with HTTP 200. Persistence failures return the common error
-envelope with HTTP 503.
+commands both return the internal `InternalSendMessageResponse` with HTTP 200. An accepted response includes the
+`created | existing` persistence outcome for Gateway fan-out decisions; the public WebSocket response omits it.
+Persistence failures return the common error envelope with HTTP 503.
 
 모든 `/internal/realtime-chat/*` 요청은 Hono Bearer Auth middleware를 먼저 통과한다. 헤더가 없거나 token이
 다르면 401, Authorization 형식이나 RFC 6750 Bearer token 문자가 올바르지 않으면 400을 반환하며,

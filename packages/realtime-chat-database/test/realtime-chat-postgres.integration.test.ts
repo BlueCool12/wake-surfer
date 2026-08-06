@@ -103,6 +103,117 @@ describe("realtime-chat Atlas PostgreSQL migration", () => {
     ]);
   });
 
+  it("upgrades legacy cross-stream keys without dropping messages", async () => {
+    const legacyDatabase = await createRealtimeChatIntegrationTestDatabase({
+      toVersion: "20260719000000",
+    });
+
+    try {
+      await sql`
+          INSERT INTO message_streams (
+            stream_id,
+            target_type,
+            target_id,
+            last_sequence,
+            created_at
+          )
+          VALUES
+            (
+              ${"channel:legacy-1"},
+              ${"channel"},
+              ${"legacy-1"},
+              ${1},
+              ${new Date("2026-07-25T00:00:00.000Z")}
+            ),
+            (
+              ${"channel:legacy-2"},
+              ${"channel"},
+              ${"legacy-2"},
+              ${1},
+              ${new Date("2026-07-25T00:00:00.000Z")}
+            )
+        `.execute(legacyDatabase.db);
+      await sql`
+          INSERT INTO messages (
+            message_id,
+            stream_id,
+            sequence,
+            sender_actor_id,
+            target_type,
+            target_id,
+            client_message_id,
+            content_type,
+            content_text,
+            sent_at_client,
+            created_at
+          )
+          VALUES
+            (
+              ${"message-legacy-1"},
+              ${"channel:legacy-1"},
+              ${1},
+              ${"actor-legacy"},
+              ${"channel"},
+              ${"legacy-1"},
+              ${"reused-client-message-id"},
+              ${"text"},
+              ${"first"},
+              NULL,
+              ${new Date("2026-07-25T00:00:01.000Z")}
+            ),
+            (
+              ${"message-legacy-2"},
+              ${"channel:legacy-2"},
+              ${1},
+              ${"actor-legacy"},
+              ${"channel"},
+              ${"legacy-2"},
+              ${"reused-client-message-id"},
+              ${"text"},
+              ${"second"},
+              NULL,
+              ${new Date("2026-07-25T00:00:02.000Z")}
+            )
+        `.execute(legacyDatabase.db);
+
+      await legacyDatabase.applyPendingMigrations();
+
+      const messages = await sql<{ idempotencyKey: string; messageId: string }>`
+          SELECT
+            message_id AS "messageId",
+            idempotency_key AS "idempotencyKey"
+          FROM messages
+          WHERE sender_actor_id = ${"actor-legacy"}
+          ORDER BY message_id
+        `.execute(legacyDatabase.db);
+      expect(messages.rows).toEqual([
+        {
+          messageId: "message-legacy-1",
+          idempotencyKey: "legacy:1",
+        },
+        {
+          messageId: "message-legacy-2",
+          idempotencyKey: "legacy:2",
+        },
+      ]);
+
+      const constraint = await sql<{ constraintName: string }>`
+          SELECT constraint_name AS "constraintName"
+          FROM information_schema.table_constraints
+          WHERE table_schema = current_schema()
+            AND table_name = 'messages'
+            AND constraint_name = 'messages_sender_actor_id_idempotency_key_key'
+        `.execute(legacyDatabase.db);
+      expect(constraint.rows).toEqual([
+        {
+          constraintName: "messages_sender_actor_id_idempotency_key_key",
+        },
+      ]);
+    } finally {
+      await legacyDatabase.close();
+    }
+  }, 120_000);
+
   it("enforces the message content type and UTF-8 8KiB constraints", async () => {
     await sql`
       INSERT INTO message_streams (stream_id, target_type, target_id, last_sequence, created_at)

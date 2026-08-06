@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { parseSendMessageRequest, SendMessageResponseSchema } from "../src/index";
+import {
+  InternalSendMessageResponseSchema,
+  parseSendMessageRequest,
+  SendMessageResponseSchema,
+} from "../src/index";
 
 describe("send message request parser", () => {
   it("accepts the idempotency key, target, and text owned by the client", () => {
@@ -116,6 +120,53 @@ describe("send message response schema", () => {
       status: "accepted",
       idempotencyKey: "idempotency-1",
     });
+  });
+
+  it.each(["created", "existing"] as const)(
+    "validates the %s persistence outcome on an internal accepted response",
+    (persistence) => {
+      expect(
+        InternalSendMessageResponseSchema.safeParse({
+          status: "accepted",
+          persistence,
+          idempotencyKey: "idempotency-1",
+          message: {
+            messageId: "message-1",
+            streamId: "channel:channel-1",
+            sequence: 1,
+            senderActorId: "actor-1",
+            target: {
+              type: "channel",
+              channelId: "channel-1",
+            },
+            text: "hello",
+            createdAt: "2026-07-25T06:00:00.000Z",
+          },
+        }).success,
+      ).toBe(true);
+    },
+  );
+
+  it("keeps persistence metadata out of the public response contract", () => {
+    expect(
+      SendMessageResponseSchema.safeParse({
+        status: "accepted",
+        persistence: "existing",
+        idempotencyKey: "idempotency-1",
+        message: {
+          messageId: "message-1",
+          streamId: "channel:channel-1",
+          sequence: 1,
+          senderActorId: "actor-1",
+          target: {
+            type: "channel",
+            channelId: "channel-1",
+          },
+          text: "hello",
+          createdAt: "2026-07-25T06:00:00.000Z",
+        },
+      }).success,
+    ).toBe(false);
   });
 
   it("validates the idempotency conflict rejection", () => {

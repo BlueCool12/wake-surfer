@@ -22,6 +22,7 @@ describe("gateway API client", () => {
         new Response(
           JSON.stringify({
             status: "accepted",
+            persistence: "created",
             idempotencyKey: "client-message-1",
             message: {
               messageId: "message-1",
@@ -52,7 +53,7 @@ describe("gateway API client", () => {
       signal: controller.signal,
       ticket: "ticket-1",
     });
-    await client.sendMessage(
+    const sendResult = await client.sendMessage(
       {
         idempotencyKey: "client-message-1",
         target: { type: "channel", channelId: "room-1" },
@@ -64,6 +65,12 @@ describe("gateway API client", () => {
         signal: controller.signal,
       },
     );
+
+    expect(sendResult).toMatchObject({
+      status: "accepted",
+      persistence: "created",
+      idempotencyKey: "client-message-1",
+    });
 
     const ticketRequest = fetchMock.mock.calls[0]!;
     expect(String(ticketRequest[0])).toBe(

@@ -108,6 +108,8 @@ export const AcceptedTextMessageSchema = z.strictObject({
 export type SendMessageRejectedReason =
   "invalid_text" | "target_not_found" | "write_forbidden" | "idempotency_conflict";
 
+export type SendMessagePersistence = "created" | "existing";
+
 export type SendMessageResponse =
   | {
       status: "accepted";
@@ -123,6 +125,33 @@ export type SendMessageResponse =
 export const SendMessageResponseSchema = z.discriminatedUnion("status", [
   z.strictObject({
     status: z.literal("accepted"),
+    idempotencyKey: IdempotencyKeySchema,
+    message: AcceptedTextMessageSchema,
+  }),
+  z.strictObject({
+    status: z.literal("rejected"),
+    idempotencyKey: IdempotencyKeySchema,
+    reason: z.enum(["invalid_text", "target_not_found", "write_forbidden", "idempotency_conflict"]),
+  }),
+]);
+
+export type InternalSendMessageResponse =
+  | {
+      status: "accepted";
+      persistence: SendMessagePersistence;
+      idempotencyKey: string;
+      message: AcceptedTextMessage;
+    }
+  | {
+      status: "rejected";
+      idempotencyKey: string;
+      reason: SendMessageRejectedReason;
+    };
+
+export const InternalSendMessageResponseSchema = z.discriminatedUnion("status", [
+  z.strictObject({
+    status: z.literal("accepted"),
+    persistence: z.enum(["created", "existing"]),
     idempotencyKey: IdempotencyKeySchema,
     message: AcceptedTextMessageSchema,
   }),

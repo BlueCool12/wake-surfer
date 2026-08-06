@@ -73,6 +73,11 @@ pnpm db:migrate:realtime-chat
 새 migration은 기존 파일을 수정하지 않고 새 SQL 파일로 추가한 뒤 `atlas.sum`을 갱신한다. 아직 인수할
 운영 database가 없으므로 legacy baseline은 제공하지 않는다.
 
+`20260806000000_message_idempotency_key.sql`은 기존 sender+stream 범위의 client message key를
+sender 범위의 짧은 `legacy:<ordinal>` key로 재작성한 뒤 sender-scoped unique constraint를 추가한다.
+따라서 서로 다른 stream에서 같은 legacy key를 사용한 유효한 기존 행도 보존되지만, 이전 key를 사용한
+재시도 호환성은 유지하지 않는다.
+
 ## 테이블 타입 합성
 
 현재 전체 DB 타입은 gateway ticket, message send, stream messages feature의 테이블 타입을 합성한다.
@@ -119,6 +124,9 @@ afterAll(async () => {
   await database?.close();
 });
 ```
+
+마이그레이션 업그레이드 경로를 검증할 때는 `toVersion`으로 중간 revision까지만 적용하고 fixture를
+삽입한 뒤 `applyPendingMigrations()`로 남은 revision을 적용한다.
 
 두 test URL은 필수다. 첫 URL은 host test process가, 두 번째 URL은 Compose network 내부의 Atlas
 container가 사용하므로 hostname이 다를 수 있다. Atlas migration이 실패하면 helper는 성공한 database

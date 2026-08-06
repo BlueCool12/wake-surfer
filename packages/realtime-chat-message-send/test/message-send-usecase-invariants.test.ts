@@ -175,6 +175,7 @@ describe("send message usecase invariants", () => {
       ),
     ).resolves.toEqual({
       status: "accepted",
+      persistence: "existing",
       message: savedMessage,
     });
   });
@@ -221,6 +222,7 @@ describe("send message usecase invariants", () => {
       }),
     ).resolves.toEqual({
       status: "accepted",
+      persistence: "existing",
       message: savedMessage,
     });
     await expect(
@@ -237,6 +239,14 @@ describe("send message usecase invariants", () => {
     ).resolves.toEqual({
       status: "rejected",
       reason: "idempotency_conflict",
+    });
+  });
+
+  it("marks a newly appended message as created", async () => {
+    await expect(executeSendMessage(input, baseDeps)).resolves.toEqual({
+      status: "accepted",
+      persistence: "created",
+      message: savedMessage,
     });
   });
 });

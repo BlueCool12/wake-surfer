@@ -9,8 +9,8 @@ stream으로 해석하는 규칙과 쓰기 권한 판단은 consumer가 주입�
 
 - `createSendMessage(dependencies)`: `SendMessage` 함수를 생성한다.
 - `SendMessageInput`: `senderActorId`, sender-scoped `idempotencyKey`, `target`, `text`를 받는다.
-- `SendMessageResult`: 저장된 `AppendedTextMessage`를 담은 `accepted` 또는 거절 이유를 담은
-  `rejected`를 반환한다.
+- `SendMessageResult`: 저장된 `AppendedTextMessage`와 `created | existing` 저장 결과를 담은
+  `accepted` 또는 거절 이유를 담은 `rejected`를 반환한다.
 - `toAcceptedTextMessage(message)`: 내부 `Date`를 ISO datetime 문자열로 변환한 send response
   message value를 만든다.
 
@@ -24,10 +24,11 @@ stream으로 해석하는 규칙과 쓰기 권한 판단은 consumer가 주입�
 - target resolve 실패와 쓰기 권한 거절은 각각 `target_not_found`, `write_forbidden`으로
   반환한다.
 - 같은 sender의 같은 `idempotencyKey`로 같은 target과 정규화된 text를 재시도하면 기존
-  메시지를 `accepted`로 반환한다.
+  메시지를 `persistence: "existing"`인 `accepted`로 반환한다.
 - 같은 sender와 `idempotencyKey`를 다른 target 또는 text에 재사용하면
   `idempotency_conflict`로 거절한다.
-- 새 메시지는 resolve된 stream 내에서 sequence를 발급받고 transaction으로 저장된다.
+- 새 메시지는 resolve된 stream 내에서 sequence를 발급받고 transaction으로 저장되며
+  `persistence: "created"`인 `accepted`로 반환된다.
 
 ## 책임이 아닌 것
 
