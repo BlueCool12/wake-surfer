@@ -11,9 +11,13 @@ import type {
   IssueGatewayTicketResponse,
   RealtimeChatErrorCode,
 } from "@wake-surfer/realtime-chat-gateway-ticket-contracts";
-import type { MessageSendModule } from "@wake-surfer/realtime-chat-message-send";
 import {
-  parseSendMessageRequestBody,
+  toAcceptedTextMessage,
+  type SendMessage,
+  type SendMessageResult,
+} from "@wake-surfer/realtime-chat-message-send";
+import {
+  parseSendMessageRequest,
   type SendMessageResponse,
 } from "@wake-surfer/realtime-chat-message-send-contracts";
 import type {
@@ -67,7 +71,7 @@ export type RealtimeChatApiAppDeps = {
   loadLatestMessages?: LoadLatestMessages;
   loadOlderMessages?: LoadOlderMessages;
   logger: AppLogger;
-  messageSend?: MessageSendModule;
+  sendMessage?: SendMessage;
   requestTimeoutMilliseconds?: number;
   syncAfterMessages?: SyncAfterMessages;
 };
@@ -98,7 +102,7 @@ export function createRealtimeChatApiApp(deps: RealtimeChatApiAppDeps): Hono {
     gatewayTicket,
     getAssertedActor,
     logger,
-    messageSend,
+    sendMessage,
   } = deps;
   const app = new Hono();
 
@@ -221,22 +225,25 @@ export function createRealtimeChatApiApp(deps: RealtimeChatApiAppDeps): Hono {
     return context.json(result);
   });
 
-  if (messageSend !== undefined && getAssertedActor !== undefined) {
+  if (sendMessage !== undefined && getAssertedActor !== undefined) {
     app.post("/internal/realtime-chat/messages", async (context) => {
       await authenticateGateway(context.req.raw);
       const actor = await getAssertedActor(context.req.raw);
       const body = await readRequiredJsonBody(context.req.raw);
-      const parsed = parseSendMessageRequestBody(body);
+      const parsed = parseSendMessageRequest(body);
 
       if (!parsed.ok) {
         throw new AppHttpError(400, "bad_request", parsed.message);
       }
 
-      let result: SendMessageResponse;
+      let result: SendMessageResult;
 
       try {
-        result = await messageSend.send(parsed.value, {
-          actorId: actor.actorId,
+        result = await sendMessage({
+          senderActorId: actor.actorId,
+          idempotencyKey: parsed.value.idempotencyKey,
+          target: parsed.value.target,
+          text: parsed.value.text,
         });
       } catch (error) {
         throw new AppHttpError(503, "internal_error", "message send service unavailable", {
@@ -244,7 +251,19 @@ export function createRealtimeChatApiApp(deps: RealtimeChatApiAppDeps): Hono {
         });
       }
 
-      return context.json(result);
+      if (result.status === "rejected") {
+        return context.json({
+          status: "rejected",
+          idempotencyKey: parsed.value.idempotencyKey,
+          reason: result.reason,
+        } satisfies SendMessageResponse);
+      }
+
+      return context.json({
+        status: "accepted",
+        idempotencyKey: parsed.value.idempotencyKey,
+        message: toAcceptedTextMessage(result.message),
+      } satisfies SendMessageResponse);
     });
   }
 

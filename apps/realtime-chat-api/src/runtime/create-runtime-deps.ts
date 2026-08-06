@@ -4,9 +4,11 @@ import {
   createStaticGatewayAssigner,
 } from "@wake-surfer/realtime-chat-gateway-ticket";
 import {
-  createMessageSendModule,
+  createSendMessage,
+  type MessageTargetResolver,
   type MessageWriteAuthorizer,
 } from "@wake-surfer/realtime-chat-message-send";
+import { getCanonicalStreamId } from "@wake-surfer/realtime-chat-message-contracts";
 import {
   createLoadLatestMessages,
   createLoadOlderMessages,
@@ -59,11 +61,16 @@ export async function createRuntimeDeps(
     });
     // MVP 세로 흐름용 임시 정책이다. 실제 channel membership/permission provider로 교체해야 한다.
     const authorizeChannelRead: ChannelReadAuthorizer = () => ({ status: "allowed" });
+    const resolveMessageTarget: MessageTargetResolver = ({ target }) => ({
+      status: "resolved",
+      streamId: getCanonicalStreamId(target),
+    });
     const authorizeMessageWrite: MessageWriteAuthorizer = ({ target }) =>
       target.type === "channel" ? { status: "allowed" } : { status: "denied" };
-    const messageSend = createMessageSendModule({
+    const sendMessage = createSendMessage({
       authorizeWrite: authorizeMessageWrite,
       db: database.db,
+      resolveTarget: resolveMessageTarget,
     });
 
     return {
@@ -91,7 +98,7 @@ export async function createRuntimeDeps(
           db: database.db,
         }),
         logger,
-        messageSend,
+        sendMessage,
         requestTimeoutMilliseconds: config.requestTimeoutMilliseconds,
         syncAfterMessages: createSyncAfterMessages({
           authorizeRead: authorizeChannelRead,
