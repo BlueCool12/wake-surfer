@@ -1,87 +1,86 @@
-import { MessageTargetSchema } from "@wake-surfer/realtime-chat-message-contracts";
+import { MessageTargetSchema } from "@wake-surfer/realtime-chat-message-send-contracts";
 import type {
-  ActorId,
-  ClientMessageId,
-  CommandId,
-  MessageId,
-  PublicMessage,
-  SendMessageContent,
-  SendMessageResponse,
-  SendMessageTarget,
-  StreamId,
+  AcceptedTextMessage,
+  MessageTarget,
 } from "@wake-surfer/realtime-chat-message-send-contracts";
+import type { AppendedTextMessage } from "./send-message.types";
 
-export type MessageIdGenerator = {
-  generate: () => MessageId;
-};
+const MAX_TEXT_UTF8_BYTES = 8_192;
 
-export type OutboundEventIdGenerator = {
-  generate: () => string;
-};
-
-export function assertActorId(actorId: ActorId): void {
+export function assertActorId(actorId: string): void {
   assertNonBlankString(actorId, "actorId");
 }
 
-export function assertClientMessageId(clientMessageId: ClientMessageId): void {
-  assertNonBlankString(clientMessageId, "clientMessageId");
+export function assertIdempotencyKey(idempotencyKey: string): void {
+  assertNonBlankString(idempotencyKey, "idempotencyKey");
+
+  if (idempotencyKey.trim() !== idempotencyKey) {
+    throw new Error("idempotencyKey 앞뒤에는 공백을 사용할 수 없습니다.");
+  }
 }
 
-export function assertMessageId(messageId: MessageId): void {
+export function assertMessageId(messageId: string): void {
   assertNonBlankString(messageId, "messageId");
 }
 
-export function assertStreamId(streamId: StreamId): void {
+export function assertStreamId(streamId: string): void {
   assertNonBlankString(streamId, "streamId");
 }
 
-export function assertMessageTarget(target: unknown): asserts target is SendMessageTarget {
+export function assertSendMessageTarget(target: unknown): asserts target is MessageTarget {
   if (!MessageTargetSchema.safeParse(target).success) {
-    throw new Error("message target이 올바르지 않습니다.");
+    throw new Error("send message target이 올바르지 않습니다.");
   }
 }
 
-export function assertMessageContent(content: SendMessageContent): void {
-  if (content.type !== "text") {
-    throw new Error("지원하지 않는 메시지 content type입니다.");
+export function normalizeMessageText(text: string): string | undefined {
+  const normalized = text.trim();
+
+  if (normalized.length === 0 || getUtf8ByteLength(normalized) > MAX_TEXT_UTF8_BYTES) {
+    return undefined;
   }
 
-  if (content.text.trim().length === 0) {
-    throw new Error("메시지 text는 비어 있지 않은 문자열이어야 합니다.");
+  return normalized;
+}
+
+export function getSendMessageTargetType(target: MessageTarget): MessageTarget["type"] {
+  return target.type;
+}
+
+export function getSendMessageTargetId(target: MessageTarget): string {
+  switch (target.type) {
+    case "channel":
+      return target.channelId;
+    case "dm":
+      return target.dmConversationId;
+    case "thread":
+      return target.threadId;
   }
 }
 
-export function createAcceptedResponse(input: {
-  command: {
-    commandId?: CommandId;
-    clientMessageId: ClientMessageId;
+export function getSendMessageStreamId(target: MessageTarget): string {
+  return `${getSendMessageTargetType(target)}:${getSendMessageTargetId(target)}`;
+}
+
+export function toAcceptedTextMessage(message: AppendedTextMessage): AcceptedTextMessage {
+  return {
+    messageId: message.messageId,
+    streamId: message.streamId,
+    sequence: message.sequence,
+    senderActorId: message.senderActorId,
+    target: message.target,
+    text: message.text,
+    createdAt: message.createdAt.toISOString(),
   };
-  message: PublicMessage;
-}): SendMessageResponse {
-  const response: SendMessageResponse = {
-    status: "accepted",
-    clientMessageId: input.command.clientMessageId,
-    message: input.message,
-  };
-
-  if (input.command.commandId !== undefined) {
-    response.commandId = input.command.commandId;
-  }
-
-  return response;
 }
 
-export const createDefaultMessageIdGenerator = (): MessageIdGenerator => ({
-  generate() {
-    return `msg_${globalThis.crypto.randomUUID()}`;
-  },
-});
+export function generateDefaultMessageId(): string {
+  return `msg_${globalThis.crypto.randomUUID()}`;
+}
 
-export const createDefaultOutboundEventIdGenerator = (): OutboundEventIdGenerator => ({
-  generate() {
-    return `evt_${globalThis.crypto.randomUUID()}`;
-  },
-});
+function getUtf8ByteLength(value: string): number {
+  return new TextEncoder().encode(value).byteLength;
+}
 
 function assertNonBlankString(value: unknown, fieldName: string): asserts value is string {
   if (typeof value !== "string" || value.trim().length === 0) {

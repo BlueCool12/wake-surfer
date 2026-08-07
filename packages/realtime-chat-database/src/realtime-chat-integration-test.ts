@@ -8,14 +8,21 @@ import type { RealtimeChatDatabaseHandle } from "./realtime-chat-database";
 export type RealtimeChatIntegrationTestDatabase = {
   db: RealtimeChatDatabaseHandle["db"];
   schemaName: string;
+  applyPendingMigrations: () => Promise<void>;
   close: () => Promise<void>;
+};
+
+export type CreateRealtimeChatIntegrationTestDatabaseOptions = {
+  maxMigrations?: number;
 };
 
 /**
  * `TEST_DATABASE_URL`로 지정한 PostgreSQL 안에 독립 schema를 만들고 Atlas migration을 적용한다.
  * 각 테스트 suite는 이 함수를 한 번 호출하고 `afterAll`에서 반환값의 `close()`를 호출해야 한다.
  */
-export async function createRealtimeChatIntegrationTestDatabase(): Promise<RealtimeChatIntegrationTestDatabase> {
+export async function createRealtimeChatIntegrationTestDatabase(
+  options: CreateRealtimeChatIntegrationTestDatabaseOptions = {},
+): Promise<RealtimeChatIntegrationTestDatabase> {
   const databaseUrl = getTestDatabaseUrl();
   const atlasDatabaseUrl = getTestAtlasDatabaseUrl();
   const schemaName = createSchemaName();
@@ -30,7 +37,11 @@ export async function createRealtimeChatIntegrationTestDatabase(): Promise<Realt
     await adminPool.query(`CREATE SCHEMA ${quoteIdentifier(schemaName)}`);
     schemaCreated = true;
 
-    await applyAtlasMigrations(createAtlasSchemaScopedDatabaseUrl(atlasDatabaseUrl, schemaName));
+    const schemaScopedAtlasDatabaseUrl = createAtlasSchemaScopedDatabaseUrl(
+      atlasDatabaseUrl,
+      schemaName,
+    );
+    await applyAtlasMigrations(schemaScopedAtlasDatabaseUrl, options.maxMigrations);
 
     database = createRealtimeChatDatabase({
       databaseUrl: createSchemaScopedDatabaseUrl(databaseUrl, schemaName),
@@ -39,6 +50,7 @@ export async function createRealtimeChatIntegrationTestDatabase(): Promise<Realt
     return {
       db: database.db,
       schemaName,
+      applyPendingMigrations: () => applyAtlasMigrations(schemaScopedAtlasDatabaseUrl),
       close: createCleanup(database, adminPool, schemaName),
     };
   } catch (error) {
@@ -108,8 +120,18 @@ function createAtlasSchemaScopedDatabaseUrl(databaseUrl: string, schemaName: str
   return parsed.toString();
 }
 
-async function applyAtlasMigrations(databaseUrl: string): Promise<void> {
+async function applyAtlasMigrations(databaseUrl: string, maxMigrations?: number): Promise<void> {
   const repositoryRoot = resolve(__dirname, "../../..");
+  let migrationAmount: string | undefined;
+
+  if (maxMigrations !== undefined) {
+    if (!Number.isSafeInteger(maxMigrations) || maxMigrations <= 0) {
+      throw new Error("maxMigrations는 1 이상의 안전한 정수여야 합니다.");
+    }
+
+    migrationAmount = String(maxMigrations);
+  }
+
   const args = [
     "compose",
     "run",
@@ -119,6 +141,13 @@ async function applyAtlasMigrations(databaseUrl: string): Promise<void> {
     "-e",
     `ATLAS_DATABASE_URL=${databaseUrl}`,
     "realtime-chat-migrate",
+    "migrate",
+    "apply",
+    ...(migrationAmount === undefined ? [] : [migrationAmount]),
+    "--env",
+    "runtime",
+    "--config",
+    "file:///workspace/atlas.hcl",
   ];
 
   await new Promise<void>((resolvePromise, reject) => {

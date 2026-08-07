@@ -96,9 +96,8 @@ actor가 시스템에 어떤 상태 변화를 요청하는 의도다. 아직 발
   - `chat.channel.join`의 subscription 요청
   - `chat.stream.sync`의 복구 요청
 - 식별:
-  - message command는 필수 `clientMessageId`와 선택적 `commandId`를 가진다.
-  - 현재 web은 `commandId`를 보내지 않고 `clientMessageId`를 message correlation과 idempotency에
-    사용한다.
+  - message command는 필수 `idempotencyKey`를 가진다.
+  - 현재 web은 `idempotencyKey`를 command correlation과 sender-scoped idempotency에 사용한다.
 - 금지 해석:
   - `SendMessage`를 `MessageCreated`와 같은 event로 부르지 않는다.
 
@@ -261,12 +260,13 @@ server가 resumable session 또는 event log에 보존한 누락 event를 원래
 같은 의도를 여러 번 처리해도 기준 상태 변화가 한 번만 일어나도록 하는 성질이다.
 
 - 현행:
-  - message key는 `(senderActorId, streamId, clientMessageId)`다.
+  - message key는 `(senderActorId, idempotencyKey)`다.
   - 같은 key의 retry는 기존 `messageId`와 sequence를 반환한다.
+  - 같은 key를 다른 target 또는 정규화된 text에 재사용하면 `idempotency_conflict`다.
   - 저장 exactly-once와 wire delivery exactly-once는 다르다. duplicate retry가 local
     `chat.message.created`를 다시 만들 수 있고 client가 identity로 제거한다.
 - P:
-  - message retry는 `(actorId, streamId, clientMessageId)`를 기준으로 같은 ID와 같은 payload를
+  - message retry는 `(actorId, idempotencyKey)`를 기준으로 같은 ID와 같은 target/text를
     유지한다(`P-IDEM-001`, `P-IDEM-002`).
   - duplicate live message는 `messageId`와 stream `sequence` identity가 모두 같을 때만 한 번 적용한다
     (`P-IDEM-003`).
@@ -288,8 +288,7 @@ server가 resumable session 또는 event log에 보존한 누락 event를 원래
 | `gatewayId` | ticket이 할당되고 connection을 처리한 Gateway identity | deployment 설정 | actor 또는 session |
 | `channelId` | channel target와 local subscription routing key | domain identity | canonical `streamId` 전체 |
 | `streamId` | `channel:{channelId}` 형태의 ordering scope | message lifetime | client가 임의로 보내는 routing key |
-| `clientMessageId` | actor가 만든 message command idempotency ID | retry 동안 유지 | server `messageId` |
-| `commandId` | 선택적 command correlation | 현재 web 미사용 | message idempotency의 유일 기준 |
+| `idempotencyKey` | actor가 만든 message command idempotency ID | retry 동안 유지 | server `messageId` |
 | `requestId` | HTTP/WS sync 요청·응답 correlation | 한 요청 동안 유지 | replay cursor |
 | `messageId` | 저장된 canonical message identity | 전역 고유 | command identity |
 | `eventId` | optional outbound delivery request 타입에만 존재 | 현재 runtime 미연결 | 모든 WS frame에 있는 공통 ID |
@@ -310,7 +309,7 @@ stateDiagram-v2
   [*] --> pending: "로컬 optimistic message 생성"
   pending --> sent: "chat.message.accepted 또는 canonical message 반영"
   pending --> failed: "command 거절 또는 연결 단절"
-  failed --> pending: "같은 clientMessageId로 재시도"
+  failed --> pending: "같은 idempotencyKey로 재시도"
   sent --> [*]
 ```
 
@@ -319,8 +318,8 @@ stateDiagram-v2
 - `pending`: server commit 결과를 아직 timeline에 반영하지 못했다.
 - `sent`: canonical `PublicMessage`를 timeline에 반영했다.
 - `failed`: 현재 시도는 성공을 확인하지 못했다. DB에 저장되지 않았다는 보장은 없다.
-- lost ACK 복구에서는 자기 message의 `senderActorId`, `sentAtClient`, text를 비교해 optimistic
-  message를 제거한다. history item에는 `clientMessageId`가 없다.
+- lost ACK 복구의 history/catch-up item에는 `idempotencyKey`가 없다. 따라서 같은 sender/text라는
+  이유만으로 optimistic message를 제거하지 않고, 같은 key 재시도의 accepted/rejected 결과로 확정한다.
 
 ### P 결정 상태
 
@@ -336,7 +335,7 @@ stateDiagram-v2
   COMMITTED --> APPLIED: "canonical message를 timeline에 병합"
   APPLIED --> APPLIED: "늦은 Commit ACK 또는 같은 identity 중복 병합"
   PENDING --> UNKNOWN_COMMIT: "ACK·거절 전 connection loss"
-  UNKNOWN_COMMIT --> RETRYING: "같은 clientMessageId와 payload로 재시도"
+  UNKNOWN_COMMIT --> RETRYING: "같은 idempotencyKey와 payload로 재시도"
   RETRYING --> COMMITTED: "Commit ACK"
   RETRYING --> APPLIED: "canonical 결과를 먼저 확인"
   PENDING --> REJECTED: "재시도 불가 command 거절"

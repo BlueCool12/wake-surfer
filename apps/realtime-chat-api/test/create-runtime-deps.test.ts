@@ -32,7 +32,7 @@ describe("realtime chat API runtime dependencies", () => {
       createDatabase: () => database,
     });
 
-    expect(runtime.appDeps.messageSend?.send).toEqual(expect.any(Function));
+    expect(runtime.appDeps.sendMessage).toEqual(expect.any(Function));
     expect(runtime.appDeps.loadLatestMessages).toEqual(expect.any(Function));
     expect(runtime.appDeps.loadOlderMessages).toEqual(expect.any(Function));
     expect(runtime.appDeps.syncAfterMessages).toEqual(expect.any(Function));

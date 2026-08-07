@@ -1,63 +1,65 @@
-import {
-  MessageTargetSchema,
-  PublicMessageSchema,
-  TextMessageContentSchema,
-} from "@wake-surfer/realtime-chat-message-contracts";
-import type {
-  ActorId,
-  ISODateTime,
-  MessageTarget,
-  PublicMessage,
-  TextMessageContent,
-} from "@wake-surfer/realtime-chat-message-contracts";
 import { z } from "zod";
 
-export type {
-  ActorId,
-  ChannelId,
-  DmConversationId,
-  ISODateTime,
-  MessageId,
-  MessageTarget,
-  PublicMessage,
-  Sequence,
-  StreamId,
-  TextMessageContent,
-  ThreadId,
-} from "@wake-surfer/realtime-chat-message-contracts";
-
-export type ClientMessageId = string;
-export type CommandId = string;
-
-export type SendMessageTarget = MessageTarget;
-export type SendMessageContent = TextMessageContent;
-
-export type SendMessageRequest = {
-  commandId?: CommandId;
-  clientMessageId: ClientMessageId;
-  target: SendMessageTarget;
-  content: SendMessageContent;
-  sentAtClient?: ISODateTime;
-};
-
+const MAX_TEXT_UTF8_BYTES = 8_192;
 const NonBlankStringSchema = z.string().trim().min(1);
 const ISODateTimeSchema = z
   .string()
   .trim()
   .pipe(z.iso.datetime({ offset: true }));
+const IdempotencyKeySchema = z
+  .string()
+  .min(1)
+  .refine(
+    (idempotencyKey) => idempotencyKey.trim() === idempotencyKey,
+    "idempotencyKey 앞뒤에는 공백을 사용할 수 없습니다.",
+  );
+const AcceptedMessageTextSchema = NonBlankStringSchema.refine(
+  (text) => getUtf8ByteLength(text) <= MAX_TEXT_UTF8_BYTES,
+  `메시지 text는 UTF-8 ${MAX_TEXT_UTF8_BYTES} byte 이하여야 합니다.`,
+);
 
-export const SendMessageTargetSchema = MessageTargetSchema;
-export const SendMessageContentSchema = TextMessageContentSchema;
+export type MessageTarget =
+  | {
+      type: "channel";
+      channelId: string;
+    }
+  | {
+      type: "dm";
+      dmConversationId: string;
+    }
+  | {
+      type: "thread";
+      threadId: string;
+    };
 
-export const SendMessageRequestBodySchema = z.strictObject({
-  commandId: NonBlankStringSchema.optional(),
-  clientMessageId: NonBlankStringSchema,
-  target: SendMessageTargetSchema,
-  content: SendMessageContentSchema,
-  sentAtClient: ISODateTimeSchema.optional(),
+export const MessageTargetSchema = z.discriminatedUnion("type", [
+  z.strictObject({
+    type: z.literal("channel"),
+    channelId: NonBlankStringSchema,
+  }),
+  z.strictObject({
+    type: z.literal("dm"),
+    dmConversationId: NonBlankStringSchema,
+  }),
+  z.strictObject({
+    type: z.literal("thread"),
+    threadId: NonBlankStringSchema,
+  }),
+]);
+
+export type SendMessageRequest = {
+  idempotencyKey: string;
+  target: MessageTarget;
+  text: string;
+};
+
+export const SendMessageRequestSchema = z.strictObject({
+  idempotencyKey: IdempotencyKeySchema,
+  target: MessageTargetSchema,
+  text: z.string(),
 });
 
-export type SendMessageRequestBodyParseResult =
+export type SendMessageRequestParseResult =
   | {
       ok: true;
       value: SendMessageRequest;
@@ -67,8 +69,8 @@ export type SendMessageRequestBodyParseResult =
       message: string;
     };
 
-export function parseSendMessageRequestBody(body: unknown): SendMessageRequestBodyParseResult {
-  const parsed = SendMessageRequestBodySchema.safeParse(body);
+export function parseSendMessageRequest(body: unknown): SendMessageRequestParseResult {
+  const parsed = SendMessageRequestSchema.safeParse(body);
 
   if (!parsed.success) {
     return {
@@ -79,64 +81,87 @@ export function parseSendMessageRequestBody(body: unknown): SendMessageRequestBo
 
   return {
     ok: true,
-    value: removeUndefinedOptionalFields(parsed.data),
+    value: parsed.data,
   };
 }
 
-function removeUndefinedOptionalFields(
-  input: z.infer<typeof SendMessageRequestBodySchema>,
-): SendMessageRequest {
-  const value: SendMessageRequest = {
-    clientMessageId: input.clientMessageId,
-    target: input.target,
-    content: input.content,
-  };
+export type AcceptedTextMessage = {
+  messageId: string;
+  streamId: string;
+  sequence: number;
+  senderActorId: string;
+  target: MessageTarget;
+  text: string;
+  createdAt: string;
+};
 
-  if (input.commandId !== undefined) {
-    value.commandId = input.commandId;
-  }
+export const AcceptedTextMessageSchema = z.strictObject({
+  messageId: NonBlankStringSchema,
+  streamId: NonBlankStringSchema,
+  sequence: z.number().int().safe().positive(),
+  senderActorId: NonBlankStringSchema,
+  target: MessageTargetSchema,
+  text: AcceptedMessageTextSchema,
+  createdAt: ISODateTimeSchema,
+});
 
-  if (input.sentAtClient !== undefined) {
-    value.sentAtClient = input.sentAtClient;
-  }
+export type SendMessageRejectedReason =
+  "invalid_text" | "target_not_found" | "write_forbidden" | "idempotency_conflict";
 
-  return value;
-}
-
-export type SendMessageRejectedReason = "invalid_content" | "target_not_found" | "write_forbidden";
+export type SendMessagePersistence = "created" | "existing";
 
 export type SendMessageResponse =
   | {
       status: "accepted";
-      commandId?: CommandId;
-      clientMessageId: ClientMessageId;
-      message: PublicMessage;
+      idempotencyKey: string;
+      message: AcceptedTextMessage;
     }
   | {
       status: "rejected";
-      commandId?: CommandId;
-      clientMessageId: ClientMessageId;
+      idempotencyKey: string;
       reason: SendMessageRejectedReason;
     };
 
 export const SendMessageResponseSchema = z.discriminatedUnion("status", [
   z.strictObject({
     status: z.literal("accepted"),
-    commandId: NonBlankStringSchema.optional(),
-    clientMessageId: NonBlankStringSchema,
-    message: PublicMessageSchema,
+    idempotencyKey: IdempotencyKeySchema,
+    message: AcceptedTextMessageSchema,
   }),
   z.strictObject({
     status: z.literal("rejected"),
-    commandId: NonBlankStringSchema.optional(),
-    clientMessageId: NonBlankStringSchema,
-    reason: z.enum(["invalid_content", "target_not_found", "write_forbidden"]),
+    idempotencyKey: IdempotencyKeySchema,
+    reason: z.enum(["invalid_text", "target_not_found", "write_forbidden", "idempotency_conflict"]),
   }),
 ]);
 
-export type OutboundMessageDeliveryRequested = {
-  eventId: string;
-  occurredAt: ISODateTime;
-  message: PublicMessage;
-  recipientActorIds: ActorId[];
-};
+export type InternalSendMessageResponse =
+  | {
+      status: "accepted";
+      persistence: SendMessagePersistence;
+      idempotencyKey: string;
+      message: AcceptedTextMessage;
+    }
+  | {
+      status: "rejected";
+      idempotencyKey: string;
+      reason: SendMessageRejectedReason;
+    };
+
+export const InternalSendMessageResponseSchema = z.discriminatedUnion("status", [
+  z.strictObject({
+    status: z.literal("accepted"),
+    persistence: z.enum(["created", "existing"]),
+    idempotencyKey: IdempotencyKeySchema,
+    message: AcceptedTextMessageSchema,
+  }),
+  z.strictObject({
+    status: z.literal("rejected"),
+    idempotencyKey: IdempotencyKeySchema,
+    reason: z.enum(["invalid_text", "target_not_found", "write_forbidden", "idempotency_conflict"]),
+  }),
+]);
+
+function getUtf8ByteLength(value: string): number {
+  return new TextEncoder().encode(value).byteLength;
+}

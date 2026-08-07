@@ -17,7 +17,7 @@ describe("realtime-chat Atlas PostgreSQL migration", () => {
     await database?.close();
   });
 
-  it("applies the initial schema and records the Atlas revision", async () => {
+  it("applies the versioned schema and records every Atlas revision", async () => {
     const relations = await sql<{
       gatewayTickets: string | null;
       messageStreams: string | null;
@@ -44,8 +44,175 @@ describe("realtime-chat Atlas PostgreSQL migration", () => {
       SELECT count(*)::text AS count
       FROM atlas_schema_revisions
     `.execute(getDatabase().db);
-    expect(revisions.rows).toEqual([{ count: "1" }]);
+    expect(revisions.rows).toEqual([{ count: "2" }]);
   });
+
+  it("migrates message correlation to sender-scoped idempotency keys", async () => {
+    const columns = await sql<{ columnName: string }>`
+      SELECT column_name AS "columnName"
+      FROM information_schema.columns
+      WHERE table_schema = current_schema()
+        AND table_name = 'messages'
+        AND column_name IN ('client_message_id', 'idempotency_key')
+      ORDER BY column_name
+    `.execute(getDatabase().db);
+
+    expect(columns.rows).toEqual([{ columnName: "idempotency_key" }]);
+
+    await sql`
+      INSERT INTO message_streams (stream_id, target_type, target_id, last_sequence, created_at)
+      VALUES (${"channel:idempotency-default"}, ${"channel"}, ${"idempotency-default"}, 1, now())
+    `.execute(getDatabase().db);
+    await sql`
+      INSERT INTO messages (
+        message_id,
+        stream_id,
+        sequence,
+        sender_actor_id,
+        target_type,
+        target_id,
+        idempotency_key,
+        content_text,
+        created_at
+      )
+      VALUES (
+        ${"message-idempotency-default"},
+        ${"channel:idempotency-default"},
+        ${1},
+        ${"actor-idempotency-default"},
+        ${"channel"},
+        ${"idempotency-default"},
+        ${"key-idempotency-default"},
+        ${"hello"},
+        now()
+      )
+    `.execute(getDatabase().db);
+
+    const messages = await sql<{ contentType: string; idempotencyKey: string }>`
+      SELECT
+        content_type AS "contentType",
+        idempotency_key AS "idempotencyKey"
+      FROM messages
+      WHERE message_id = ${"message-idempotency-default"}
+    `.execute(getDatabase().db);
+    expect(messages.rows).toEqual([
+      {
+        contentType: "text",
+        idempotencyKey: "key-idempotency-default",
+      },
+    ]);
+  });
+
+  it("upgrades legacy cross-stream keys without dropping messages", async () => {
+    const legacyDatabase = await createRealtimeChatIntegrationTestDatabase({
+      maxMigrations: 1,
+    });
+
+    try {
+      await sql`
+          INSERT INTO message_streams (
+            stream_id,
+            target_type,
+            target_id,
+            last_sequence,
+            created_at
+          )
+          VALUES
+            (
+              ${"channel:legacy-1"},
+              ${"channel"},
+              ${"legacy-1"},
+              ${1},
+              ${new Date("2026-07-25T00:00:00.000Z")}
+            ),
+            (
+              ${"channel:legacy-2"},
+              ${"channel"},
+              ${"legacy-2"},
+              ${1},
+              ${new Date("2026-07-25T00:00:00.000Z")}
+            )
+        `.execute(legacyDatabase.db);
+      await sql`
+          INSERT INTO messages (
+            message_id,
+            stream_id,
+            sequence,
+            sender_actor_id,
+            target_type,
+            target_id,
+            client_message_id,
+            content_type,
+            content_text,
+            sent_at_client,
+            created_at
+          )
+          VALUES
+            (
+              ${"message-legacy-1"},
+              ${"channel:legacy-1"},
+              ${1},
+              ${"actor-legacy"},
+              ${"channel"},
+              ${"legacy-1"},
+              ${"reused-client-message-id"},
+              ${"text"},
+              ${"first"},
+              NULL,
+              ${new Date("2026-07-25T00:00:01.000Z")}
+            ),
+            (
+              ${"message-legacy-2"},
+              ${"channel:legacy-2"},
+              ${1},
+              ${"actor-legacy"},
+              ${"channel"},
+              ${"legacy-2"},
+              ${"reused-client-message-id"},
+              ${"text"},
+              ${"second"},
+              NULL,
+              ${new Date("2026-07-25T00:00:02.000Z")}
+            )
+        `.execute(legacyDatabase.db);
+
+      await legacyDatabase.applyPendingMigrations();
+
+      const messages = await sql<{ idempotencyKey: string; messageId: string }>`
+          SELECT
+            message_id AS "messageId",
+            idempotency_key AS "idempotencyKey"
+          FROM messages
+          WHERE sender_actor_id = ${"actor-legacy"}
+          ORDER BY message_id
+        `.execute(legacyDatabase.db);
+      expect(messages.rows).toEqual([
+        {
+          messageId: "message-legacy-1",
+          idempotencyKey: "legacy:1",
+        },
+        {
+          messageId: "message-legacy-2",
+          idempotencyKey: "legacy:2",
+        },
+      ]);
+
+      const constraint = await sql<{ constraintName: string }>`
+          SELECT constraint_name AS "constraintName"
+          FROM information_schema.table_constraints
+          WHERE table_schema = current_schema()
+            AND table_name = 'messages'
+            AND constraint_name = 'messages_sender_actor_id_idempotency_key_key'
+        `.execute(legacyDatabase.db);
+      expect(constraint.rows).toEqual([
+        {
+          constraintName: "messages_sender_actor_id_idempotency_key_key",
+        },
+      ]);
+    } finally {
+      await legacyDatabase.close();
+    }
+  }, 120_000);
 
   it("enforces the message content type and UTF-8 8KiB constraints", async () => {
     await sql`
@@ -94,7 +261,7 @@ describe("realtime-chat Atlas PostgreSQL migration", () => {
         sender_actor_id,
         target_type,
         target_id,
-        client_message_id,
+        idempotency_key,
         content_type,
         content_text,
         sent_at_client,

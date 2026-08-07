@@ -8,7 +8,7 @@ import {
   GatewayNotReadyEventSchema,
 } from "@wake-surfer/realtime-chat-gateway-ticket-contracts";
 import {
-  parseSendMessageRequestBody,
+  parseSendMessageRequest,
   type SendMessageRequest,
   type SendMessageResponse,
 } from "@wake-surfer/realtime-chat-message-send-contracts";
@@ -284,7 +284,7 @@ export function createRealtimeChatGatewayApp(
         return;
       }
       case "chat.message.send": {
-        const parsed = parseSendMessageRequestBody(frame.payload);
+        const parsed = parseSendMessageRequest(frame.payload);
 
         if (!parsed.ok) {
           closeIfOpen(websocket, 1008, "invalid message send frame");
@@ -318,9 +318,8 @@ export function createRealtimeChatGatewayApp(
     if (request.target.type !== "channel" || !session.channels.has(request.target.channelId)) {
       const rejected: Extract<SendMessageResponse, { status: "rejected" }> = {
         status: "rejected",
-        clientMessageId: request.clientMessageId,
+        idempotencyKey: request.idempotencyKey,
         reason: "write_forbidden",
-        ...(request.commandId === undefined ? {} : { commandId: request.commandId }),
       };
       await sendWireEvent(session.socket, "chat.message.rejected", { ...rejected });
       return;
@@ -345,8 +344,10 @@ export function createRealtimeChatGatewayApp(
     }
 
     const channelId = response.message.target.channelId;
+    const { text, ...createdMessage } = response.message;
+    const { persistence, ...acceptedResponse } = response;
     const acceptedDelivery = sendWireEvent(session.socket, "chat.message.accepted", {
-      ...response,
+      ...acceptedResponse,
     }).catch((error: unknown) => {
       deps.logger.warn(
         {
@@ -356,6 +357,12 @@ export function createRealtimeChatGatewayApp(
         "실시간 채팅 메시지 accepted 전달 실패",
       );
     });
+
+    if (persistence === "existing") {
+      await acceptedDelivery;
+      return;
+    }
+
     const deliveries = [...sessionsById.values()]
       .filter(
         (candidate) =>
@@ -366,7 +373,8 @@ export function createRealtimeChatGatewayApp(
       .map(async (candidate) => {
         try {
           await sendWireEvent(candidate.socket, "chat.message.created", {
-            ...response.message,
+            ...createdMessage,
+            content: { type: "text", text },
           });
         } catch (error) {
           deps.logger.warn(

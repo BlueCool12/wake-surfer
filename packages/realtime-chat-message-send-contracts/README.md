@@ -20,6 +20,8 @@ CommonJS로 각각 변환하며, package `exports`의 `import`와 `require` 조�
 - message-send request body validation schema와 parser를 제공한다.
 - message-send command correlation과 accepted/rejected response 및
   `SendMessageResponseSchema`를 정의한다.
+- API와 Gateway 사이에서만 사용하는 저장 결과 포함 `InternalSendMessageResponseSchema`를 정의한다.
+- 공개 `SendMessageResponse`에는 내부 `created | existing` 저장 결과를 포함하지 않는다.
 - outbound delivery 요청 event의 send 전용 envelope을 정의한다.
 
 ## 책임이 아닌 것

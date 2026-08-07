@@ -68,16 +68,17 @@ Sender ACK
 
 | ID | 실패·주입 지점 | C / G / A / O 상태 | 중복·순서·유실 위험 | 재시도·복구·사용자 표시 | 현행 |
 | --- | --- | --- | --- | --- | --- |
-| FS-MSG-001 | A: 전송 직전 연결 종료 | C: optimistic `PENDING`; G/A: frame 미수신; O: 없음 | DB 유실 없음, 사용자 의도 미반영 | pending을 `FAILED_RETRYABLE`로 바꾸고 연결 후 같은 `clientMessageId`로 사용자 재시도 | disconnect 시 failed |
+| FS-MSG-001 | A: 전송 직전 연결 종료 | C: optimistic `PENDING`; G/A: frame 미수신; O: 없음 | DB 유실 없음, 사용자 의도 미반영 | pending을 `FAILED_RETRYABLE`로 바꾸고 연결 후 같은 `idempotencyKey`로 사용자 재시도 | disconnect 시 failed |
 | FS-MSG-002 | B: Gateway 수신 후 API 전달 실패 | C: pending; G: frame은 앎, commit 여부 없음; A/O: 없음 | 같은 명령 재시도 필요 | 인프라 실패를 command failure로 상관해 반환하는 것이 `P`; 현행은 socket 1011. 재접속 후 같은 키 재시도 | 현행 close 가능 |
-| FS-MSG-003 | C: API가 저장하지 못함 | C: pending; G: API failure; A: rollback/no row; O: 없음 | sequence는 commit되지 않음 | retryable failure와 `clientMessageId` 반환, 같은 키 재시도. 사용자 “전송 실패—재시도” | API 503→Gateway 예외/1011 |
-| FS-MSG-004 | D/G: 저장 성공 후 sender ACK 유실 | C: pending/failed; G: 응답 또는 socket send 유실; A: 메시지 존재; O: 일부는 created 관찰 가능 | 재전송 시 DB 중복 위험 | 같은 `clientMessageId` 재전송→기존 `messageId/sequence` 반환. timeline은 identity dedupe | DB 멱등성 구현 |
-| FS-MSG-005 | ACK 유실로 같은 명령 재전송 | C: 같은 optimistic item; G: 새 요청; A: 기존 row 반환; O: 현행 Gateway가 created를 다시 fan-out | DB 중복 없음, wire 중복 있음 | `messageId + streamId + sequence`로 drop. `P`: 동일 키의 다른 payload는 idempotency conflict | dedupe 구현, payload 충돌 미검사 |
+| FS-MSG-003 | C: API가 저장하지 못함 | C: pending; G: API failure; A: rollback/no row; O: 없음 | sequence는 commit되지 않음 | retryable failure와 `idempotencyKey`를 상관해 같은 키 재시도. 사용자 “전송 실패—재시도” | API 503→Gateway 예외/1011 |
+| FS-MSG-004 | D/G: 저장 성공 후 sender ACK 유실 | C: pending/failed; G: 응답 또는 socket send 유실; A: 메시지 존재; O: 일부는 created 관찰 가능 | 재전송 시 DB 중복 위험 | catch-up message만으로 optimistic item을 추측 제거하지 않는다. 같은 `idempotencyKey` 재전송→기존 `messageId/sequence` 반환 후 확정 | DB 멱등성·Web retry 구현 |
+| FS-MSG-005 | ACK 유실로 같은 명령 재전송 | C: 같은 optimistic item; G: 새 요청; A: 기존 row 반환; O: 기존 created 재발행 없음 | DB·wire 중복 없음. 최초 live fan-out 유실은 남을 수 있음 | 같은 `idempotencyKey` 재전송으로 sender accepted를 다시 받고, 구독자의 event gap은 catch-up한다. 동일 key의 target/text도 같아야 한다 | 기존 메시지는 accepted만 반환하고 created fan-out 생략 |
 | FS-MSG-006 | D/F: 저장 성공, 일부 구독자 전달 실패 | C sender: accepted; G: 일부 send failure; A: commit; O: 수신자별로 다름 | 일부 Client gap | 수신자가 다음 sequence gap/재접속을 통해 catch-up. accepted를 delivery 완료로 표시하지 않음 | local send 실패를 로그 후 무시 |
 | FS-MSG-007 | 동일 created event 두 번 도착 | C: 같은 identity 재수신; G/A: 하나의 저장 row; O: 중복 관찰 가능 | unread/화면 중복 | `messageId↔sequence` identity가 같으면 drop; 불일치면 protocol failure/full sync 검토 | timeline dedupe 구현 |
 | FS-MSG-008 | message event 순서 역전 | C: cursor보다 미래 sequence 수신; G: send scheduling/경로 순서 다름; A: DB 순서는 확정; O: 서로 다른 순서 가능 | 화면 순서 역전 | 미래 event buffer, 연속 구간만 apply. gap을 catch-up한 뒤 drain | timeline buffer 구현 |
 | FS-MSG-009 | 중간 sequence 누락 | C: cursor gap; G: 누락 인지 못할 수 있음; A: 연속 rows 존재; O: 각기 다름 | 한 message 미표시 | `afterSequence` catch-up, fixed watermark page 적용. 연속성 위반은 protocol failure | gap buffer·generation bootstrap sync는 구현. live gap 자체의 catch-up trigger는 미구현 `P` |
 | FS-MSG-010 | 삭제 뒤 수정 명령 도착 | C: stale editable view; G: relay; A: deleted version; O: 삭제를 봤을 수 있음 | 삭제 사실 역전 | `P`: edit를 conflict/rejected로 종료하고 최신 tombstone 적용. 자동 재시도 안 함 | edit/delete 미구현 |
+| FS-MSG-011 | 같은 sender가 기존 `idempotencyKey`를 다른 target 또는 text에 재사용 | C: 기존 optimistic item과 다른 의도; G: 유효 frame relay; A: 기존 row와 payload 불일치; O: 기존 message만 존재 | 키 충돌을 새 메시지로 저장하면 중복·의도 오염 | API가 `idempotency_conflict`로 거절하고 기존 canonical message는 변경하지 않는다. 자동으로 새 key를 만들거나 재시도하지 않음 | 구현 |
 | FS-MSG-012 | 수정 중 다른 actor가 삭제 | C: edit pending; G: 두 명령을 relay; A: edit/delete 중 하나 선행; O: 순서에 따라 다름 | edit resurrection | `P`: 첫 commit의 version이 우선. 삭제 뒤 edit는 거절; Client는 tombstone 반영 | 미구현 |
 | FS-MSG-013 | 잘못된 JSON/schema/field | C: 잘못된 command; G: parse 가능 여부에 따라 모름; A: strict schema 전에 도달 안 함; O: 없음 | 공격·state 없음 | request correlation을 신뢰할 수 있으면 command reject, frame 자체를 신뢰할 수 없으면 1008 close. 사용자 입력 오류와 protocol 오류 분리 | 현행 malformed frame/send는 1008 |
 | FS-MSG-014 | frame 또는 text 허용 크기 초과 | C: pending 가능; G: frame max 또는 schema 거절; A: text 8KiB 검증/DB check; O: 없음 | 자원 고갈 | oversized frame은 1009, 상관 가능한 text validation은 `invalid_content`로 명령 거절. 자동 재시도 없음 | maxPayload·8KiB 계약 구현, WS mapping 부분 |

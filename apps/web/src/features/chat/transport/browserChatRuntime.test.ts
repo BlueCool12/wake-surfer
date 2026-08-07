@@ -61,39 +61,41 @@ describe("browser chat runtime", () => {
     expect(connectionGenerations).toHaveBeenCalledWith("generation-1");
 
     transport.sendChannelMessage({
-      clientMessageId: "client-1",
-      content: { type: "text", text: "파도" },
-      sentAtClient: "2026-07-25T06:00:00.000Z",
+      idempotencyKey: "client-1",
+      text: "파도",
     });
     expect(session.sent[1]).toEqual({
       eventName: "chat.message.send",
       rawPayload: JSON.stringify({
-        clientMessageId: "client-1",
+        idempotencyKey: "client-1",
         target: { type: "channel", channelId: "channel-runtime" },
-        content: { type: "text", text: "파도" },
-        sentAtClient: "2026-07-25T06:00:00.000Z",
+        text: "파도",
       }),
     });
 
     const message = createMessage("channel-runtime");
+    const { content, ...acceptedMessage } = message;
     session.serverEmit("chat.message.accepted", {
       status: "accepted",
-      clientMessageId: "client-1",
-      message,
+      idempotencyKey: "client-1",
+      message: {
+        ...acceptedMessage,
+        text: content.text,
+      },
     });
     session.serverEmit("chat.message.rejected", {
       status: "rejected",
-      clientMessageId: "client-2",
+      idempotencyKey: "client-2",
       reason: "write_forbidden",
     });
     session.serverEmit("chat.message.created", message);
     session.serverEmit("chat.message.created", createMessage("another-channel"));
     expect(accepted).toHaveBeenCalledWith(
-      expect.objectContaining({ status: "accepted", clientMessageId: "client-1" }),
+      expect.objectContaining({ status: "accepted", idempotencyKey: "client-1" }),
     );
     expect(rejected).toHaveBeenCalledWith({
       status: "rejected",
-      clientMessageId: "client-2",
+      idempotencyKey: "client-2",
       reason: "write_forbidden",
     });
     expect(created).toHaveBeenCalledTimes(1);

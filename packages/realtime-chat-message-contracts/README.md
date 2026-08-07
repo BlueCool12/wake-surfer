@@ -1,20 +1,21 @@
 # @wake-surfer/realtime-chat-message-contracts
 
-`message-send`, stream query, 실시간 delivery가 공통으로 사용하는 versioned 외부 message value 계약이다.
+transport와 저장 구현에 독립적인 공개 message value 계약을 제공한다.
 
 ## 공개 계약
 
 - 공통 ID 타입, `MessageTarget`, canonical `StreamId` 계산 규칙
-- `PublicMessage`와 `USER/TEXT` content의 타입 및 strict runtime schema
+- `PublicMessage`와 text content의 타입 및 strict runtime schema
 - UTF-8 기준 text 최대 8,192 byte 정책
 
-`PublicMessage`의 canonical 외부 필드는 `senderActorId`, `target`, `content.type: "text"`다.
-history item에는 `clientMessageId`를 포함하지 않는다. 현재 variant는 `USER/TEXT`만 지원하며 `SYSTEM`과
-알 수 없는 variant는 parse하지 않는다.
+`PublicMessage`는 `messageId`, `streamId`, `sequence`, `senderActorId`, `target`, `content`, `createdAt`을
+포함하고 `sentAtClient`를 선택적으로 받는다. `clientMessageId`는 public message value에 포함하지
+않는다. 현재 content variant는 `{ type: "text", text }`만 지원하며, 알 수 없는 필드와 variant는
+strict runtime schema가 거절한다.
 
 `getCanonicalStreamId(target)`은 `{target.type}:{targetId}`를 반환한다. 예를 들어 channel target의
-canonical stream ID는 `channel:{channelId}`다. send와 query는 각자의 resolver 규칙을 복제하지 않고 이
-함수를 사용한다.
+canonical stream ID는 `channel:{channelId}`다. canonical stream identity가 필요한 consumer는 이 함수를
+사용하고 규칙을 복제하지 않는다.
 
 ## 모듈 형식
 
@@ -22,11 +23,13 @@ canonical stream ID는 `channel:{channelId}`다. send와 query는 각자의 reso
 CommonJS로 각각 변환하며, package `exports`의 `import`와 `require` 조건이 실행 환경에 맞는 결과물을
 선택한다. 타입 선언은 두 형식이 공유한다.
 
-## 비공개 내부 모델
+## 책임이 아닌 것
 
 이 패키지는 다음을 소유하지 않는다.
 
-- send command와 `clientMessageId` 기반 멱등성
+- send request/response envelope와 멱등성 키 정책
 - DB row, Kysely query, stream sequence 발급과 저장 transaction
 - target 존재·권한 확인과 target별 resolver 정책
 - HTTP/WebSocket transport envelope와 delivery 수신자 결정
+
+패키지 내부 경로는 공개 API가 아니므로 deep import하지 않는다.

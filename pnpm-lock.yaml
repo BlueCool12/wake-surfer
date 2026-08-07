@@ -175,6 +175,9 @@ importers:
       '@wake-surfer/realtime-chat-message-send':
         specifier: workspace:*
         version: link:../realtime-chat-message-send
+      '@wake-surfer/realtime-chat-stream-messages':
+        specifier: workspace:*
+        version: link:../realtime-chat-stream-messages
       kysely:
         specifier: 0.28.8
         version: 0.28.8
@@ -227,9 +230,6 @@ importers:
 
   packages/realtime-chat-message-send:
     dependencies:
-      '@wake-surfer/realtime-chat-message-contracts':
-        specifier: workspace:*
-        version: link:../realtime-chat-message-contracts
       '@wake-surfer/realtime-chat-message-send-contracts':
         specifier: workspace:*
         version: link:../realtime-chat-message-send-contracts
@@ -243,9 +243,6 @@ importers:
 
   packages/realtime-chat-message-send-contracts:
     dependencies:
-      '@wake-surfer/realtime-chat-message-contracts':
-        specifier: workspace:*
-        version: link:../realtime-chat-message-contracts
       zod:
         specifier: 4.2.1
         version: 4.2.1

@@ -1,22 +1,19 @@
-import type {
-  PublicMessage,
-  TextMessageContent,
-} from "@wake-surfer/realtime-chat-message-contracts";
+import type { PublicMessage } from "@wake-surfer/realtime-chat-message-contracts";
 import type { SendMessageResponse } from "@wake-surfer/realtime-chat-message-send-contracts";
 import type { StreamMessagesTransport } from "@wake-surfer/realtime-chat-stream-messages-client";
 
-export type MessageAcceptedResponse = Extract<SendMessageResponse, { status: "accepted" }>;
+type AcceptedSendMessageResponse = Extract<SendMessageResponse, { status: "accepted" }>;
+
+export type MessageAcceptedResponse = Omit<AcceptedSendMessageResponse, "message"> & {
+  message: PublicMessage;
+};
 export type MessageRejectedResponse = Extract<SendMessageResponse, { status: "rejected" }>;
 
 export interface ChatMessageTransport {
   connect(): Promise<void>;
   disconnect(): void;
   isReady(): boolean;
-  sendChannelMessage(params: {
-    clientMessageId: string;
-    content: TextMessageContent;
-    sentAtClient: string;
-  }): void;
+  sendChannelMessage(params: { idempotencyKey: string; text: string }): void;
   onConnectionGenerationChanged(listener: (connectionGeneration: string) => void): () => void;
   onDisconnected(listener: () => void): () => void;
   onMessageCreated(listener: (message: PublicMessage) => void): () => void;
