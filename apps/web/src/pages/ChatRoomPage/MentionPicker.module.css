@@ -1,8 +1,8 @@
 .list {
   position: absolute;
   bottom: 100%;
-  left: var(--space-5);
-  right: var(--space-5);
+  left: var(--composer-padding-x, var(--space-5));
+  right: var(--composer-padding-x, var(--space-5));
   margin: 0 0 var(--space-2);
   padding: var(--space-1);
   max-height: 12rem;
@@ -51,4 +51,10 @@
 
 .name {
   font-size: var(--font-size-sm);
+}
+
+@media (pointer: coarse) {
+  .item {
+    min-height: var(--space-11);
+  }
 }

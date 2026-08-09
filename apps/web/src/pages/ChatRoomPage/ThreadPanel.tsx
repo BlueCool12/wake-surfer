@@ -29,6 +29,10 @@ export type RoomMember = {
 export type ThreadPanelTab = "thread" | "members" | "memo";
 
 type ThreadPanelProps = {
+  /** 부모가 정하는 배치용 클래스(좁은 화면에서는 전체 화면 오버레이). */
+  className?: string | undefined;
+  /** 오버레이를 닫을 때 호출. 넓은 화면에서는 닫기 버튼이 숨겨진다. */
+  onClose: () => void;
   activeTab: ThreadPanelTab;
   onTabChange: (tab: ThreadPanelTab) => void;
   parentMessage: ChatMessageView | undefined;
@@ -45,6 +49,8 @@ type ThreadPanelProps = {
 
 /** 채팅방 오른쪽에 고정되는 스레드/멤버/메모 패널. 백엔드에 스레드 개념이 없어 답글은 이 화면 안에서만 유지된다. */
 function ThreadPanel({
+  className,
+  onClose,
   activeTab,
   onTabChange,
   parentMessage,
@@ -122,9 +128,11 @@ function ThreadPanel({
     onDeleteParent();
   };
 
+  const panelClass = className === undefined ? styles.panel : `${styles.panel} ${className}`;
+
   if (isCollapsed) {
     return (
-      <aside className={styles.panel}>
+      <aside className={panelClass}>
         <div className={styles.rail}>
           <button
             type="button"
@@ -168,7 +176,7 @@ function ThreadPanel({
   }
 
   return (
-    <aside className={styles.panel}>
+    <aside className={panelClass}>
       <div className={styles.tabs}>
         <button
           type="button"
@@ -200,12 +208,21 @@ function ThreadPanel({
 
         <button
           type="button"
-          className={`${styles.tab} ${styles.tabsEnd}`}
+          className={`${styles.tab} ${styles.tabsEnd} ${styles.collapseButton}`}
           onClick={() => onCollapsedChange(true)}
           aria-label="패널 접기"
         >
           <PanelRightClose size={16} />
           <span className={styles.tooltip}>접기</span>
+        </button>
+
+        <button
+          type="button"
+          className={`${styles.tab} ${styles.tabsEnd} ${styles.closeButton}`}
+          onClick={onClose}
+          aria-label="패널 닫기"
+        >
+          <PanelRightClose size={16} />
         </button>
       </div>
 

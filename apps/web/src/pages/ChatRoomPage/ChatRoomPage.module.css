@@ -1,7 +1,18 @@
+/*
+ * breakpoint는 이 파일만 안다. 하위 컴포넌트가 화면 크기에 따라 달라져야 하면 아래 변수를
+ * 미디어 쿼리에서 뒤집거나 부모가 className을 넘기고, 하위 모듈에 breakpoint를 복사하지 않는다.
+ */
 .shell {
+  --bubble-max-width: 75%;
+  --messages-padding: var(--space-5);
+  --composer-padding-x: var(--space-5);
+  --panel-close-display: none;
+  --panel-collapse-display: inline-flex;
+
   display: grid;
   grid-template-columns: 220px minmax(0, 1fr);
-  height: 100vh;
+  /* 주소창·소프트 키보드를 뺀 실제 높이(useVisualViewportHeight). */
+  height: var(--app-height, 100dvh);
   background: var(--color-bg);
 }
 
@@ -42,6 +53,26 @@
   margin-left: auto;
 }
 
+.iconButton {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: var(--space-11);
+  height: var(--space-11);
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+}
+
+.iconButton:hover {
+  background: var(--color-overlay-hover);
+  color: var(--color-text);
+}
+
 .channelHash {
   color: var(--color-text-secondary);
   font-size: var(--font-size-lg);
@@ -60,7 +91,7 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
-  padding: var(--space-5);
+  padding: var(--messages-padding);
 }
 
 .placeholder {
@@ -95,18 +126,20 @@ button.recoveryNotice {
 
 .composer {
   position: relative;
-  height: 4.5rem;
+  min-height: 4.5rem;
+  flex-shrink: 0;
   box-sizing: border-box;
   display: flex;
   align-items: center;
-  padding: 0 var(--space-5);
+  padding: var(--space-3) var(--composer-padding-x);
   border-top: 1px solid var(--color-border);
   background: var(--color-surface);
 }
 
 .inputWrap {
   display: flex;
-  align-items: flex-end;
+  /* textarea 와 전송 버튼은 높이가 달라서, 한 줄일 때 flex-end 로 두면 글자와 아이콘이 어긋난다. */
+  align-items: center;
   width: 100%;
   gap: var(--space-2);
   padding: var(--space-1) var(--space-1) var(--space-1) var(--space-3);
@@ -114,6 +147,10 @@ button.recoveryNotice {
   border-radius: var(--radius-xl);
   background: var(--color-bg);
   box-sizing: border-box;
+}
+
+.inputWrapMultiline {
+  align-items: flex-end;
 }
 
 .inputWrap:focus-within {
@@ -157,4 +194,97 @@ button.recoveryNotice {
 .sendButton:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+.scrim {
+  display: none;
+}
+
+@media (pointer: coarse) {
+  .sendButton {
+    width: var(--space-11);
+    height: var(--space-11);
+  }
+
+  /* iOS Safari는 16px 미만 입력 요소에 포커스가 가면 화면을 확대한다. */
+  .input {
+    font-size: var(--font-size-md);
+  }
+}
+
+@media (max-width: 768px) {
+  .shell {
+    --bubble-max-width: 85%;
+    --messages-padding: var(--space-3);
+    --composer-padding-x: var(--space-3);
+    --panel-close-display: inline-flex;
+    --panel-collapse-display: none;
+
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .mainArea,
+  .mainAreaPanelCollapsed {
+    grid-template-columns: minmax(0, 1fr);
+    margin: 0;
+    border: none;
+    border-radius: 0;
+    box-shadow: none;
+  }
+
+  .header {
+    padding: 0 var(--space-2);
+  }
+
+  .iconButton {
+    display: inline-flex;
+  }
+
+  .scrim {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 20;
+    border: none;
+    padding: 0;
+    background: var(--color-scrim);
+  }
+
+  .drawer,
+  .panel {
+    position: fixed;
+    z-index: 30;
+    visibility: hidden;
+    transition:
+      transform 0.2s ease,
+      visibility 0.2s ease;
+  }
+
+  .drawer {
+    inset: 0 auto 0 0;
+    width: min(80%, 17rem);
+    box-sizing: border-box;
+    margin: 0;
+    border-radius: 0;
+    transform: translateX(-100%);
+  }
+
+  .panel {
+    inset: 0;
+    border-left: none;
+    transform: translateX(100%);
+  }
+
+  .drawerOpen,
+  .panelOpen {
+    transform: translateX(0);
+    visibility: visible;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .drawer,
+  .panel {
+    transition: none;
+  }
 }
