@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { SmilePlus } from "lucide-react";
 
 import styles from "./MessageReactions.module.css";
@@ -22,7 +22,22 @@ type MessageReactionsProps = {
 /** 말풍선 옆(내 메시지는 왼쪽, 상대 메시지는 오른쪽)에 붙는 반응(이모지) pill과 추가 버튼. */
 function MessageReactions({ reactions, onToggle, isMine }: MessageReactionsProps) {
   const [isPickerOpen, setIsPickerOpen] = useState(false);
+  const pickerWrapRef = useRef<HTMLDivElement>(null);
   const entries = Object.entries(reactions).filter(([, state]) => state.count > 0);
+
+  // wrap 안(= 추가 버튼)은 제외한다. 여기서 같이 닫으면 버튼의 토글과 겹쳐 다시 열린다.
+  useEffect(() => {
+    if (!isPickerOpen) return;
+
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target;
+      if (target instanceof Node && pickerWrapRef.current?.contains(target) === true) return;
+      setIsPickerOpen(false);
+    };
+
+    document.addEventListener("pointerdown", handlePointerDown);
+    return () => document.removeEventListener("pointerdown", handlePointerDown);
+  }, [isPickerOpen]);
 
   const pills = entries.map(([emoji, state]) => (
     <button
@@ -38,7 +53,7 @@ function MessageReactions({ reactions, onToggle, isMine }: MessageReactionsProps
   ));
 
   const trigger = (
-    <div className={styles.pickerWrap}>
+    <div className={styles.pickerWrap} ref={pickerWrapRef}>
       <button
         type="button"
         className={styles.addButton}
@@ -49,7 +64,7 @@ function MessageReactions({ reactions, onToggle, isMine }: MessageReactionsProps
       </button>
 
       {isPickerOpen ? (
-        <div className={styles.picker}>
+        <div className={isMine ? `${styles.picker} ${styles.pickerMine}` : styles.picker}>
           {QUICK_EMOJIS.map((emoji) => (
             <button
               key={emoji}
