@@ -43,7 +43,7 @@ describe("edit message request parser", () => {
   ])("rejects an invalid edit request: %j", (request) => {
     expect(parseEditMessageRequest(request)).toEqual({
       ok: false,
-      message: "메시지 수정 요청 본문이 올바르지 않습니다.",
+      message: "메시지 수정 요청 형식이 올바르지 않습니다.",
     });
   });
 
@@ -77,7 +77,7 @@ describe("delete message request parser", () => {
     (request) => {
       expect(parseDeleteMessageRequest(request)).toEqual({
         ok: false,
-        message: "메시지 삭제 요청 본문이 올바르지 않습니다.",
+        message: "메시지 삭제 요청 형식이 올바르지 않습니다.",
       });
     },
   );

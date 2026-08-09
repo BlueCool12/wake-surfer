@@ -19,13 +19,13 @@ export type EditMessageRequestParseResult =
       message: string;
     };
 
-export function parseEditMessageRequest(body: unknown): EditMessageRequestParseResult {
-  const parsed = EditMessageRequestSchema.safeParse(body);
+export function parseEditMessageRequest(input: unknown): EditMessageRequestParseResult {
+  const parsed = EditMessageRequestSchema.safeParse(input);
 
   if (!parsed.success) {
     return {
       ok: false,
-      message: "메시지 수정 요청 본문이 올바르지 않습니다.",
+      message: "메시지 수정 요청 형식이 올바르지 않습니다.",
     };
   }
 
@@ -51,13 +51,13 @@ export type DeleteMessageRequestParseResult =
       message: string;
     };
 
-export function parseDeleteMessageRequest(body: unknown): DeleteMessageRequestParseResult {
-  const parsed = DeleteMessageRequestSchema.safeParse(body);
+export function parseDeleteMessageRequest(input: unknown): DeleteMessageRequestParseResult {
+  const parsed = DeleteMessageRequestSchema.safeParse(input);
 
   if (!parsed.success) {
     return {
       ok: false,
-      message: "메시지 삭제 요청 본문이 올바르지 않습니다.",
+      message: "메시지 삭제 요청 형식이 올바르지 않습니다.",
     };
   }
 
