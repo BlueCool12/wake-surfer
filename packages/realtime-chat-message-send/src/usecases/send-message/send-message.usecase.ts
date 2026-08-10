@@ -5,13 +5,16 @@ import {
   assertMessageId,
   assertSendMessageTarget,
   assertStreamId,
-  getSendMessageTargetId,
-  getSendMessageTargetType,
   generateDefaultMessageId,
+  getSendMessageStreamId,
   normalizeMessageText,
 } from "../../message-send";
+import {
+  createSendRequestFingerprint,
+  matchesSendRequestFingerprint,
+  type SendRequestFingerprint,
+} from "../../send-request-fingerprint";
 import type {
-  AppendedTextMessage,
   MessageTargetResolver,
   MessageWriteAuthorizer,
   SendMessage,
@@ -21,19 +24,26 @@ import type {
   SenderScopedIdempotencyKey,
 } from "../../send-message.types";
 import type { MessageSendDatabase } from "../../message-send-table";
-import { appendTextMessage, findAppendedTextMessageByIdempotencyKey } from "./send-message.kysely";
-import type { AppendTextMessageInput, AppendTextMessageResult } from "./send-message.kysely";
+import { appendTextMessage, findSendMessageReceipt } from "./send-message.kysely";
+import type {
+  AppendTextMessageInput,
+  AppendTextMessageResult,
+  StoredSendMessageReceipt,
+} from "./send-message.kysely";
 
 export type SendMessageExecutionDependencies = {
   db: Kysely<MessageSendDatabase>;
-  now: () => Date;
   resolveTarget: MessageTargetResolver;
   authorizeWrite: MessageWriteAuthorizer;
   generateMessageId: () => string;
-  findAppendedTextMessageByIdempotencyKey: (
+  createRequestFingerprint: (
+    target: SendMessageInput["target"],
+    normalizedText: string,
+  ) => SendRequestFingerprint;
+  findSendMessageReceipt: (
     db: Kysely<MessageSendDatabase>,
     key: SenderScopedIdempotencyKey,
-  ) => Promise<AppendedTextMessage | undefined>;
+  ) => Promise<StoredSendMessageReceipt | undefined>;
   appendTextMessage: (
     db: Kysely<MessageSendDatabase>,
     input: AppendTextMessageInput,
@@ -49,8 +59,8 @@ export function createSendMessage<DB extends MessageSendDatabase>(
     authorizeWrite: dependencies.authorizeWrite,
     resolveTarget: dependencies.resolveTarget,
     generateMessageId: dependencies.generateMessageId ?? generateDefaultMessageId,
-    now: dependencies.now ?? createNow,
-    findAppendedTextMessageByIdempotencyKey,
+    createRequestFingerprint: createSendRequestFingerprint,
+    findSendMessageReceipt,
     appendTextMessage,
   };
 
@@ -74,17 +84,15 @@ export async function executeSendMessage(
     };
   }
 
+  const requestFingerprint = dependencies.createRequestFingerprint(input.target, text);
   const scopedIdempotencyKey: SenderScopedIdempotencyKey = {
     senderActorId: input.senderActorId,
     idempotencyKey: input.idempotencyKey,
   };
-  const existing = await dependencies.findAppendedTextMessageByIdempotencyKey(
-    dependencies.db,
-    scopedIdempotencyKey,
-  );
+  const existing = await dependencies.findSendMessageReceipt(dependencies.db, scopedIdempotencyKey);
 
   if (existing !== undefined) {
-    return resultForExistingMessage(input, text, existing);
+    return resultForExistingReceipt(requestFingerprint, existing);
   }
 
   const resolvedTarget = await dependencies.resolveTarget({
@@ -100,6 +108,8 @@ export async function executeSendMessage(
   }
 
   assertStreamId(resolvedTarget.streamId);
+
+  assertResolvedStreamMatchesTarget(resolvedTarget.streamId, input.target);
 
   const authorization = await dependencies.authorizeWrite({
     senderActorId: input.senderActorId,
@@ -117,56 +127,57 @@ export async function executeSendMessage(
   const messageId = dependencies.generateMessageId();
   assertMessageId(messageId);
 
-  const createdAt = dependencies.now();
-
-  if (Number.isNaN(createdAt.getTime())) {
-    throw new Error("message createdAt을 생성하는 server clock이 올바르지 않습니다.");
-  }
-
   const appendResult = await dependencies.appendTextMessage(dependencies.db, {
     ...scopedIdempotencyKey,
     messageId,
     streamId: resolvedTarget.streamId,
     target: input.target,
     text,
-    createdAt,
+    requestFingerprint,
   });
 
   if (appendResult.status === "existing") {
-    return resultForExistingMessage(input, text, appendResult.message);
+    return resultForExistingReceipt(requestFingerprint, appendResult.receipt);
+  }
+
+  if (appendResult.receipt.message === undefined) {
+    throw new Error("새로 저장한 message가 tombstone으로 반환됐습니다.");
   }
 
   return {
     status: "accepted",
     persistence: "created",
-    message: appendResult.message,
+    message: appendResult.receipt.message,
   };
 }
 
-function resultForExistingMessage(
-  input: SendMessageInput,
-  text: string,
-  existing: AppendedTextMessage,
+function resultForExistingReceipt(
+  requestFingerprint: SendRequestFingerprint,
+  existing: StoredSendMessageReceipt,
 ): SendMessageResult {
-  if (
-    existing.senderActorId !== input.senderActorId ||
-    getSendMessageTargetType(existing.target) !== getSendMessageTargetType(input.target) ||
-    getSendMessageTargetId(existing.target) !== getSendMessageTargetId(input.target) ||
-    existing.text !== text
-  ) {
+  if (!matchesSendRequestFingerprint(existing.requestFingerprint, requestFingerprint)) {
     return {
       status: "rejected",
       reason: "idempotency_conflict",
     };
   }
 
+  if (existing.message === undefined) {
+    throw new Error("tombstone message의 기존 send 결과는 현재 공개 계약으로 반환할 수 없습니다.");
+  }
+
   return {
     status: "accepted",
     persistence: "existing",
-    message: existing,
+    message: existing.message,
   };
 }
 
-function createNow(): Date {
-  return new Date();
+function assertResolvedStreamMatchesTarget(
+  resolvedStreamId: string,
+  target: SendMessageInput["target"],
+): void {
+  if (resolvedStreamId !== getSendMessageStreamId(target)) {
+    throw new Error("resolve된 streamId가 canonical message target과 일치하지 않습니다.");
+  }
 }

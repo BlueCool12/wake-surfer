@@ -70,13 +70,13 @@ pnpm db:validate:realtime-chat
 pnpm db:migrate:realtime-chat
 ```
 
-새 migration은 기존 파일을 수정하지 않고 새 SQL 파일로 추가한 뒤 `atlas.sum`을 갱신한다. 아직 인수할
-운영 database가 없으므로 legacy baseline은 제공하지 않는다.
+현재 운영 데이터가 없는 단계이므로 `20260719000000_initial.sql` 하나가 확정된 6개 테이블의 최종
+baseline을 만든다. 과거 `messages.idempotency_key` migration은 이 baseline에 흡수됐고, 전송 멱등성의
+authority는 `send_message_receipts`다. 새 database는 `atlas migrate apply`로 이 baseline을 직접 적용한다.
 
-`20260806000000_message_idempotency_key.sql`은 기존 sender+stream 범위의 client message key를
-sender 범위의 짧은 `legacy:<ordinal>` key로 재작성한 뒤 sender-scoped unique constraint를 추가한다.
-따라서 서로 다른 stream에서 같은 legacy key를 사용한 유효한 기존 행도 보존되지만, 이전 key를 사용한
-재시도 호환성은 유지하지 않는다.
+이후 새 schema 변경은 기존 baseline을 다시 쓰지 않고 새 versioned SQL migration으로 추가한 뒤
+`atlas.sum`을 갱신한다. 이 저장소에는 `schema apply`나 `migrate diff` 자동 생성 경로가 없으며 migration
+실행은 항상 `atlas migrate apply`를 사용한다.
 
 ## 테이블 타입 합성
 
@@ -125,10 +125,11 @@ afterAll(async () => {
 });
 ```
 
-마이그레이션 업그레이드 경로를 검증할 때는 `maxMigrations`로 처음 적용할 revision 개수를 제한하고
-fixture를 삽입한 뒤 `applyPendingMigrations()`로 남은 revision을 적용한다.
-
 두 test URL은 필수다. 첫 URL은 host test process가, 두 번째 URL은 Compose network 내부의 Atlas
 container가 사용하므로 hostname이 다를 수 있다. Atlas migration이 실패하면 helper는 성공한 database
 handle을 반환하지 않고 생성한 임시 schema를 정리한 뒤 실패를 다시 전파한다. 병렬 worker와 suite는
 UUID가 포함된 서로 다른 schema를 사용한다.
+
+통합 테스트는 빈 schema에 전체 baseline을 적용한 뒤 table·constraint·index·default와 feature SQL의
+원자성을 검증한다. 과거 중간 revision에서 데이터를 변환하는 upgrade fixture는 현재 baseline의 책임이
+아니다.

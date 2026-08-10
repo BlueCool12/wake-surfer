@@ -70,5 +70,4 @@ export type SendMessageDependencies<DB extends MessageSendDatabase = MessageSend
   authorizeWrite: MessageWriteAuthorizer;
   resolveTarget: MessageTargetResolver;
   generateMessageId?: () => string;
-  now?: () => Date;
 };

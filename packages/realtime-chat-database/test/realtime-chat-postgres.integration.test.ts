@@ -6,7 +6,7 @@ import {
   type RealtimeChatIntegrationTestDatabase,
 } from "../src/realtime-chat-integration-test";
 
-describe("realtime-chat Atlas PostgreSQL migration", () => {
+describe("realtime-chat PostgreSQL baseline", () => {
   let database: RealtimeChatIntegrationTestDatabase | undefined;
 
   beforeAll(async () => {
@@ -17,226 +17,111 @@ describe("realtime-chat Atlas PostgreSQL migration", () => {
     await database?.close();
   });
 
-  it("applies the versioned schema and records every Atlas revision", async () => {
-    const relations = await sql<{
-      gatewayTickets: string | null;
-      messageStreams: string | null;
-      messages: string | null;
-      revisions: string | null;
-    }>`
-      SELECT
-        to_regclass('gateway_tickets')::text AS "gatewayTickets",
-        to_regclass('message_streams')::text AS "messageStreams",
-        to_regclass('messages')::text AS messages,
-        to_regclass('atlas_schema_revisions')::text AS revisions
+  it("applies the consolidated physical schema to a fresh database", async () => {
+    const tables = await sql<{ tableName: string }>`
+      SELECT table_name AS "tableName"
+      FROM information_schema.tables
+      WHERE table_schema = current_schema()
+        AND table_name IN (
+          'gateway_tickets',
+          'message_streams',
+          'messages',
+          'send_message_receipts',
+          'message_reactions',
+          'stream_read_positions'
+        )
+      ORDER BY table_name
     `.execute(getDatabase().db);
-
-    expect(relations.rows).toEqual([
-      {
-        gatewayTickets: "gateway_tickets",
-        messageStreams: "message_streams",
-        messages: "messages",
-        revisions: "atlas_schema_revisions",
-      },
-    ]);
-
-    const revisions = await sql<{ count: string }>`
-      SELECT count(*)::text AS count
+    const revisions = await sql<{ count: number }>`
+      SELECT count(*)::integer AS count
       FROM atlas_schema_revisions
     `.execute(getDatabase().db);
-    expect(revisions.rows).toEqual([{ count: "2" }]);
-  });
-
-  it("migrates message correlation to sender-scoped idempotency keys", async () => {
-    const columns = await sql<{ columnName: string }>`
+    const messageColumns = await sql<{ columnName: string }>`
       SELECT column_name AS "columnName"
       FROM information_schema.columns
       WHERE table_schema = current_schema()
         AND table_name = 'messages'
-        AND column_name IN ('client_message_id', 'idempotency_key')
-      ORDER BY column_name
+      ORDER BY ordinal_position
     `.execute(getDatabase().db);
 
-    expect(columns.rows).toEqual([{ columnName: "idempotency_key" }]);
-
-    await sql`
-      INSERT INTO message_streams (stream_id, target_type, target_id, last_sequence, created_at)
-      VALUES (${"channel:idempotency-default"}, ${"channel"}, ${"idempotency-default"}, 1, now())
-    `.execute(getDatabase().db);
-    await sql`
-      INSERT INTO messages (
-        message_id,
-        stream_id,
-        sequence,
-        sender_actor_id,
-        target_type,
-        target_id,
-        idempotency_key,
-        content_text,
-        created_at
-      )
-      VALUES (
-        ${"message-idempotency-default"},
-        ${"channel:idempotency-default"},
-        ${1},
-        ${"actor-idempotency-default"},
-        ${"channel"},
-        ${"idempotency-default"},
-        ${"key-idempotency-default"},
-        ${"hello"},
-        now()
-      )
-    `.execute(getDatabase().db);
-
-    const messages = await sql<{ contentType: string; idempotencyKey: string }>`
-      SELECT
-        content_type AS "contentType",
-        idempotency_key AS "idempotencyKey"
-      FROM messages
-      WHERE message_id = ${"message-idempotency-default"}
-    `.execute(getDatabase().db);
-    expect(messages.rows).toEqual([
-      {
-        contentType: "text",
-        idempotencyKey: "key-idempotency-default",
-      },
+    expect(tables.rows.map((row) => row.tableName)).toEqual([
+      "gateway_tickets",
+      "message_reactions",
+      "message_streams",
+      "messages",
+      "send_message_receipts",
+      "stream_read_positions",
+    ]);
+    expect(revisions.rows).toEqual([{ count: 1 }]);
+    expect(messageColumns.rows.map((row) => row.columnName)).toEqual([
+      "message_id",
+      "stream_id",
+      "sequence",
+      "sender_actor_id",
+      "parent_message_id",
+      "version",
+      "content",
+      "sender_display_snapshot",
+      "created_at",
+      "edited_at",
+      "deleted_at",
     ]);
   });
 
-  it("upgrades legacy cross-stream keys without dropping messages", async () => {
-    const legacyDatabase = await createRealtimeChatIntegrationTestDatabase({
-      maxMigrations: 1,
+  it("enforces the message lifecycle and persisted text size at the storage boundary", async () => {
+    await insertStream("storage-constraints", 2);
+
+    await expect(
+      insertMessage({
+        messageId: "message-oversized",
+        streamId: "channel:storage-constraints",
+        sequence: 1,
+        text: "a".repeat(8_193),
+      }),
+    ).rejects.toThrow("messages_text_utf8_8kib_check");
+    await expect(
+      sql`
+        INSERT INTO messages (
+          message_id,
+          stream_id,
+          sequence,
+          sender_actor_id,
+          version,
+          content,
+          deleted_at
+        )
+        VALUES (
+          ${"message-invalid-lifecycle"},
+          ${"channel:storage-constraints"},
+          2,
+          ${"actor-author"},
+          2,
+          ${textContent("active content")}::jsonb,
+          now()
+        )
+      `.execute(getDatabase().db),
+    ).rejects.toThrow("messages_lifecycle_check");
+  });
+
+  it("rejects a reply whose parent belongs to another stream", async () => {
+    await insertStream("reply-parent", 1);
+    await insertStream("reply-child", 1);
+    await insertMessage({
+      messageId: "message-parent",
+      streamId: "channel:reply-parent",
+      sequence: 1,
+      text: "parent",
     });
 
-    try {
-      await sql`
-          INSERT INTO message_streams (
-            stream_id,
-            target_type,
-            target_id,
-            last_sequence,
-            created_at
-          )
-          VALUES
-            (
-              ${"channel:legacy-1"},
-              ${"channel"},
-              ${"legacy-1"},
-              ${1},
-              ${new Date("2026-07-25T00:00:00.000Z")}
-            ),
-            (
-              ${"channel:legacy-2"},
-              ${"channel"},
-              ${"legacy-2"},
-              ${1},
-              ${new Date("2026-07-25T00:00:00.000Z")}
-            )
-        `.execute(legacyDatabase.db);
-      await sql`
-          INSERT INTO messages (
-            message_id,
-            stream_id,
-            sequence,
-            sender_actor_id,
-            target_type,
-            target_id,
-            client_message_id,
-            content_type,
-            content_text,
-            sent_at_client,
-            created_at
-          )
-          VALUES
-            (
-              ${"message-legacy-1"},
-              ${"channel:legacy-1"},
-              ${1},
-              ${"actor-legacy"},
-              ${"channel"},
-              ${"legacy-1"},
-              ${"reused-client-message-id"},
-              ${"text"},
-              ${"first"},
-              NULL,
-              ${new Date("2026-07-25T00:00:01.000Z")}
-            ),
-            (
-              ${"message-legacy-2"},
-              ${"channel:legacy-2"},
-              ${1},
-              ${"actor-legacy"},
-              ${"channel"},
-              ${"legacy-2"},
-              ${"reused-client-message-id"},
-              ${"text"},
-              ${"second"},
-              NULL,
-              ${new Date("2026-07-25T00:00:02.000Z")}
-            )
-        `.execute(legacyDatabase.db);
-
-      await legacyDatabase.applyPendingMigrations();
-
-      const messages = await sql<{ idempotencyKey: string; messageId: string }>`
-          SELECT
-            message_id AS "messageId",
-            idempotency_key AS "idempotencyKey"
-          FROM messages
-          WHERE sender_actor_id = ${"actor-legacy"}
-          ORDER BY message_id
-        `.execute(legacyDatabase.db);
-      expect(messages.rows).toEqual([
-        {
-          messageId: "message-legacy-1",
-          idempotencyKey: "legacy:1",
-        },
-        {
-          messageId: "message-legacy-2",
-          idempotencyKey: "legacy:2",
-        },
-      ]);
-
-      const constraint = await sql<{ constraintName: string }>`
-          SELECT constraint_name AS "constraintName"
-          FROM information_schema.table_constraints
-          WHERE table_schema = current_schema()
-            AND table_name = 'messages'
-            AND constraint_name = 'messages_sender_actor_id_idempotency_key_key'
-        `.execute(legacyDatabase.db);
-      expect(constraint.rows).toEqual([
-        {
-          constraintName: "messages_sender_actor_id_idempotency_key_key",
-        },
-      ]);
-    } finally {
-      await legacyDatabase.close();
-    }
-  }, 120_000);
-
-  it("enforces the message content type and UTF-8 8KiB constraints", async () => {
-    await sql`
-      INSERT INTO message_streams (stream_id, target_type, target_id, last_sequence, created_at)
-      VALUES (${"channel:constraint-test"}, ${"channel"}, ${"constraint-test"}, 2, now())
-    `.execute(getDatabase().db);
-
     await expect(
       insertMessage({
-        messageId: "message-invalid-type",
+        messageId: "message-cross-stream-reply",
+        streamId: "channel:reply-child",
         sequence: 1,
-        contentType: "system",
-        contentText: "invalid content type",
+        parentMessageId: "message-parent",
+        text: "reply",
       }),
-    ).rejects.toThrow("messages_content_type_text_check");
-
-    await expect(
-      insertMessage({
-        messageId: "message-oversized-content",
-        sequence: 2,
-        contentType: "text",
-        contentText: "a".repeat(8193),
-      }),
-    ).rejects.toThrow("messages_content_text_utf8_8kib_check");
+    ).rejects.toThrow("messages_parent_same_stream_fk");
   });
 
   function getDatabase(): RealtimeChatIntegrationTestDatabase {
@@ -247,11 +132,19 @@ describe("realtime-chat Atlas PostgreSQL migration", () => {
     return database;
   }
 
+  async function insertStream(targetId: string, lastSequence: number): Promise<void> {
+    await sql`
+      INSERT INTO message_streams (target_type, target_id, last_sequence)
+      VALUES (${"channel"}, ${targetId}, ${lastSequence})
+    `.execute(getDatabase().db);
+  }
+
   async function insertMessage(input: {
     messageId: string;
+    streamId: string;
     sequence: number;
-    contentType: string;
-    contentText: string;
+    text: string;
+    parentMessageId?: string;
   }): Promise<void> {
     await sql`
       INSERT INTO messages (
@@ -259,27 +152,21 @@ describe("realtime-chat Atlas PostgreSQL migration", () => {
         stream_id,
         sequence,
         sender_actor_id,
-        target_type,
-        target_id,
-        idempotency_key,
-        content_type,
-        content_text,
-        sent_at_client,
-        created_at
+        parent_message_id,
+        content
       )
       VALUES (
         ${input.messageId},
-        ${"channel:constraint-test"},
+        ${input.streamId},
         ${input.sequence},
-        ${"actor-constraint-test"},
-        ${"channel"},
-        ${"constraint-test"},
-        ${`client-${input.messageId}`},
-        ${input.contentType},
-        ${input.contentText},
-        NULL,
-        now()
+        ${"actor-author"},
+        ${input.parentMessageId ?? null},
+        ${textContent(input.text)}::jsonb
       )
     `.execute(getDatabase().db);
   }
 });
+
+function textContent(text: string): string {
+  return JSON.stringify({ schemaVersion: 1, kind: "text", text });
+}

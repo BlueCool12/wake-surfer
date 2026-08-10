@@ -56,6 +56,11 @@ Stream Messages는 물리적으로 `message_streams`와 `messages`를 함께 사
 타입을 재사용하지 않는다. `StreamMessagesDatabase`는 읽기에 필요한 열만 독립적으로 선언하며, 실제 전체
 database 타입은 TypeScript structural typing으로 이 계약을 만족한다.
 
+`messages.content` JSONB의 형식만은 여러 reader가 재정의하지 않는다. canonical owner인
+`@wake-surfer/realtime-chat-message-send/persisted-message-content`의 parser/type을 소비하고, 저장 row를
+현재 `StreamMessage.content`로 명시적으로 변환한다. Target은 `messages`의 중복 열이 아니라
+`message_streams`에서 읽는다.
+
 Query별 cursor, watermark, 조회 방향과 page 진행 의미는 공통화하지 않는다. row parsing이나 공통 오류처럼
 Query 의미가 없는 안정된 primitive만 공유한다.
 
