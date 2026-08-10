@@ -28,7 +28,7 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-0-5);
-  max-width: 75%;
+  max-width: var(--bubble-max-width, 75%);
   padding: var(--space-2) var(--space-3);
   border-radius: var(--radius-lg);
   font-size: var(--font-size-sm);
@@ -155,4 +155,60 @@
 
 .threadCount:hover {
   opacity: 1;
+}
+
+.sheetLayer {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+}
+
+.sheetScrim {
+  position: absolute;
+  inset: 0;
+  border: none;
+  padding: 0;
+  background: var(--color-scrim);
+}
+
+.sheet {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-2);
+  padding-bottom: calc(var(--space-2) + env(safe-area-inset-bottom));
+  border-top-left-radius: var(--radius-lg);
+  border-top-right-radius: var(--radius-lg);
+  background: var(--color-surface);
+}
+
+.sheetAction,
+.sheetCancel {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: var(--space-11);
+  padding: 0 var(--space-3);
+  border: none;
+  border-radius: var(--radius-md);
+  background: none;
+  color: var(--color-text);
+  font: inherit;
+  font-size: var(--font-size-sm);
+  text-align: left;
+  cursor: pointer;
+}
+
+.sheetActionDanger {
+  color: var(--color-danger);
+}
+
+.sheetCancel {
+  justify-content: center;
+  background: var(--color-bg);
+  color: var(--color-text-secondary);
 }

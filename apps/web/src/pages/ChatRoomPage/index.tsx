@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
-import { Send } from "lucide-react";
+import { Menu, PanelRight, Send } from "lucide-react";
 
 import Loading from "../../components/Loading";
 import ThemeToggle from "../../components/ThemeToggle";
 import { useChatRoom, type ChatMessageView } from "../../features/chat/useChatRoom";
+import useVisualViewportHeight from "../../hooks/useVisualViewportHeight";
 import MentionPicker from "./MentionPicker";
 import MessageBubble from "./MessageBubble";
 import type { MessageReactionsValue } from "./MessageReactions";
@@ -30,6 +31,7 @@ const ROOM_MEMBERS: RoomMember[] = [
 
 function ChatRoomPage() {
   const { channelId = "test" } = useParams();
+  useVisualViewportHeight();
   const {
     messages,
     isLoading,
@@ -46,6 +48,8 @@ function ChatRoomPage() {
   const scrollRef = useRef<HTMLDivElement>(null);
   const isAtBottomRef = useRef(true);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const [isDraftMultiline, setIsDraftMultiline] = useState(false);
+  const singleLineHeightRef = useRef<number | undefined>(undefined);
 
   // "@"로 멘션할 멤버를 고르는 팝업. 백엔드에 멘션 개념이 없어 텍스트에 이름을 끼워 넣는 UI만 구현한다.
   const [mentionQuery, setMentionQuery] = useState<string | undefined>(undefined);
@@ -63,6 +67,9 @@ function ChatRoomPage() {
   const [selectedThreadKey, setSelectedThreadKey] = useState<string | undefined>(undefined);
   const [panelTab, setPanelTab] = useState<ThreadPanelTab>("thread");
   const [isPanelCollapsed, setIsPanelCollapsed] = useState(false);
+  // 좁은 화면 전용 상태. 넓은 화면에서는 CSS 가 이 상태를 무시한다.
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+  const [isPanelOverlayOpen, setIsPanelOverlayOpen] = useState(false);
   const [messageEdits, setMessageEdits] = useState<Record<string, string>>({});
   const [deletedMessageKeys, setDeletedMessageKeys] = useState<Record<string, true>>({});
   const [reactionsByMessageKey, setReactionsByMessageKey] = useState<
@@ -88,6 +95,22 @@ function ChatRoomPage() {
     setSelectedThreadKey(messageKey);
     setPanelTab("thread");
     setIsPanelCollapsed(false);
+    setIsPanelOverlayOpen(true);
+  };
+
+  const handleOpenPanel = () => {
+    setIsPanelCollapsed(false);
+    setIsPanelOverlayOpen(true);
+  };
+
+  const closeThreadPanel = () => {
+    setIsPanelOverlayOpen(false);
+    setSelectedThreadKey(undefined);
+  };
+
+  const closeOverlays = () => {
+    setIsDrawerOpen(false);
+    closeThreadPanel();
   };
 
   const handleAddReply = (text: string) => {
@@ -134,8 +157,25 @@ function ChatRoomPage() {
     const el = textareaRef.current;
     if (el === null) return;
     el.style.height = "auto";
+    // 첫 측정은 빈 입력이라 한 줄 높이다.
+    singleLineHeightRef.current ??= el.scrollHeight;
     el.style.height = `${el.scrollHeight}px`;
+    setIsDraftMultiline(el.scrollHeight > singleLineHeightRef.current);
   }, [draft]);
+
+  useEffect(() => {
+    if (!isDrawerOpen && !isPanelOverlayOpen) return;
+
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      setIsDrawerOpen(false);
+      setIsPanelOverlayOpen(false);
+      setSelectedThreadKey(undefined);
+    };
+
+    document.addEventListener("keydown", handleEscape);
+    return () => document.removeEventListener("keydown", handleEscape);
+  }, [isDrawerOpen, isPanelOverlayOpen]);
 
   const handleScroll = () => {
     const el = scrollRef.current;
@@ -215,7 +255,20 @@ function ChatRoomPage() {
 
   return (
     <div className={styles.shell}>
-      <RoomListSidebar channelId={channelId} />
+      <RoomListSidebar
+        channelId={channelId}
+        className={isDrawerOpen ? `${styles.drawer} ${styles.drawerOpen}` : styles.drawer}
+      />
+
+      {isDrawerOpen || isPanelOverlayOpen ? (
+        <button
+          type="button"
+          className={styles.scrim}
+          onClick={closeOverlays}
+          aria-label="닫기"
+          tabIndex={-1}
+        />
+      ) : null}
 
       <div
         className={
@@ -223,9 +276,25 @@ function ChatRoomPage() {
         }
       >
         <header className={styles.header}>
+          <button
+            type="button"
+            className={styles.iconButton}
+            onClick={() => setIsDrawerOpen(true)}
+            aria-label="방 목록 열기"
+          >
+            <Menu size={18} aria-hidden="true" />
+          </button>
           <span className={styles.channelHash}>#</span>
           <h1 className={styles.channelName}>{channelId}</h1>
           <ThemeToggle className={styles.themeToggle} />
+          <button
+            type="button"
+            className={styles.iconButton}
+            onClick={handleOpenPanel}
+            aria-label="스레드 패널 열기"
+          >
+            <PanelRight size={18} aria-hidden="true" />
+          </button>
         </header>
 
         <div className={styles.page}>
@@ -293,7 +362,13 @@ function ChatRoomPage() {
                 onSelect={handleSelectMention}
               />
             ) : null}
-            <div className={styles.inputWrap}>
+            <div
+              className={
+                isDraftMultiline
+                  ? `${styles.inputWrap} ${styles.inputWrapMultiline}`
+                  : styles.inputWrap
+              }
+            >
               <textarea
                 ref={textareaRef}
                 className={styles.input}
@@ -317,6 +392,8 @@ function ChatRoomPage() {
         </div>
 
         <ThreadPanel
+          className={isPanelOverlayOpen ? `${styles.panel} ${styles.panelOpen}` : styles.panel}
+          onClose={closeThreadPanel}
           activeTab={panelTab}
           onTabChange={setPanelTab}
           parentMessage={selectedThreadParent}

@@ -1,5 +1,7 @@
+import { useState } from "react";
 import { MessagesSquare, RotateCw, X } from "lucide-react";
 
+import useIsCoarsePointer from "../../hooks/useIsCoarsePointer";
 import type { ChatMessageView } from "../../features/chat/useChatRoom";
 import { formatTime } from "../../utils/date";
 import MessageReactions, { type MessageReactionsValue } from "./MessageReactions";
@@ -43,7 +45,15 @@ function MessageBubble({
   onToggleReaction,
   unreadCount = 0,
 }: MessageBubbleProps) {
-  const isClickable = message.status === "sent" && onOpenThread !== undefined;
+  // 터치에서는 실패 메시지의 작은 아이콘 두 개 대신 말풍선을 눌러 액션 시트를 연다.
+  const isCoarsePointer = useIsCoarsePointer();
+  const [isActionSheetOpen, setIsActionSheetOpen] = useState(false);
+  const hasFailedActions =
+    message.status === "failed" && !isDeleted && (onRetry !== undefined || onDelete !== undefined);
+  const usesActionSheet = isCoarsePointer && hasFailedActions;
+
+  const isClickable = usesActionSheet || (message.status === "sent" && onOpenThread !== undefined);
+  const handleClick = usesActionSheet ? () => setIsActionSheetOpen(true) : onOpenThread;
 
   const rowClass = message.isMine ? `${styles.row} ${styles.rowMine}` : styles.row;
   const bubbleClass = [
@@ -69,7 +79,7 @@ function MessageBubble({
   const handleKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
     if (event.key === "Enter" || event.key === " ") {
       event.preventDefault();
-      onOpenThread?.();
+      handleClick?.();
     }
   };
 
@@ -90,7 +100,7 @@ function MessageBubble({
 
         <div
           className={bubbleClass}
-          onClick={isClickable ? onOpenThread : undefined}
+          onClick={isClickable ? handleClick : undefined}
           role={isClickable ? "button" : undefined}
           tabIndex={isClickable ? 0 : undefined}
           onKeyDown={isClickable ? handleKeyDown : undefined}
@@ -104,25 +114,29 @@ function MessageBubble({
               {message.status === "failed" ? (
                 <span className={styles.retryRow}>
                   전송 실패
-                  <span className={styles.retryDivider} aria-hidden="true">
-                    ·
-                  </span>
-                  <button
-                    type="button"
-                    className={styles.actionButton}
-                    onClick={onRetry}
-                    aria-label="다시 시도"
-                  >
-                    <RotateCw size={10} />
-                  </button>
-                  <button
-                    type="button"
-                    className={styles.actionButton}
-                    onClick={handleDelete}
-                    aria-label="메시지 삭제"
-                  >
-                    <X size={10} />
-                  </button>
+                  {usesActionSheet ? null : (
+                    <>
+                      <span className={styles.retryDivider} aria-hidden="true">
+                        ·
+                      </span>
+                      <button
+                        type="button"
+                        className={styles.actionButton}
+                        onClick={onRetry}
+                        aria-label="다시 시도"
+                      >
+                        <RotateCw size={10} />
+                      </button>
+                      <button
+                        type="button"
+                        className={styles.actionButton}
+                        onClick={handleDelete}
+                        aria-label="메시지 삭제"
+                      >
+                        <X size={10} />
+                      </button>
+                    </>
+                  )}
                 </span>
               ) : (
                 <span className={styles.metaRow}>
@@ -152,6 +166,53 @@ function MessageBubble({
 
         {message.isMine ? null : unreadCountNode}
       </div>
+
+      {isActionSheetOpen ? (
+        <div
+          className={styles.sheetLayer}
+          role="dialog"
+          aria-modal="true"
+          aria-label="전송 실패한 메시지"
+        >
+          <button
+            type="button"
+            className={styles.sheetScrim}
+            onClick={() => setIsActionSheetOpen(false)}
+            aria-label="닫기"
+          />
+          <div className={styles.sheet}>
+            <button
+              type="button"
+              className={styles.sheetAction}
+              onClick={() => {
+                setIsActionSheetOpen(false);
+                onRetry?.();
+              }}
+            >
+              <RotateCw size={16} aria-hidden="true" />
+              다시 보내기
+            </button>
+            <button
+              type="button"
+              className={`${styles.sheetAction} ${styles.sheetActionDanger}`}
+              onClick={() => {
+                setIsActionSheetOpen(false);
+                onDelete?.();
+              }}
+            >
+              <X size={16} aria-hidden="true" />
+              삭제
+            </button>
+            <button
+              type="button"
+              className={styles.sheetCancel}
+              onClick={() => setIsActionSheetOpen(false)}
+            >
+              취소
+            </button>
+          </div>
+        </div>
+      ) : null}
 
       {reactionsNode ? (
         <div

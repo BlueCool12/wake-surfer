@@ -19,6 +19,7 @@
   --color-danger: #dc2626;
   --color-online: #22c55e;
   --color-overlay-hover: rgba(0, 0, 0, 0.08);
+  --color-scrim: rgba(0, 0, 0, 0.4);
   --color-github: #24292f;
   --color-github-hover: #32383f;
   --color-github-text: #ffffff;
@@ -32,6 +33,7 @@
   --space-6: 1.5rem;
   --space-8: 2rem;
   --space-9: 2.25rem;
+  --space-11: 2.75rem;
   --space-12: 3rem;
 
   --font-size-2xs: 0.6875rem;
@@ -61,6 +63,7 @@
     --color-accent: #3b82f6;
     --color-danger: #ef4444;
     --color-overlay-hover: rgba(255, 255, 255, 0.12);
+    --color-scrim: rgba(0, 0, 0, 0.6);
   }
 }
 
@@ -75,6 +78,7 @@
   --color-accent: #3b82f6;
   --color-danger: #ef4444;
   --color-overlay-hover: rgba(255, 255, 255, 0.12);
+  --color-scrim: rgba(0, 0, 0, 0.6);
 }
 
 :root[data-theme="light"] {

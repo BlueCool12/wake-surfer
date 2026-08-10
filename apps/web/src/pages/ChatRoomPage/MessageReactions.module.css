@@ -27,7 +27,6 @@
 }
 
 .pickerWrap {
-  position: relative;
   display: inline-flex;
 }
 
@@ -48,6 +47,10 @@
   background: var(--color-overlay-hover);
 }
 
+/*
+ * 추가 버튼이 아니라 반응 줄(.row) 기준으로 편다. 버튼 기준으로 열면 오른쪽에 붙는 내 메시지에서
+ * 화면 밖으로 넘쳐 가로 스크롤이 생긴다.
+ */
 .picker {
   position: absolute;
   top: calc(100% + var(--space-1));
@@ -60,6 +63,11 @@
   border-radius: var(--radius-md);
   background: var(--color-surface);
   box-shadow: var(--shadow-sm);
+}
+
+.pickerMine {
+  left: auto;
+  right: 0;
 }
 
 .pickerEmoji {
@@ -75,4 +83,18 @@
 
 .pickerEmoji:hover {
   background: var(--color-overlay-hover);
+}
+
+@media (pointer: coarse) {
+  .pill,
+  .addButton {
+    min-height: var(--space-6);
+    padding: 0 var(--space-2);
+  }
+
+  .pickerEmoji {
+    min-width: var(--space-9);
+    min-height: var(--space-9);
+    font-size: var(--font-size-md);
+  }
 }
