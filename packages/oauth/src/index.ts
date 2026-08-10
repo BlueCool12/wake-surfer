@@ -16,6 +16,7 @@ export type {
   OAuthCsrfStateStorePort,
   OAuthProviderError,
   OAuthUsecases,
+  OAuthUsecasesOptions,
   SameSite,
   StartGithubLoginResult,
 } from "./public";

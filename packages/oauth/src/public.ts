@@ -1,13 +1,13 @@
 // 진입점
 export { createOAuthUsecases } from "./application/create-usecases";
-export type { OAuthUsecases } from "./application/create-usecases";
+export type { OAuthUsecases, OAuthUsecasesOptions } from "./application/create-usecases";
 export type { StartGithubLoginResult } from "./application/start-github-login.usecase";
 export type {
   HandleGithubCallbackResult,
   OAuthCallbackErrorCode,
 } from "./application/handle-github-callback.usecase";
 export type { FetchGithubUserByCodeResult } from "./application/fetch-github-user-by-code.usecase";
-export type { GithubUser } from "./infrastructure/github/fetch-github-user";
+export type { GithubUser } from "./infrastructure/github/user-client";
 
 // 설정
 export { assertValidOAuthConfig, OAuthConfigError } from "./domain/oauth-config";

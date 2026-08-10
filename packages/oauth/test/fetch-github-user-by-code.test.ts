@@ -3,11 +3,12 @@ import { describe, expect, it } from "vitest";
 import { createOAuthUsecases } from "../src/application/create-usecases";
 import { fetchGithubUserByCode } from "../src/application/fetch-github-user-by-code.usecase";
 import type { OAuthConfig } from "../src/domain/oauth-config";
-import { GITHUB_TOKEN_URL } from "../src/infrastructure/github/exchange-code";
+import { createGithubOAuthClient } from "../src/infrastructure/github/client";
 import {
+  GITHUB_TOKEN_URL,
   GITHUB_USER_EMAILS_URL,
   GITHUB_USER_URL,
-} from "../src/infrastructure/github/fetch-github-user";
+} from "../src/infrastructure/github/endpoints";
 
 const config: OAuthConfig = {
   clientId: "client-123",
@@ -18,7 +19,7 @@ const config: OAuthConfig = {
 
 type Route = { status: number; body: unknown };
 
-/** URL별 준비된 응답을 돌려주는 가짜 fetch. */
+/** URL별 준비된 응답을 돌려주고 호출 순서를 기록하는 가짜 fetch. */
 function fakeFetch(routes: Record<string, Route>) {
   const requests: string[] = [];
   const fetchLike = (async (url: string | URL | Request) => {
@@ -43,7 +44,8 @@ describe("fetchGithubUserByCode", () => {
         body: { id: 42, login: "octocat", email: "octo@github.com" },
       },
     });
-    const result = await fetchGithubUserByCode({ config, code: "code-1", fetch: fetchLike });
+    const client = createGithubOAuthClient(config, { fetch: fetchLike });
+    const result = await fetchGithubUserByCode({ client, code: "code-1" });
     expect(result).toEqual({
       status: "ok",
       user: { id: 42, login: "octocat", email: "octo@github.com" },
@@ -56,18 +58,17 @@ describe("fetchGithubUserByCode", () => {
       [GITHUB_TOKEN_URL]: { status: 200, body: { access_token: "gho_secret_token" } },
       [GITHUB_USER_URL]: { status: 200, body: { id: 1, login: "a", email: "a@b.com" } },
     });
-    const result = await fetchGithubUserByCode({ config, code: "c", fetch: fetchLike });
+    const client = createGithubOAuthClient(config, { fetch: fetchLike });
+    const result = await fetchGithubUserByCode({ client, code: "c" });
     expect(JSON.stringify(result)).not.toContain("gho_secret_token");
   });
 
   it("토큰 교환 실패는 TOKEN_EXCHANGE_FAILED로, 원본을 보존해 반환한다", async () => {
     const { fetchLike, requests } = fakeFetch({
-      [GITHUB_TOKEN_URL]: {
-        status: 200,
-        body: { error: "bad_verification_code" },
-      },
+      [GITHUB_TOKEN_URL]: { status: 200, body: { error: "bad_verification_code" } },
     });
-    const result = await fetchGithubUserByCode({ config, code: "expired", fetch: fetchLike });
+    const client = createGithubOAuthClient(config, { fetch: fetchLike });
+    const result = await fetchGithubUserByCode({ client, code: "expired" });
     expect(result).toEqual({
       status: "rejected",
       reason: "TOKEN_EXCHANGE_FAILED",
@@ -81,7 +82,8 @@ describe("fetchGithubUserByCode", () => {
       [GITHUB_TOKEN_URL]: { status: 200, body: { access_token: "t" } },
       [GITHUB_USER_URL]: { status: 401, body: { message: "Bad credentials" } },
     });
-    const result = await fetchGithubUserByCode({ config, code: "c", fetch: fetchLike });
+    const client = createGithubOAuthClient(config, { fetch: fetchLike });
+    const result = await fetchGithubUserByCode({ client, code: "c" });
     expect(result).toEqual({ status: "rejected", reason: "USER_FETCH_FAILED" });
   });
 
@@ -91,14 +93,20 @@ describe("fetchGithubUserByCode", () => {
       [GITHUB_USER_URL]: { status: 200, body: { id: 1, login: "a", email: null } },
       [GITHUB_USER_EMAILS_URL]: { status: 200, body: [] },
     });
-    const result = await fetchGithubUserByCode({ config, code: "c", fetch: fetchLike });
+    const client = createGithubOAuthClient(config, { fetch: fetchLike });
+    const result = await fetchGithubUserByCode({ client, code: "c" });
     expect(result).toEqual({ status: "rejected", reason: "EMAIL_UNAVAILABLE" });
   });
 });
 
 describe("createOAuthUsecases.fetchGithubUserByCode", () => {
-  it("팩토리에 묶인 config로 동작한다 (기본 fetch 사용 경로는 시그니처만 확인)", () => {
-    const usecases = createOAuthUsecases(config);
-    expect(typeof usecases.fetchGithubUserByCode).toBe("function");
+  it("팩토리에 주입한 fetch로 동작한다 (부팅 시 조립, 호출 시 code만 전달)", async () => {
+    const { fetchLike } = fakeFetch({
+      [GITHUB_TOKEN_URL]: { status: 200, body: { access_token: "t" } },
+      [GITHUB_USER_URL]: { status: 200, body: { id: 7, login: "u", email: "u@b.com" } },
+    });
+    const usecases = createOAuthUsecases(config, { fetch: fetchLike });
+    const result = await usecases.fetchGithubUserByCode("code-1");
+    expect(result).toEqual({ status: "ok", user: { id: 7, login: "u", email: "u@b.com" } });
   });
 });
