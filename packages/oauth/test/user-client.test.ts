@@ -1,10 +1,8 @@
 import { describe, expect, it } from "vitest";
 
-import {
-  GITHUB_USER_EMAILS_URL,
-  GITHUB_USER_URL,
-  fetchGithubUser,
-} from "../src/infrastructure/github/fetch-github-user";
+import { GITHUB_USER_EMAILS_URL, GITHUB_USER_URL } from "../src/infrastructure/github/endpoints";
+import { createGithubRequestExecutor } from "../src/infrastructure/github/request-executor";
+import { createGithubUserClient } from "../src/infrastructure/github/user-client";
 
 type Route = { status: number; body: unknown };
 
@@ -24,7 +22,11 @@ function fakeFetch(routes: Record<string, Route>) {
   return { fetchLike, requests };
 }
 
-describe("fetchGithubUser", () => {
+function userClient(fetchLike: typeof globalThis.fetch) {
+  return createGithubUserClient(createGithubRequestExecutor({ fetch: fetchLike }));
+}
+
+describe("createGithubUserClient.fetchUser", () => {
   it("프로필 email이 있으면 그대로 사용하고 emails는 호출하지 않는다", async () => {
     const { fetchLike, requests } = fakeFetch({
       [GITHUB_USER_URL]: {
@@ -32,7 +34,7 @@ describe("fetchGithubUser", () => {
         body: { id: 42, login: "octocat", email: "octo@github.com" },
       },
     });
-    const result = await fetchGithubUser({ accessToken: "gho_token", fetch: fetchLike });
+    const result = await userClient(fetchLike).fetchUser("gho_token");
     expect(result).toEqual({
       ok: true,
       user: { id: 42, login: "octocat", email: "octo@github.com" },
@@ -42,12 +44,9 @@ describe("fetchGithubUser", () => {
 
   it("Authorization·User-Agent 헤더를 싣는다 (User-Agent 없으면 GitHub이 403)", async () => {
     const { fetchLike, requests } = fakeFetch({
-      [GITHUB_USER_URL]: {
-        status: 200,
-        body: { id: 1, login: "a", email: "a@b.com" },
-      },
+      [GITHUB_USER_URL]: { status: 200, body: { id: 1, login: "a", email: "a@b.com" } },
     });
-    await fetchGithubUser({ accessToken: "gho_token", fetch: fetchLike });
+    await userClient(fetchLike).fetchUser("gho_token");
     const headers = new Headers(requests[0]!.init?.headers);
     expect(headers.get("Authorization")).toBe("Bearer gho_token");
     expect(headers.get("User-Agent")).toBe("wake-surfer-oauth");
@@ -65,7 +64,7 @@ describe("fetchGithubUser", () => {
         ],
       },
     });
-    const result = await fetchGithubUser({ accessToken: "t", fetch: fetchLike });
+    const result = await userClient(fetchLike).fetchUser("t");
     expect(result).toEqual({ ok: true, user: { id: 1, login: "a", email: "main@b.com" } });
   });
 
@@ -77,7 +76,7 @@ describe("fetchGithubUser", () => {
         body: [{ email: "main@b.com", primary: true, verified: false }],
       },
     });
-    const result = await fetchGithubUser({ accessToken: "t", fetch: fetchLike });
+    const result = await userClient(fetchLike).fetchUser("t");
     expect(result).toEqual({ ok: false, reason: "EMAIL_UNAVAILABLE" });
   });
 
@@ -85,7 +84,7 @@ describe("fetchGithubUser", () => {
     const { fetchLike } = fakeFetch({
       [GITHUB_USER_URL]: { status: 401, body: { message: "Bad credentials" } },
     });
-    const result = await fetchGithubUser({ accessToken: "revoked", fetch: fetchLike });
+    const result = await userClient(fetchLike).fetchUser("revoked");
     expect(result).toEqual({ ok: false, reason: "USER_FETCH_FAILED" });
   });
 
@@ -93,7 +92,7 @@ describe("fetchGithubUser", () => {
     const { fetchLike } = fakeFetch({
       [GITHUB_USER_URL]: { status: 200, body: { id: "42", login: "a" } },
     });
-    const result = await fetchGithubUser({ accessToken: "t", fetch: fetchLike });
+    const result = await userClient(fetchLike).fetchUser("t");
     expect(result).toEqual({ ok: false, reason: "USER_FETCH_FAILED" });
   });
 
@@ -102,7 +101,7 @@ describe("fetchGithubUser", () => {
       [GITHUB_USER_URL]: { status: 200, body: { id: 1, login: "a", email: null } },
       [GITHUB_USER_EMAILS_URL]: { status: 403, body: { message: "forbidden" } },
     });
-    const result = await fetchGithubUser({ accessToken: "t", fetch: fetchLike });
+    const result = await userClient(fetchLike).fetchUser("t");
     expect(result).toEqual({ ok: false, reason: "USER_FETCH_FAILED" });
   });
 });

@@ -1,4 +1,8 @@
 import type { OAuthConfig } from "../domain/oauth-config";
+import {
+  createGithubOAuthClient,
+  type GithubOAuthClientOptions,
+} from "../infrastructure/github/client";
 import type { OAuthCsrfStateStorePort } from "../runtime-deps";
 import {
   fetchGithubUserByCode,
@@ -22,14 +26,23 @@ export type OAuthUsecases = {
   fetchGithubUserByCode: (code: string) => Promise<FetchGithubUserByCodeResult>;
 };
 
+/** GitHub 통신 의존성(fetch·timeout). 부팅 시 한 번 주입한다. */
+export type OAuthUsecasesOptions = GithubOAuthClientOptions;
+
 /**
  * 앱-정적 `config`는 부팅 시 한 번 주입하고, 요청마다 달라지는 `StateStore`(req/res에
  * 바인딩된 쿠키)는 호출 시점에 넘긴다. — 이 수명 분리가 이 팩토리의 존재 이유.
+ *
+ * GitHub 통신 클라이언트도 부팅 시 한 번 조립해, 각 호출은 code만 넘긴다.
  */
-export function createOAuthUsecases(config: OAuthConfig): OAuthUsecases {
+export function createOAuthUsecases(
+  config: OAuthConfig,
+  options: OAuthUsecasesOptions = {},
+): OAuthUsecases {
+  const githubClient = createGithubOAuthClient(config, options);
   return {
     startGithubLogin: (stateStore) => startGithubLogin({ config, stateStore }),
     handleGithubCallback: (stateStore, query) => handleGithubCallback({ query, stateStore }),
-    fetchGithubUserByCode: (code) => fetchGithubUserByCode({ config, code }),
+    fetchGithubUserByCode: (code) => fetchGithubUserByCode({ client: githubClient, code }),
   };
 }
