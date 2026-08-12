@@ -1,10 +1,12 @@
 import type { GatewayTicketDatabase } from "@wake-surfer/realtime-chat-gateway-ticket/table-contract";
+import type { MessageMutationDatabase } from "@wake-surfer/realtime-chat-message-mutation/table-contract";
 import type { MessageSendDatabase } from "@wake-surfer/realtime-chat-message-send/table-contract";
 import type { StreamMessagesDatabase } from "@wake-surfer/realtime-chat-stream-messages/table-contract";
 import { Kysely, PostgresDialect } from "kysely";
 import { Pool } from "pg";
 
 export type RealtimeChatDatabase = GatewayTicketDatabase &
+  MessageMutationDatabase &
   MessageSendDatabase &
   StreamMessagesDatabase;
 

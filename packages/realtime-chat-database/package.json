@@ -20,12 +20,13 @@
     "dist"
   ],
   "scripts": {
-    "build": "pnpm --filter @wake-surfer/realtime-chat-gateway-ticket build && pnpm --filter @wake-surfer/realtime-chat-message-send build && pnpm --filter @wake-surfer/realtime-chat-stream-messages build && tsc -p tsconfig.json",
+    "build": "pnpm --filter @wake-surfer/realtime-chat-gateway-ticket build && pnpm --filter @wake-surfer/realtime-chat-message-send build && pnpm --filter @wake-surfer/realtime-chat-message-mutation build && pnpm --filter @wake-surfer/realtime-chat-stream-messages build && tsc -p tsconfig.json",
     "clean": "tsc -b tsconfig.json --clean",
     "test:integration": "pnpm build && vitest run --config vitest.integration.config.ts"
   },
   "dependencies": {
     "@wake-surfer/realtime-chat-gateway-ticket": "workspace:*",
+    "@wake-surfer/realtime-chat-message-mutation": "workspace:*",
     "@wake-surfer/realtime-chat-message-send": "workspace:*",
     "@wake-surfer/realtime-chat-stream-messages": "workspace:*",
     "kysely": "0.28.8",
