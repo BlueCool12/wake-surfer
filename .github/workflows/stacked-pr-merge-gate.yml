@@ -1,0 +1,91 @@
+name: stacked PR merge gate
+
+on:
+  pull_request:
+    types:
+      - opened
+      - edited
+      - reopened
+      - synchronize
+      - ready_for_review
+
+permissions:
+  contents: read
+  pull-requests: read
+
+concurrency:
+  group: stacked-pr-merge-gate-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  dependency-gate:
+    name: stacked-pr-dependency
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: 선행 PR과 base 확인
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const pullRequest = context.payload.pull_request;
+            const defaultBranch = context.payload.repository.default_branch;
+            const dependencyPattern = /^\s*(?:[-*]\s*)?Depends on #([1-9]\d*)\s*$/gim;
+            const dependencyNumbers = [
+              ...new Set(
+                [...(pullRequest.body ?? "").matchAll(dependencyPattern)].map((match) =>
+                  Number(match[1]),
+                ),
+              ),
+            ];
+            const errors = [];
+
+            if (pullRequest.base.ref !== defaultBranch) {
+              errors.push(
+                `base가 ${pullRequest.base.ref}입니다. 선행 PR을 먼저 병합하고 base를 ${defaultBranch}(으)로 변경해야 합니다.`,
+              );
+            }
+
+            if (pullRequest.base.ref !== defaultBranch && dependencyNumbers.length === 0) {
+              errors.push(
+                'stacked PR은 본문에 "Depends on #<PR 번호>" 형식으로 선행 PR을 선언해야 합니다.',
+              );
+            }
+
+            for (const dependencyNumber of dependencyNumbers) {
+              if (dependencyNumber === pullRequest.number) {
+                errors.push(`PR #${pullRequest.number}은 자기 자신을 선행 PR로 지정할 수 없습니다.`);
+                continue;
+              }
+
+              const { data: dependency } = await github.rest.pulls.get({
+                ...context.repo,
+                pull_number: dependencyNumber,
+              });
+
+              if (dependency.merged_at === null) {
+                const state = dependency.state === "closed" ? "병합되지 않고 닫힘" : "미병합";
+                errors.push(`선행 PR #${dependencyNumber}이 아직 병합되지 않았습니다 (${state}).`);
+              }
+            }
+
+            core.summary
+              .addHeading("Stacked PR merge gate")
+              .addRaw(`base: \`${pullRequest.base.ref}\`, 기본 브랜치: \`${defaultBranch}\``)
+              .addBreak()
+              .addRaw(
+                dependencyNumbers.length === 0
+                  ? "선행 PR: 없음"
+                  : `선행 PR: ${dependencyNumbers.map((number) => `#${number}`).join(", ")}`,
+              )
+              .addBreak()
+              .addRaw(`결과: ${errors.length === 0 ? "통과" : "차단"}`);
+
+            if (errors.length > 0) {
+              core.summary.addList(errors);
+            }
+
+            await core.summary.write();
+
+            if (errors.length > 0) {
+              core.setFailed(errors.join("\n"));
+            }
