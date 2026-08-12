@@ -5,12 +5,19 @@ export {
   OAuthConfigError,
 } from "./public";
 export type {
+  AuthenticatedUser,
+  AuthTokenClaims,
+  AuthTokens,
+  AuthTokenType,
+  CompleteGithubLoginResult,
   CookieAttributes,
   CookieJar,
   CookieStateStoreConfig,
   FetchGithubUserByCodeResult,
   GithubUser,
   HandleGithubCallbackResult,
+  JwtSignerPort,
+  OAuthAuthOptions,
   OAuthCallbackErrorCode,
   OAuthConfig,
   OAuthCsrfStateStorePort,
@@ -19,4 +26,5 @@ export type {
   OAuthUsecasesOptions,
   SameSite,
   StartGithubLoginResult,
+  UserStorePort,
 } from "./public";
