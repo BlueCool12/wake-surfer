@@ -172,6 +172,9 @@ importers:
       '@wake-surfer/realtime-chat-gateway-ticket':
         specifier: workspace:*
         version: link:../realtime-chat-gateway-ticket
+      '@wake-surfer/realtime-chat-message-mutation':
+        specifier: workspace:*
+        version: link:../realtime-chat-message-mutation
       '@wake-surfer/realtime-chat-message-send':
         specifier: workspace:*
         version: link:../realtime-chat-message-send
@@ -224,6 +227,31 @@ importers:
         specifier: 4.2.1
         version: 4.2.1
     devDependencies:
+      vitest:
+        specifier: 4.1.6
+        version: 4.1.6(@types/node@24.13.2)(vite@8.1.3(@types/node@24.13.2)(esbuild@0.28.0)(yaml@2.9.0))
+
+  packages/realtime-chat-message-mutation:
+    dependencies:
+      '@wake-surfer/realtime-chat-message-contracts':
+        specifier: workspace:*
+        version: link:../realtime-chat-message-contracts
+      '@wake-surfer/realtime-chat-message-mutation-contracts':
+        specifier: workspace:*
+        version: link:../realtime-chat-message-mutation-contracts
+      '@wake-surfer/realtime-chat-message-send':
+        specifier: workspace:*
+        version: link:../realtime-chat-message-send
+      kysely:
+        specifier: 0.28.8
+        version: 0.28.8
+    devDependencies:
+      '@types/node':
+        specifier: ^24.13.2
+        version: 24.13.2
+      '@wake-surfer/realtime-chat-database':
+        specifier: workspace:*
+        version: link:../realtime-chat-database
       vitest:
         specifier: 4.1.6
         version: 4.1.6(@types/node@24.13.2)(vite@8.1.3(@types/node@24.13.2)(esbuild@0.28.0)(yaml@2.9.0))
