@@ -5,8 +5,6 @@ import {
   MAX_LATEST_MESSAGES_QUERY_COUNT,
   parseChannelStreamMetadata,
   parseStreamMessageRow,
-  type RawStreamMessageRow,
-  type RawStreamMetadataRow,
   type StreamMessage,
 } from "../../stream-messages";
 import type { StreamMessagesDatabase } from "../../stream-messages-table";
@@ -40,7 +38,6 @@ export async function readLatestMessagesSnapshot<DB extends StreamMessagesDataba
           "last_sequence as headSequence",
         ])
         .where("stream_id", "=", input.streamId)
-        .$castTo<RawStreamMetadataRow>()
         .executeTakeFirst();
       const stream = parseChannelStreamMetadata(streamRow, input);
 
@@ -53,23 +50,21 @@ export async function readLatestMessagesSnapshot<DB extends StreamMessagesDataba
 
       const rows = await transaction
         .selectFrom("messages")
+        .innerJoin("message_streams", "message_streams.stream_id", "messages.stream_id")
         .select([
-          "message_id as messageId",
-          "stream_id as streamId",
-          "sequence",
-          "sender_actor_id as senderActorId",
-          "target_type as targetType",
-          "target_id as targetId",
-          "content_type as contentType",
-          "content_text as contentText",
-          "sent_at_client as sentAtClient",
-          "created_at as createdAt",
+          "messages.message_id as messageId",
+          "messages.stream_id as streamId",
+          "messages.sequence",
+          "messages.sender_actor_id as senderActorId",
+          "message_streams.target_type as targetType",
+          "message_streams.target_id as targetId",
+          "messages.content",
+          "messages.created_at as createdAt",
         ])
-        .where("stream_id", "=", input.streamId)
-        .where("sequence", "<=", stream.headSequence)
-        .orderBy("sequence", "desc")
+        .where("messages.stream_id", "=", input.streamId)
+        .where("messages.sequence", "<=", stream.headSequence)
+        .orderBy("messages.sequence", "desc")
         .limit(LATEST_QUERY_ROW_LIMIT)
-        .$castTo<RawStreamMessageRow>()
         .execute();
       const messages = rows.map((row) => parseStreamMessageRow(row, input)).reverse();
       const headSequence = stream.headSequence;

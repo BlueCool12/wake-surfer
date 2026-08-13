@@ -5,8 +5,6 @@ import {
   parseChannelStreamMetadata,
   parseStreamMessageRow,
   throwSequenceGap,
-  type RawStreamMessageRow,
-  type RawStreamMetadataRow,
   type StreamMessage,
   type StreamMessagesFailure,
 } from "../../stream-messages";
@@ -43,7 +41,6 @@ export async function readOlderMessages<DB extends StreamMessagesDatabase>(
           "last_sequence as headSequence",
         ])
         .where("stream_id", "=", input.streamId)
-        .$castTo<RawStreamMetadataRow>()
         .executeTakeFirst();
       const stream = parseChannelStreamMetadata(streamRow, input);
 
@@ -64,23 +61,21 @@ export async function readOlderMessages<DB extends StreamMessagesDatabase>(
       const queryLimit = input.limit + 1;
       const rows = await transaction
         .selectFrom("messages")
+        .innerJoin("message_streams", "message_streams.stream_id", "messages.stream_id")
         .select([
-          "message_id as messageId",
-          "stream_id as streamId",
-          "sequence",
-          "sender_actor_id as senderActorId",
-          "target_type as targetType",
-          "target_id as targetId",
-          "content_type as contentType",
-          "content_text as contentText",
-          "sent_at_client as sentAtClient",
-          "created_at as createdAt",
+          "messages.message_id as messageId",
+          "messages.stream_id as streamId",
+          "messages.sequence",
+          "messages.sender_actor_id as senderActorId",
+          "message_streams.target_type as targetType",
+          "message_streams.target_id as targetId",
+          "messages.content",
+          "messages.created_at as createdAt",
         ])
-        .where("stream_id", "=", input.streamId)
-        .where("sequence", "<", input.beforeSequence)
-        .orderBy("sequence", "desc")
+        .where("messages.stream_id", "=", input.streamId)
+        .where("messages.sequence", "<", input.beforeSequence)
+        .orderBy("messages.sequence", "desc")
         .limit(queryLimit)
-        .$castTo<RawStreamMessageRow>()
         .execute();
       const descendingMessages = rows.map((row) => parseStreamMessageRow(row, input));
       const expectedCount = Math.min(input.beforeSequence - 1, queryLimit);

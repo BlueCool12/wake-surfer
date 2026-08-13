@@ -51,9 +51,11 @@ describe("Stream Messages storage boundary", () => {
         senderActorId: "actor-1",
         targetType: "channel",
         targetId: "channel-1",
-        contentType: "text",
-        contentText: "hello",
-        sentAtClient: null,
+        content: {
+          schemaVersion: 1,
+          kind: "text",
+          text: "hello",
+        },
         createdAt: new Date("2026-07-21T00:00:00.000Z"),
       },
       expected,
@@ -70,5 +72,27 @@ describe("Stream Messages storage boundary", () => {
       createdAt: new Date("2026-07-21T00:00:00.000Z"),
     });
     expect(message).not.toHaveProperty("streamId");
+  });
+
+  it("rejects malformed persisted JSONB content", () => {
+    expect(() =>
+      parseStreamMessageRow(
+        {
+          messageId: "message-1",
+          streamId: "channel:channel-1",
+          sequence: 1,
+          senderActorId: "actor-1",
+          targetType: "channel",
+          targetId: "channel-1",
+          content: {
+            schemaVersion: 2,
+            kind: "text",
+            text: "hello",
+          },
+          createdAt: new Date("2026-07-21T00:00:00.000Z"),
+        },
+        expected,
+      ),
+    ).toThrow(StreamMessagesDataIntegrityError);
   });
 });

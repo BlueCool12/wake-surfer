@@ -13,9 +13,10 @@ stream으로 해석하는 규칙과 쓰기 권한 판단은 consumer가 주입�
   `accepted` 또는 거절 이유를 담은 `rejected`를 반환한다.
 - `toAcceptedTextMessage(message)`: 내부 `Date`를 ISO datetime 문자열로 변환한 send response
   message value를 만든다.
+- `./persisted-message-content`: `messages.content` JSONB의 canonical text schema와 codec을 제공한다.
 
-`createSendMessage`에는 `db`, `resolveTarget`, `authorizeWrite`를 필수로 주입한다. message ID
-생성기와 server clock은 필요할 때 대체할 수 있다.
+`createSendMessage`에는 `db`, `resolveTarget`, `authorizeWrite`를 필수로 주입한다. message ID 생성기는
+필요할 때 대체할 수 있고 생성 시각은 PostgreSQL `created_at DEFAULT now()`가 정한다.
 
 ## 관찰 가능한 동작
 
@@ -23,12 +24,12 @@ stream으로 해석하는 규칙과 쓰기 권한 판단은 consumer가 주입�
   `invalid_text`로 거절한다.
 - target resolve 실패와 쓰기 권한 거절은 각각 `target_not_found`, `write_forbidden`으로
   반환한다.
-- 같은 sender의 같은 `idempotencyKey`로 같은 target과 정규화된 text를 재시도하면 기존
-  메시지를 `persistence: "existing"`인 `accepted`로 반환한다.
+- 같은 sender의 같은 `idempotencyKey`로 같은 canonical request fingerprint를 재시도하면
+  `send_message_receipts`가 가리키는 기존 메시지를 `persistence: "existing"`인 `accepted`로 반환한다.
 - 같은 sender와 `idempotencyKey`를 다른 target 또는 text에 재사용하면
   `idempotency_conflict`로 거절한다.
-- 새 메시지는 resolve된 stream 내에서 sequence를 발급받고 transaction으로 저장되며
-  `persistence: "created"`인 `accepted`로 반환된다.
+- 새 메시지는 resolve된 stream의 head를 원자적으로 증가시키고 JSONB content, 불변 receipt와 함께 같은
+  transaction으로 저장되며 `persistence: "created"`인 `accepted`로 반환된다.
 
 ## 책임이 아닌 것
 
@@ -45,8 +46,9 @@ stream으로 해석하는 규칙과 쓰기 권한 판단은 consumer가 주입�
 
 ## Database contract
 
-이 패키지는 `./table-contract` 서브패스로 `MessageSendDatabase` 타입만 제공한다. `message_streams`와
-`messages`의 schema SQL 및 적용 책임은 `@wake-surfer/realtime-chat-database`가 소유한 Atlas versioned
-migration에 있다.
+이 패키지는 `./table-contract` 서브패스로 `MessageSendDatabase` 타입을 제공하고
+`send_message_receipts`, `message_streams`, `messages` 중 실제 query가 사용하는 좁은 계약만 소유한다.
+`messages.content`의 canonical runtime parser는 `./persisted-message-content`가 소유한다. Schema SQL과 적용
+책임은 `@wake-surfer/realtime-chat-database`가 소유한 Atlas versioned migration에 있다.
 
 패키지 내부 경로는 공개 API가 아니므로 deep import하지 않는다.

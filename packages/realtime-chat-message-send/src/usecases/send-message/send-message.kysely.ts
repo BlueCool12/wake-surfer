@@ -1,10 +1,14 @@
 import type { MessageTarget } from "@wake-surfer/realtime-chat-message-send-contracts";
 import { sql, type Kysely } from "kysely";
 import {
-  getSendMessageTargetId,
-  getSendMessageTargetType,
-  normalizeMessageText,
-} from "../../message-send";
+  createPersistedTextMessageContent,
+  parsePersistedTextMessageContent,
+} from "../../persisted-message-content";
+import {
+  parseSendRequestFingerprint,
+  type SendRequestFingerprint,
+} from "../../send-request-fingerprint";
+import { getSendMessageTargetId, getSendMessageTargetType } from "../../message-send";
 import type { MessageSendDatabase } from "../../message-send-table";
 import type { AppendedTextMessage, SenderScopedIdempotencyKey } from "../../send-message.types";
 
@@ -13,56 +17,71 @@ export type AppendTextMessageInput = SenderScopedIdempotencyKey & {
   streamId: string;
   target: MessageTarget;
   text: string;
-  createdAt: Date;
+  requestFingerprint: SendRequestFingerprint;
 };
+
+export type StoredSendMessageReceipt = Readonly<{
+  requestFingerprint: SendRequestFingerprint;
+  message: AppendedTextMessage | undefined;
+}>;
 
 export type AppendTextMessageResult =
   | {
       status: "created";
-      message: AppendedTextMessage;
+      receipt: StoredSendMessageReceipt;
     }
   | {
       status: "existing";
-      message: AppendedTextMessage;
+      receipt: StoredSendMessageReceipt;
     };
 
 type AppendedTextMessageRow = {
   messageId: string;
   streamId: string;
-  streamTargetType?: string;
-  streamTargetId?: string;
   sequence: number;
   senderActorId: string;
-  targetType: string;
+  targetType: MessageTarget["type"];
   targetId: string;
-  text: string;
+  content: unknown;
   createdAt: Date;
+  deletedAt: Date | null;
 };
 
-export async function findAppendedTextMessageByIdempotencyKey(
+type StoredSendMessageReceiptRow = AppendedTextMessageRow & {
+  canonicalizationVersion: number;
+  fingerprintAlgorithm: string;
+  fingerprintKeyId: string | null;
+  requestFingerprint: Uint8Array;
+};
+
+export async function findSendMessageReceipt(
   db: Kysely<MessageSendDatabase>,
   key: SenderScopedIdempotencyKey,
-): Promise<AppendedTextMessage | undefined> {
+): Promise<StoredSendMessageReceipt | undefined> {
   const row = await db
-    .selectFrom("messages")
+    .selectFrom("send_message_receipts")
+    .innerJoin("messages", "messages.message_id", "send_message_receipts.result_message_id")
     .innerJoin("message_streams", "message_streams.stream_id", "messages.stream_id")
     .select([
+      "send_message_receipts.canonicalization_version as canonicalizationVersion",
+      "send_message_receipts.fingerprint_algorithm as fingerprintAlgorithm",
+      "send_message_receipts.fingerprint_key_id as fingerprintKeyId",
+      "send_message_receipts.request_fingerprint as requestFingerprint",
       "messages.message_id as messageId",
       "messages.stream_id as streamId",
-      "message_streams.target_type as streamTargetType",
-      "message_streams.target_id as streamTargetId",
       "messages.sequence",
       "messages.sender_actor_id as senderActorId",
-      "messages.target_type as targetType",
-      "messages.target_id as targetId",
-      "messages.content_text as text",
+      "message_streams.target_type as targetType",
+      "message_streams.target_id as targetId",
+      "messages.content",
       "messages.created_at as createdAt",
+      "messages.deleted_at as deletedAt",
     ])
-    .where("messages.sender_actor_id", "=", key.senderActorId)
-    .where("messages.idempotency_key", "=", key.idempotencyKey)
+    .where("send_message_receipts.sender_actor_id", "=", key.senderActorId)
+    .where("send_message_receipts.idempotency_key", "=", key.idempotencyKey)
     .executeTakeFirst();
 
-  return row === undefined ? undefined : rowToAppendedTextMessage(row);
+  return row === undefined ? undefined : rowToStoredSendMessageReceipt(row);
 }
 
 export async function appendTextMessage(
@@ -72,12 +91,12 @@ export async function appendTextMessage(
   return db.transaction().execute(async (trx) => {
     await acquireIdempotencyLock(trx, input);
 
-    const existing = await findAppendedTextMessageByIdempotencyKey(trx, input);
+    const existing = await findSendMessageReceipt(trx, input);
 
     if (existing !== undefined) {
       return {
         status: "existing",
-        message: existing,
+        receipt: existing,
       };
     }
 
@@ -87,63 +106,60 @@ export async function appendTextMessage(
     await trx
       .insertInto("message_streams")
       .values({
-        stream_id: input.streamId,
         target_type: targetType,
         target_id: targetId,
-        last_sequence: 0,
-        created_at: input.createdAt,
       })
-      .onConflict((oc) => oc.column("stream_id").doNothing())
+      .onConflict((oc) => oc.columns(["target_type", "target_id"]).doNothing())
       .executeTakeFirstOrThrow();
 
-    const stream = await trx
-      .selectFrom("message_streams")
-      .select(["target_type as targetType", "target_id as targetId"])
-      .where("stream_id", "=", input.streamId)
-      .forUpdate()
-      .executeTakeFirstOrThrow();
-
-    assertStreamTargetMatches(stream.targetType, stream.targetId, input.target);
-
-    const sequenceRow = await trx
-      .updateTable("message_streams")
-      .set({
-        last_sequence: sql<number>`last_sequence + 1`,
-      })
-      .where("stream_id", "=", input.streamId)
-      .returning("last_sequence as sequence")
-      .executeTakeFirstOrThrow();
-
-    const sequence = parseSequence(sequenceRow.sequence);
-
-    const row = await trx
+    const sequence = await advanceSequenceForTarget(trx, {
+      streamId: input.streamId,
+      targetType,
+      targetId,
+    });
+    const inserted = await trx
       .insertInto("messages")
       .values({
         message_id: input.messageId,
         stream_id: input.streamId,
         sequence,
         sender_actor_id: input.senderActorId,
-        target_type: targetType,
-        target_id: targetId,
-        idempotency_key: input.idempotencyKey,
-        content_text: input.text,
-        created_at: input.createdAt,
+        content: createPersistedTextMessageContent(input.text),
       })
       .returning([
         "message_id as messageId",
         "stream_id as streamId",
         "sequence",
         "sender_actor_id as senderActorId",
-        "target_type as targetType",
-        "target_id as targetId",
-        "content_text as text",
+        "content",
         "created_at as createdAt",
       ])
       .executeTakeFirstOrThrow();
 
+    await trx
+      .insertInto("send_message_receipts")
+      .values({
+        sender_actor_id: input.senderActorId,
+        idempotency_key: input.idempotencyKey,
+        canonicalization_version: input.requestFingerprint.canonicalizationVersion,
+        fingerprint_algorithm: input.requestFingerprint.algorithm,
+        fingerprint_key_id: input.requestFingerprint.keyId,
+        request_fingerprint: input.requestFingerprint.value,
+        result_message_id: input.messageId,
+      })
+      .executeTakeFirstOrThrow();
+
     return {
       status: "created",
-      message: rowToAppendedTextMessage(row),
+      receipt: {
+        requestFingerprint: input.requestFingerprint,
+        message: rowToAppendedTextMessage({
+          ...inserted,
+          targetType,
+          targetId,
+          deletedAt: null,
+        }),
+      },
     };
   });
 }
@@ -160,92 +176,89 @@ async function acquireIdempotencyLock(
   `.execute(db);
 }
 
-function rowToAppendedTextMessage(row: AppendedTextMessageRow): AppendedTextMessage {
-  const target = parseTarget(row.targetType, row.targetId);
+async function advanceSequenceForTarget(
+  db: Kysely<MessageSendDatabase>,
+  input: {
+    streamId: string;
+    targetType: MessageTarget["type"];
+    targetId: string;
+  },
+): Promise<number> {
+  const row = await db
+    .updateTable("message_streams")
+    .set({
+      last_sequence: sql<number>`last_sequence + 1`,
+    })
+    .where("stream_id", "=", input.streamId)
+    .where("target_type", "=", input.targetType)
+    .where("target_id", "=", input.targetId)
+    .returning("last_sequence as sequence")
+    .executeTakeFirst();
 
-  if (row.streamTargetType !== undefined || row.streamTargetId !== undefined) {
-    assertStreamTargetMatches(row.streamTargetType, row.streamTargetId, target);
+  if (row === undefined) {
+    throw new Error("기존 message stream의 target이 message target과 일치하지 않습니다.");
   }
 
-  const text = parseString(row.text, "text");
+  return row.sequence;
+}
 
-  if (normalizeMessageText(text) !== text) {
-    throw new Error("메시지 쿼리가 정규화되지 않은 text를 반환했습니다.");
-  }
-
+function rowToStoredSendMessageReceipt(row: StoredSendMessageReceiptRow): StoredSendMessageReceipt {
   return {
-    messageId: parseString(row.messageId, "messageId"),
-    streamId: parseString(row.streamId, "streamId"),
-    sequence: parseSequence(row.sequence),
-    senderActorId: parseString(row.senderActorId, "senderActorId"),
-    target,
-    text,
-    createdAt: parseDate(row.createdAt, "createdAt"),
+    requestFingerprint: parseSendRequestFingerprint({
+      canonicalizationVersion: row.canonicalizationVersion,
+      algorithm: row.fingerprintAlgorithm,
+      keyId: row.fingerprintKeyId,
+      value: row.requestFingerprint,
+    }),
+    message: rowToCurrentAppendedTextMessage(row),
   };
 }
 
-function assertStreamTargetMatches(
-  streamTargetType: unknown,
-  streamTargetId: unknown,
-  target: MessageTarget,
-): void {
-  if (
-    streamTargetType !== getSendMessageTargetType(target) ||
-    streamTargetId !== getSendMessageTargetId(target)
-  ) {
-    throw new Error("기존 message stream의 target이 message target과 일치하지 않습니다.");
+function rowToCurrentAppendedTextMessage(
+  row: AppendedTextMessageRow,
+): AppendedTextMessage | undefined {
+  if (row.content === null && row.deletedAt !== null) {
+    return undefined;
   }
+
+  if (row.content === null || row.deletedAt !== null) {
+    throw new Error("메시지 쿼리가 올바르지 않은 lifecycle 상태를 반환했습니다.");
+  }
+
+  return rowToAppendedTextMessage(row);
 }
 
-function parseTarget(targetType: unknown, targetId: unknown): MessageTarget {
-  const parsedTargetId = parseString(targetId, "targetId");
+function rowToAppendedTextMessage(row: AppendedTextMessageRow): AppendedTextMessage {
+  const target = parseTarget(row.targetType, row.targetId);
+  const content = parsePersistedTextMessageContent(row.content);
 
-  if (targetType === "channel") {
-    return {
-      type: "channel",
-      channelId: parsedTargetId,
-    };
-  }
-
-  if (targetType === "dm") {
-    return {
-      type: "dm",
-      dmConversationId: parsedTargetId,
-    };
-  }
-
-  if (targetType === "thread") {
-    return {
-      type: "thread",
-      threadId: parsedTargetId,
-    };
-  }
-
-  throw new Error("메시지 쿼리가 올바르지 않은 targetType을 반환했습니다.");
+  return {
+    messageId: row.messageId,
+    streamId: row.streamId,
+    sequence: row.sequence,
+    senderActorId: row.senderActorId,
+    target,
+    text: content.text,
+    createdAt: row.createdAt,
+  };
 }
 
-function parseSequence(value: unknown): number {
-  if (typeof value !== "number" || !Number.isSafeInteger(value) || value <= 0) {
-    throw new Error("메시지 쿼리가 올바르지 않은 sequence를 반환했습니다.");
+function parseTarget(targetType: MessageTarget["type"], targetId: string): MessageTarget {
+  switch (targetType) {
+    case "channel":
+      return {
+        type: "channel",
+        channelId: targetId,
+      };
+    case "dm":
+      return {
+        type: "dm",
+        dmConversationId: targetId,
+      };
+    case "thread":
+      return {
+        type: "thread",
+        threadId: targetId,
+      };
   }
-
-  return value;
-}
-
-function parseString(value: unknown, fieldName: string): string {
-  if (typeof value !== "string" || value.length === 0) {
-    throw new Error(`메시지 쿼리가 올바르지 않은 ${fieldName}를 반환했습니다.`);
-  }
-
-  return value;
-}
-
-function parseDate(value: unknown, fieldName: string): Date {
-  const parsed = value instanceof Date ? value : new Date(parseString(value, fieldName));
-
-  if (Number.isNaN(parsed.getTime())) {
-    throw new Error(`메시지 쿼리가 올바르지 않은 ${fieldName}을 반환했습니다.`);
-  }
-
-  return parsed;
 }

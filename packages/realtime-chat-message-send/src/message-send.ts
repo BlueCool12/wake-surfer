@@ -4,8 +4,7 @@ import type {
   MessageTarget,
 } from "@wake-surfer/realtime-chat-message-send-contracts";
 import type { AppendedTextMessage } from "./send-message.types";
-
-const MAX_TEXT_UTF8_BYTES = 8_192;
+import { MAX_TEXT_MESSAGE_UTF8_BYTES } from "./persisted-message-content";
 
 export function assertActorId(actorId: string): void {
   assertNonBlankString(actorId, "actorId");
@@ -36,7 +35,7 @@ export function assertSendMessageTarget(target: unknown): asserts target is Mess
 export function normalizeMessageText(text: string): string | undefined {
   const normalized = text.trim();
 
-  if (normalized.length === 0 || getUtf8ByteLength(normalized) > MAX_TEXT_UTF8_BYTES) {
+  if (normalized.length === 0 || getUtf8ByteLength(normalized) > MAX_TEXT_MESSAGE_UTF8_BYTES) {
     return undefined;
   }
 

@@ -1,3 +1,4 @@
+import { parsePersistedTextMessageContent } from "@wake-surfer/realtime-chat-message-send/persisted-message-content";
 import { StreamMessagesDataIntegrityError } from "./errors";
 
 export type ChannelReadAuthorization = { status: "allowed" } | { status: "denied" };
@@ -40,9 +41,7 @@ export type RawStreamMessageRow = {
   senderActorId: unknown;
   targetType: unknown;
   targetId: unknown;
-  contentType: unknown;
-  contentText: unknown;
-  sentAtClient: unknown;
+  content: unknown;
   createdAt: unknown;
 };
 
@@ -161,21 +160,20 @@ export function parseStreamMessageRow(
   const messageId = parseNonBlankString(row.messageId);
   const sequence = parsePositiveSafeInteger(row.sequence);
   const senderActorId = parseNonBlankString(row.senderActorId);
-  const contentText = parseNonBlankString(row.contentText);
   const createdAt = parseDate(row.createdAt);
-  const sentAtClient =
-    row.sentAtClient === null || row.sentAtClient === undefined
-      ? undefined
-      : parseDate(row.sentAtClient);
+  let content;
+
+  try {
+    content = parsePersistedTextMessageContent(row.content);
+  } catch {
+    throw new StreamMessagesDataIntegrityError("invalid_storage_row", metadata);
+  }
 
   if (
     messageId === undefined ||
     sequence === undefined ||
     senderActorId === undefined ||
-    row.contentType !== "text" ||
-    contentText === undefined ||
-    createdAt === undefined ||
-    (row.sentAtClient !== null && row.sentAtClient !== undefined && sentAtClient === undefined)
+    createdAt === undefined
   ) {
     throw new StreamMessagesDataIntegrityError("invalid_storage_row", metadata);
   }
@@ -186,14 +184,10 @@ export function parseStreamMessageRow(
     senderActorId,
     content: {
       type: "text",
-      text: contentText,
+      text: content.text,
     },
     createdAt,
   };
-
-  if (sentAtClient !== undefined) {
-    message.sentAtClient = sentAtClient;
-  }
 
   return message;
 }

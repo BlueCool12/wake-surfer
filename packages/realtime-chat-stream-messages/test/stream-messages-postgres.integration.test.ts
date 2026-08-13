@@ -188,11 +188,10 @@ describe("Stream Messages PostgreSQL queries", () => {
 
   it("detects sequence gaps without including message content in the error", async () => {
     const channelId = "gap-channel";
-    const streamId = `channel:${channelId}`;
     const sensitiveContent = "gap-sensitive-content";
     await sql`
-      INSERT INTO message_streams (stream_id, target_type, target_id, last_sequence, created_at)
-      VALUES (${streamId}, ${"channel"}, ${channelId}, 2, now())
+      INSERT INTO message_streams (target_type, target_id, last_sequence)
+      VALUES (${"channel"}, ${channelId}, 2)
     `.execute(getDatabase().db);
     await insertMessageRow(channelId, 2, sensitiveContent);
     const useCases = createUseCases(() => ({ status: "allowed" }));
@@ -233,11 +232,11 @@ describe("Stream Messages PostgreSQL queries", () => {
     firstSequence: number,
     lastSequence: number,
   ): Promise<void> {
-    const streamId = `channel:${channelId}`;
     await sql`
-      INSERT INTO message_streams (stream_id, target_type, target_id, last_sequence, created_at)
-      VALUES (${streamId}, ${"channel"}, ${channelId}, ${lastSequence}, now())
-      ON CONFLICT (stream_id) DO UPDATE SET last_sequence = EXCLUDED.last_sequence
+      INSERT INTO message_streams (target_type, target_id, last_sequence)
+      VALUES (${"channel"}, ${channelId}, ${lastSequence})
+      ON CONFLICT (target_type, target_id)
+      DO UPDATE SET last_sequence = EXCLUDED.last_sequence
     `.execute(getDatabase().db);
 
     for (let sequence = firstSequence; sequence <= lastSequence; sequence += 1) {
@@ -257,26 +256,14 @@ describe("Stream Messages PostgreSQL queries", () => {
         stream_id,
         sequence,
         sender_actor_id,
-        target_type,
-        target_id,
-        idempotency_key,
-        content_type,
-        content_text,
-        sent_at_client,
-        created_at
+        content
       )
       VALUES (
         ${`message-${channelId}-${sequence}`},
         ${streamId},
         ${sequence},
         ${"actor-message-author"},
-        ${"channel"},
-        ${channelId},
-        ${`client-${channelId}-${sequence}`},
-        ${"text"},
-        ${contentText},
-        NULL,
-        now()
+        ${JSON.stringify({ schemaVersion: 1, kind: "text", text: contentText })}::jsonb
       )
     `.execute(getDatabase().db);
   }

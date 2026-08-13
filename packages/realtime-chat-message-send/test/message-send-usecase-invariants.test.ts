@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 
 import { type AppendedTextMessage, type SendMessageInput } from "../src";
 import type { MessageSendDatabase } from "../src/message-send-table";
+import type { SendRequestFingerprint } from "../src/send-request-fingerprint";
 import {
   executeSendMessage,
   type SendMessageExecutionDependencies,
@@ -30,10 +31,23 @@ const savedMessage: AppendedTextMessage = {
   text: "hello",
   createdAt: new Date("2026-07-11T00:00:00.000Z"),
 };
+const requestFingerprint: SendRequestFingerprint = {
+  canonicalizationVersion: 1,
+  algorithm: "sha256",
+  keyId: null,
+  value: new Uint8Array([1, 2, 3]),
+};
+const differentFingerprint: SendRequestFingerprint = {
+  ...requestFingerprint,
+  value: new Uint8Array([4, 5, 6]),
+};
+const savedReceipt = {
+  requestFingerprint,
+  message: savedMessage,
+};
 
 const baseDeps: SendMessageExecutionDependencies = {
   db,
-  now: () => new Date("2026-07-11T00:00:00.000Z"),
   resolveTarget: () => ({
     status: "resolved",
     streamId: "channel:channel-1",
@@ -42,10 +56,11 @@ const baseDeps: SendMessageExecutionDependencies = {
     status: "allowed",
   }),
   generateMessageId: () => "message-1",
-  findAppendedTextMessageByIdempotencyKey: async () => undefined,
+  createRequestFingerprint: () => requestFingerprint,
+  findSendMessageReceipt: async () => undefined,
   appendTextMessage: async () => ({
     status: "created",
-    message: savedMessage,
+    receipt: savedReceipt,
   }),
 };
 
@@ -54,7 +69,7 @@ describe("send message usecase invariants", () => {
     let lookupCount = 0;
     const deps: SendMessageExecutionDependencies = {
       ...baseDeps,
-      findAppendedTextMessageByIdempotencyKey: async () => {
+      findSendMessageReceipt: async () => {
         lookupCount += 1;
         return undefined;
       },
@@ -96,7 +111,7 @@ describe("send message usecase invariants", () => {
           },
           {
             ...baseDeps,
-            findAppendedTextMessageByIdempotencyKey: async () => {
+            findSendMessageReceipt: async () => {
               lookupCount += 1;
               return undefined;
             },
@@ -111,7 +126,7 @@ describe("send message usecase invariants", () => {
               appendCount += 1;
               return {
                 status: "created",
-                message: savedMessage,
+                receipt: savedReceipt,
               };
             },
           },
@@ -152,6 +167,34 @@ describe("send message usecase invariants", () => {
     });
   });
 
+  it("stops when the resolved stream does not match the canonical target", async () => {
+    let authorizationCount = 0;
+    let appendCount = 0;
+
+    await expect(
+      executeSendMessage(input, {
+        ...baseDeps,
+        resolveTarget: () => ({
+          status: "resolved",
+          streamId: "channel:another-channel",
+        }),
+        authorizeWrite: () => {
+          authorizationCount += 1;
+          return { status: "allowed" };
+        },
+        appendTextMessage: async () => {
+          appendCount += 1;
+          return {
+            status: "created",
+            receipt: savedReceipt,
+          };
+        },
+      }),
+    ).rejects.toThrow("canonical message target과 일치하지 않습니다");
+    expect(authorizationCount).toBe(0);
+    expect(appendCount).toBe(0);
+  });
+
   it("returns the existing message for the same sender, key, target, and normalized text", async () => {
     await expect(
       executeSendMessage(
@@ -161,7 +204,7 @@ describe("send message usecase invariants", () => {
         },
         {
           ...baseDeps,
-          findAppendedTextMessageByIdempotencyKey: async () => savedMessage,
+          findSendMessageReceipt: async () => savedReceipt,
           resolveTarget: () => {
             throw new Error("기존 메시지 재시도는 target을 다시 resolve하지 않습니다.");
           },
@@ -180,34 +223,40 @@ describe("send message usecase invariants", () => {
     });
   });
 
-  it.each([
-    {
-      name: "target",
-      existing: {
-        ...savedMessage,
-        streamId: "channel:channel-2",
-        target: {
-          type: "channel" as const,
-          channelId: "channel-2",
-        },
-      },
-    },
-    {
-      name: "text",
-      existing: {
-        ...savedMessage,
-        text: "different",
-      },
-    },
-  ])("rejects an existing key used with different $name", async ({ existing }) => {
+  it("rejects an existing key used with a different request fingerprint", async () => {
     await expect(
       executeSendMessage(input, {
         ...baseDeps,
-        findAppendedTextMessageByIdempotencyKey: async () => existing,
+        findSendMessageReceipt: async () => ({
+          requestFingerprint: differentFingerprint,
+          message: savedMessage,
+        }),
       }),
     ).resolves.toEqual({
       status: "rejected",
       reason: "idempotency_conflict",
+    });
+  });
+
+  it("uses the immutable receipt fingerprint instead of current message content", async () => {
+    await expect(
+      executeSendMessage(input, {
+        ...baseDeps,
+        findSendMessageReceipt: async () => ({
+          requestFingerprint,
+          message: {
+            ...savedMessage,
+            text: "edited after the original send",
+          },
+        }),
+      }),
+    ).resolves.toEqual({
+      status: "accepted",
+      persistence: "existing",
+      message: {
+        ...savedMessage,
+        text: "edited after the original send",
+      },
     });
   });
 
@@ -217,7 +266,7 @@ describe("send message usecase invariants", () => {
         ...baseDeps,
         appendTextMessage: async () => ({
           status: "existing",
-          message: savedMessage,
+          receipt: savedReceipt,
         }),
       }),
     ).resolves.toEqual({
@@ -230,9 +279,9 @@ describe("send message usecase invariants", () => {
         ...baseDeps,
         appendTextMessage: async () => ({
           status: "existing",
-          message: {
-            ...savedMessage,
-            text: "different",
+          receipt: {
+            requestFingerprint: differentFingerprint,
+            message: savedMessage,
           },
         }),
       }),

@@ -14,6 +14,10 @@
     "./table-contract": {
       "types": "./dist/table-contract.d.ts",
       "default": "./dist/table-contract.js"
+    },
+    "./persisted-message-content": {
+      "types": "./dist/persisted-message-content.d.ts",
+      "default": "./dist/persisted-message-content.js"
     }
   },
   "files": [
@@ -26,9 +30,11 @@
   },
   "dependencies": {
     "@wake-surfer/realtime-chat-message-send-contracts": "workspace:*",
-    "kysely": "0.28.8"
+    "kysely": "0.28.8",
+    "zod": "4.2.1"
   },
   "devDependencies": {
+    "@types/node": "^24.13.2",
     "vitest": "4.1.6"
   }
 }
