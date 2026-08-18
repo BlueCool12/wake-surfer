@@ -25,8 +25,7 @@
   ],
   "scripts": {
     "build": "pnpm --filter @wake-surfer/realtime-chat-message-send-contracts build && tsc -p tsconfig.json",
-    "clean": "tsc -b tsconfig.json --clean",
-    "test": "pnpm --filter @wake-surfer/realtime-chat-message-send-contracts build && vitest run"
+    "clean": "tsc -b tsconfig.json --clean"
   },
   "dependencies": {
     "@wake-surfer/realtime-chat-message-send-contracts": "workspace:*",
@@ -34,7 +33,6 @@
     "zod": "4.2.1"
   },
   "devDependencies": {
-    "@types/node": "^24.13.2",
-    "vitest": "4.1.6"
+    "@types/node": "^24.13.2"
   }
 }

@@ -27,7 +27,6 @@ CommonJS로 각각 변환하며, package `exports`의 `import`와 `require` 조�
 2. `latest.ts`, `older.ts`, `sync-after.ts`: 서로 독립된 Query request/response와 page 의미
 3. `errors.ts`: domain rejection과 retryable infrastructure failure
 4. `serialization.ts`: boundary별 canonical final envelope와 UTF-8 측정
-5. `test/`: request, response, error, serialization별 독립 계약 검증
 
 `index.ts`는 기존 공개 symbol을 유지하는 barrel이다. page 내부 검증 helper는 공개하지 않는다.
 

@@ -18,13 +18,9 @@
   ],
   "scripts": {
     "build": "node ../../scripts/manage-dual-package-output.mjs clean && tsc -p tsconfig.json && tsc -p tsconfig.cjs.json && node ../../scripts/manage-dual-package-output.mjs mark",
-    "clean": "node ../../scripts/manage-dual-package-output.mjs clean",
-    "test": "vitest run"
+    "clean": "node ../../scripts/manage-dual-package-output.mjs clean"
   },
   "dependencies": {
     "zod": "4.2.1"
-  },
-  "devDependencies": {
-    "vitest": "4.1.6"
   }
 }

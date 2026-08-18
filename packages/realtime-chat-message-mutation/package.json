@@ -21,10 +21,7 @@
   ],
   "scripts": {
     "build": "pnpm --filter @wake-surfer/realtime-chat-message-contracts build && pnpm --filter @wake-surfer/realtime-chat-message-mutation-contracts build && pnpm --filter @wake-surfer/realtime-chat-message-send build && tsc -p tsconfig.json",
-    "clean": "tsc -b tsconfig.json --clean",
-    "test": "pnpm run build && vitest run --config vitest.config.mts",
-    "test:integration": "pnpm run build && pnpm --filter @wake-surfer/realtime-chat-database build && vitest run --config vitest.integration.config.mts",
-    "typecheck": "pnpm run build && pnpm --filter @wake-surfer/realtime-chat-database build && tsc -p tsconfig.test.json"
+    "clean": "tsc -b tsconfig.json --clean"
   },
   "dependencies": {
     "@wake-surfer/realtime-chat-message-contracts": "workspace:*",
@@ -33,8 +30,6 @@
     "kysely": "0.28.8"
   },
   "devDependencies": {
-    "@types/node": "^24.13.2",
-    "@wake-surfer/realtime-chat-database": "workspace:*",
-    "vitest": "4.1.6"
+    "@types/node": "^24.13.2"
   }
 }

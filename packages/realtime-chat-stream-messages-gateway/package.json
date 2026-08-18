@@ -17,14 +17,12 @@
   ],
   "scripts": {
     "build": "pnpm --filter @wake-surfer/realtime-chat-stream-messages-contracts build && tsc -p tsconfig.json",
-    "clean": "tsc -b tsconfig.json --clean",
-    "test": "pnpm run build && vitest run"
+    "clean": "tsc -b tsconfig.json --clean"
   },
   "dependencies": {
     "@wake-surfer/realtime-chat-stream-messages-contracts": "workspace:*"
   },
   "devDependencies": {
-    "@types/node": "^24.13.2",
-    "vitest": "4.1.6"
+    "@types/node": "^24.13.2"
   }
 }

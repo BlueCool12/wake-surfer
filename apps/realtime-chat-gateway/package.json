@@ -7,9 +7,7 @@
     "build": "pnpm run build:deps && tsc -p tsconfig.json",
     "build:bundle": "pnpm run build && esbuild src/main.ts --bundle --platform=node --format=esm --target=node24 --banner:js=\"import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);\" --outfile=dist/main.mjs",
     "build:deps": "pnpm --filter @wake-surfer/realtime-chat-gateway-ticket-contracts build && pnpm --filter @wake-surfer/realtime-chat-message-send-contracts build && pnpm --filter @wake-surfer/realtime-chat-stream-messages-gateway build",
-    "start": "node dist/main.js",
-    "test": "pnpm run build:deps && vitest run",
-    "typecheck": "pnpm run build:deps && tsc -p tsconfig.test.json"
+    "start": "node dist/main.js"
   },
   "dependencies": {
     "@wake-surfer/realtime-chat-gateway-ticket-contracts": "workspace:*",
@@ -22,7 +20,6 @@
     "@types/node": "^24.13.2",
     "@types/ws": "^8.18.1",
     "esbuild": "0.28.0",
-    "typescript": "~6.0.2",
-    "vitest": "^4.1.6"
+    "typescript": "~6.0.2"
   }
 }
