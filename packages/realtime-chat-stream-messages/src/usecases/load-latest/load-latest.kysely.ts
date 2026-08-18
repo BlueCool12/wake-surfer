@@ -3,9 +3,10 @@ import type { Kysely } from "kysely";
 import {
   assertExpectedSequenceWindow,
   MAX_LATEST_MESSAGES_QUERY_COUNT,
-  parseChannelStreamMetadata,
+  parseMessageStreamMetadata,
   parseStreamMessageRow,
   type StreamMessage,
+  type StreamMessagesTarget,
 } from "../../stream-messages";
 import type { StreamMessagesDatabase } from "../../stream-messages-table";
 
@@ -20,7 +21,7 @@ export async function readLatestMessagesSnapshot<DB extends StreamMessagesDataba
   db: Kysely<DB>,
   input: {
     streamId: string;
-    channelId: string;
+    target: StreamMessagesTarget;
   },
 ): Promise<LatestMessagesSnapshot> {
   const readDb = db as Kysely<StreamMessagesDatabase>;
@@ -39,13 +40,10 @@ export async function readLatestMessagesSnapshot<DB extends StreamMessagesDataba
         ])
         .where("stream_id", "=", input.streamId)
         .executeTakeFirst();
-      const stream = parseChannelStreamMetadata(streamRow, input);
+      const stream = parseMessageStreamMetadata(streamRow, input);
 
       if (stream.status === "missing") {
-        return {
-          headSequence: 0,
-          messages: [],
-        };
+        return createLatestMessagesSnapshot(0, []);
       }
 
       const rows = await transaction
@@ -75,9 +73,19 @@ export async function readLatestMessagesSnapshot<DB extends StreamMessagesDataba
         streamId: input.streamId,
       });
 
-      return {
+      return createLatestMessagesSnapshot(
         headSequence,
-        messages: messages.slice(-MAX_LATEST_MESSAGES_QUERY_COUNT),
-      };
+        messages.slice(-MAX_LATEST_MESSAGES_QUERY_COUNT),
+      );
     });
+}
+
+function createLatestMessagesSnapshot(
+  headSequence: number,
+  messages: StreamMessage[],
+): LatestMessagesSnapshot {
+  return {
+    headSequence,
+    messages,
+  };
 }

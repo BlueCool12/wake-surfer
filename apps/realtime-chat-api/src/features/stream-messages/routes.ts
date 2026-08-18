@@ -97,20 +97,24 @@ export function registerLoadLatestMessagesHttpRoute(
     assertAllowedQueryParameters(context.req.url, []);
     const actor = await config.authenticateActor(context.req.raw);
     const request = parseLatestRequest(context.req.param("channelId"));
+    const target = { type: "channel" as const, channelId: request.channelId };
     const startedAt = performance.now();
 
     try {
       await enforcePublicRateLimit(config, context.req.raw, actor.actorId);
-      const usecaseResult = await config.loadLatest(request, {
-        actorId: actor.actorId,
-      });
+      const usecaseResult = await config.loadLatest(
+        { target },
+        {
+          actorId: actor.actorId,
+        },
+      );
 
       if (usecaseResult.status === "failure") {
         return createStreamMessagesFailureResponse(usecaseResult.code);
       }
 
       const result = fitLatestMessagesPage(
-        request.channelId,
+        target,
         usecaseResult.page,
         measureLatestStreamMessagesHttpFinalEnvelope,
       );
@@ -161,20 +165,28 @@ export function registerLoadOlderMessagesHttpRoute(
     assertAllowedQueryParameters(context.req.url, ["beforeSequence", "limit"]);
     const actor = await config.authenticateActor(context.req.raw);
     const request = parseOlderRequest(context.req.param("channelId"), context.req.url);
+    const target = { type: "channel" as const, channelId: request.channelId };
     const startedAt = performance.now();
 
     try {
       await enforcePublicRateLimit(config, context.req.raw, actor.actorId);
-      const usecaseResult = await config.loadOlder(request, {
-        actorId: actor.actorId,
-      });
+      const usecaseResult = await config.loadOlder(
+        {
+          target,
+          beforeSequence: request.beforeSequence,
+          limit: request.limit,
+        },
+        {
+          actorId: actor.actorId,
+        },
+      );
 
       if (usecaseResult.status === "failure") {
         return createStreamMessagesFailureResponse(usecaseResult.code);
       }
 
       const result = fitOlderMessagesPage(
-        request.channelId,
+        target,
         usecaseResult.page,
         measureOlderStreamMessagesHttpFinalEnvelope,
       );
@@ -260,12 +272,13 @@ export function registerStreamMessagesInternalHttpRoutes(
     await config.authenticateGateway(context.req.raw);
     const actor = await config.getAssertedActor(context.req.raw);
     const request = await parseInternalSyncRequest(context.req.param("channelId"), context.req.raw);
+    const target = { type: "channel" as const, channelId: request.channelId };
     const startedAt = performance.now();
 
     try {
       const usecaseResult = await config.syncAfter(
         {
-          channelId: request.channelId,
+          target,
           afterSequence: request.afterSequence,
           ...(request.throughSequence === undefined
             ? {}
@@ -279,7 +292,7 @@ export function registerStreamMessagesInternalHttpRoutes(
         return createStreamMessagesFailureResponse(usecaseResult.code);
       }
 
-      const result = fitSyncAfterMessagesPage(request.channelId, usecaseResult.page, (response) =>
+      const result = fitSyncAfterMessagesPage(target, usecaseResult.page, (response) =>
         measureChatStreamSyncedFinalEnvelope({ requestId, ...response }),
       );
       const clientEvent = { requestId, ...result.response };

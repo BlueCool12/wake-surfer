@@ -297,9 +297,6 @@ importers:
 
   packages/realtime-chat-stream-messages:
     dependencies:
-      '@wake-surfer/realtime-chat-message-send':
-        specifier: workspace:*
-        version: link:../realtime-chat-message-send
       kysely:
         specifier: 0.28.8
         version: 0.28.8

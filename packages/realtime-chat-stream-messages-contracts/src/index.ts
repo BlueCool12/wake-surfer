@@ -8,6 +8,7 @@ export {
   MAX_REQUEST_ID_LENGTH,
   MAX_STREAM_MESSAGES_PAGE_ENVELOPE_UTF8_BYTES,
   MAX_STREAM_MESSAGES_PAGE_LIMIT,
+  MessageStreamIdSchema,
   PageLimitSchema,
   RequestIdSchema,
   ThroughSequenceSchema,

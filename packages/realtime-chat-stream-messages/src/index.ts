@@ -1,11 +1,12 @@
 export { StreamMessagesDataIntegrityError, type StreamMessagesDataIntegrityReason } from "./errors";
 export type {
-  ChannelReadAuthorization,
-  ChannelReadAuthorizer,
+  MessageStreamReadAuthorization,
+  MessageStreamReadAuthorizer,
   StreamMessage,
   StreamMessagesFailure,
   StreamMessagesFailureCode,
   StreamMessagesQueryContext,
+  StreamMessagesTarget,
 } from "./stream-messages";
 export {
   createLoadLatestMessages,
