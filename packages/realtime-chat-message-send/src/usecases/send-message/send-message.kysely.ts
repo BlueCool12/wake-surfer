@@ -33,6 +33,9 @@ export type AppendTextMessageResult =
   | {
       status: "existing";
       receipt: StoredSendMessageReceipt;
+    }
+  | {
+      status: "target_not_found";
     };
 
 type AppendedTextMessageRow = {
@@ -103,14 +106,11 @@ export async function appendTextMessage(
     const targetType = getSendMessageTargetType(input.target);
     const targetId = getSendMessageTargetId(input.target);
 
-    await trx
-      .insertInto("message_streams")
-      .values({
-        target_type: targetType,
-        target_id: targetId,
-      })
-      .onConflict((oc) => oc.columns(["target_type", "target_id"]).doNothing())
-      .executeTakeFirstOrThrow();
+    if (!(await ensureMessageStream(trx, input))) {
+      return {
+        status: "target_not_found",
+      };
+    }
 
     const sequence = await advanceSequenceForTarget(trx, {
       streamId: input.streamId,
@@ -162,6 +162,77 @@ export async function appendTextMessage(
       },
     };
   });
+}
+
+async function ensureMessageStream(
+  db: Kysely<MessageSendDatabase>,
+  input: AppendTextMessageInput,
+): Promise<boolean> {
+  if (input.target.type === "thread") {
+    return ensureThreadMessageStream(db, input);
+  }
+
+  await db
+    .insertInto("message_streams")
+    .values({
+      target_type: getSendMessageTargetType(input.target),
+      target_id: getSendMessageTargetId(input.target),
+    })
+    .onConflict((oc) => oc.columns(["target_type", "target_id"]).doNothing())
+    .executeTakeFirstOrThrow();
+
+  return true;
+}
+
+async function ensureThreadMessageStream(
+  db: Kysely<MessageSendDatabase>,
+  input: AppendTextMessageInput,
+): Promise<boolean> {
+  if (input.target.type !== "thread") {
+    throw new Error("thread message stream 생성에 thread target이 전달되지 않았습니다.");
+  }
+
+  const root = await db
+    .selectFrom("messages")
+    .innerJoin("message_streams as root_stream", "root_stream.stream_id", "messages.stream_id")
+    .select(["root_stream.target_type as targetType", "messages.deleted_at as deletedAt"])
+    .where("messages.message_id", "=", input.target.threadId)
+    .forUpdate("messages")
+    .executeTakeFirst();
+
+  if (root === undefined || root.targetType === "thread") {
+    return false;
+  }
+
+  const existingThreadStream = await db
+    .selectFrom("message_streams")
+    .select("stream_id as streamId")
+    .where("target_type", "=", "thread")
+    .where("target_id", "=", input.target.threadId)
+    .executeTakeFirst();
+
+  if (existingThreadStream !== undefined) {
+    if (existingThreadStream.streamId !== input.streamId) {
+      throw new Error("기존 thread stream이 canonical stream ID와 일치하지 않습니다.");
+    }
+
+    return true;
+  }
+
+  if (root.deletedAt !== null) {
+    return false;
+  }
+
+  await db
+    .insertInto("message_streams")
+    .values({
+      target_type: "thread",
+      target_id: input.target.threadId,
+    })
+    .onConflict((oc) => oc.columns(["target_type", "target_id"]).doNothing())
+    .executeTakeFirstOrThrow();
+
+  return true;
 }
 
 async function acquireIdempotencyLock(

@@ -2,8 +2,9 @@
 
 `realtime-chat`의 메시지 저장 command를 처리하는 transport-agnostic 패키지다.
 
-channel, DM, thread target에 대한 공통 message append 파이프라인을 제공한다. target을
-stream으로 해석하는 규칙과 쓰기 권한 판단은 consumer가 주입한다.
+channel, DM, thread target에 대한 공통 message append 파이프라인을 제공한다. channel과 DM의 target
+해석 및 모든 target의 쓰기 권한 판단은 consumer가 주입한다. Thread target은 `threadId`와 같은 ID의
+root message를 기준으로 package가 thread stream 생성 가능 여부를 검증한다.
 
 ## 공개 API
 
@@ -30,6 +31,12 @@ stream으로 해석하는 규칙과 쓰기 권한 판단은 consumer가 주입�
   `idempotency_conflict`로 거절한다.
 - 새 메시지는 resolve된 stream의 head를 원자적으로 증가시키고 JSONB content, 불변 receipt와 함께 같은
   transaction으로 저장되며 `persistence: "created"`인 `accepted`로 반환된다.
+- 최초 thread message는 active channel 또는 DM root message만 대상으로 하며, root row 검증과 thread
+  stream 생성, message append, receipt 저장을 같은 transaction에서 처리한다.
+- 존재하지 않는 root, 삭제된 root의 신규 thread와 thread message를 root로 한 중첩 thread는
+  `target_not_found`로 거절한다.
+- 이미 생성된 thread는 root가 나중에 삭제되더라도 유지하며, consumer의 쓰기 권한 판정을 통과하면 새
+  message를 append한다.
 
 ## 책임이 아닌 것
 
@@ -42,7 +49,7 @@ stream으로 해석하는 규칙과 쓰기 권한 판단은 consumer가 주입�
 - read cursor
 - system message
 - presence / typing indicator
-- channel / DM / thread별 세부 비즈니스 정책 확정
+- channel / DM의 존재·멤버십과 target별 외부 capability 정책 확정
 
 ## Database contract
 
