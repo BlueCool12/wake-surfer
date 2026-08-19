@@ -1,0 +1,37 @@
+{
+  "name": "@wake-surfer/auth-api",
+  "private": true,
+  "version": "0.0.0",
+  "type": "commonjs",
+  "scripts": {
+    "build": "pnpm run build:deps && prisma generate && tsc -p tsconfig.json",
+    "build:bundle": "pnpm run build",
+    "build:deps": "pnpm --filter @wake-surfer/oauth build",
+    "dev": "pnpm run build:deps && prisma generate && tsc -p tsconfig.json --watch",
+    "prisma:generate": "prisma generate",
+    "prisma:migrate": "prisma migrate dev",
+    "start": "node dist/main.js",
+    "test": "pnpm run build:deps && prisma generate && vitest run",
+    "typecheck": "pnpm run build:deps && prisma generate && tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@nestjs/common": "^11.1.6",
+    "@nestjs/core": "^11.1.6",
+    "@nestjs/platform-express": "^11.1.6",
+    "@prisma/client": "^6.16.2",
+    "@wake-surfer/oauth": "workspace:*",
+    "cookie-parser": "^1.4.7",
+    "jose": "^6.1.0",
+    "pino": "^10.3.1",
+    "reflect-metadata": "^0.2.2",
+    "rxjs": "^7.8.2"
+  },
+  "devDependencies": {
+    "@types/cookie-parser": "^1.4.9",
+    "@types/express": "^5.0.3",
+    "@types/node": "^24.13.2",
+    "prisma": "^6.16.2",
+    "typescript": "~6.0.2",
+    "vitest": "^4.1.6"
+  }
+}

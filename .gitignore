@@ -16,3 +16,5 @@ coverage/
 AGENTS.override.md
 .codex
 docs
+
+.DS_Store

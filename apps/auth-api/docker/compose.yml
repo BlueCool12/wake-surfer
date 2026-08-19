@@ -1,0 +1,18 @@
+services:
+  auth-postgres:
+    image: postgres:17-alpine
+    env_file:
+      - runtime.dev.env
+    ports:
+      # 기존 realtime-chat postgres(5432)와 충돌하지 않게 5433으로 노출한다.
+      - "5433:5432"
+    volumes:
+      - auth-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U wake_surfer_auth -d wake_surfer_auth"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  auth-postgres-data:
