@@ -1,3 +1,5 @@
+name: wake-surfer-auth
+
 services:
   auth-postgres:
     image: postgres:17-alpine
