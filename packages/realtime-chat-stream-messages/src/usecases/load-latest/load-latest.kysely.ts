@@ -58,6 +58,7 @@ export async function readLatestMessagesSnapshot<DB extends StreamMessagesDataba
           "message_streams.target_id as targetId",
           "messages.content",
           "messages.created_at as createdAt",
+          "messages.deleted_at as deletedAt",
         ])
         .where("messages.stream_id", "=", input.streamId)
         .where("messages.sequence", "<=", stream.headSequence)

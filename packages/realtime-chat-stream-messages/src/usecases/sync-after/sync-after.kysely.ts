@@ -78,6 +78,7 @@ export async function readMessagesAfter<DB extends StreamMessagesDatabase>(
           "message_streams.target_id as targetId",
           "messages.content",
           "messages.created_at as createdAt",
+          "messages.deleted_at as deletedAt",
         ])
         .where("messages.stream_id", "=", input.streamId)
         .where("messages.sequence", ">", input.afterSequence)

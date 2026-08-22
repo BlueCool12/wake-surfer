@@ -4,6 +4,12 @@ import type { AddressInfo } from "node:net";
 import type { Duplex } from "node:stream";
 
 import {
+  parseDeleteMessageRequest,
+  parseEditMessageRequest,
+  type DeleteMessageRequest,
+  type EditMessageRequest,
+} from "@wake-surfer/realtime-chat-message-mutation-contracts";
+import {
   GatewayConnectedEventSchema,
   GatewayNotReadyEventSchema,
 } from "@wake-surfer/realtime-chat-gateway-ticket-contracts";
@@ -294,6 +300,28 @@ export function createRealtimeChatGatewayApp(
         await relayMessageSend(session, parsed.value);
         return;
       }
+      case "chat.message.edit": {
+        const parsed = parseEditMessageRequest(frame.payload);
+
+        if (!parsed.ok) {
+          closeIfOpen(websocket, 1008, "invalid message edit frame");
+          return;
+        }
+
+        await relayMessageEdit(session, parsed.value);
+        return;
+      }
+      case "chat.message.delete": {
+        const parsed = parseDeleteMessageRequest(frame.payload);
+
+        if (!parsed.ok) {
+          closeIfOpen(websocket, 1008, "invalid message delete frame");
+          return;
+        }
+
+        await relayMessageDelete(session, parsed.value);
+        return;
+      }
       case "chat.stream.sync": {
         await Promise.all(
           [...streamSyncListeners].map((listener) =>
@@ -315,7 +343,10 @@ export function createRealtimeChatGatewayApp(
     session: LocalGatewaySession,
     request: SendMessageRequest,
   ): Promise<void> {
-    if (request.target.type !== "channel" || !session.channels.has(request.target.channelId)) {
+    if (
+      request.target.type === "dm" ||
+      (request.target.type === "channel" && !session.channels.has(request.target.channelId))
+    ) {
       const rejected: Extract<SendMessageResponse, { status: "rejected" }> = {
         status: "rejected",
         idempotencyKey: request.idempotencyKey,
@@ -336,14 +367,10 @@ export function createRealtimeChatGatewayApp(
       return;
     }
 
-    if (
-      response.message.target.type !== "channel" ||
-      response.message.target.channelId !== request.target.channelId
-    ) {
-      throw new Error("메시지 전송 API가 요청과 다른 channel message를 반환했습니다.");
+    if (!messageTargetsEqual(response.message.target, request.target)) {
+      throw new Error("메시지 전송 API가 요청과 다른 target message를 반환했습니다.");
     }
 
-    const channelId = response.message.target.channelId;
     const { text, ...createdMessage } = response.message;
     const { persistence, ...acceptedResponse } = response;
     const acceptedDelivery = sendWireEvent(session.socket, "chat.message.accepted", {
@@ -358,10 +385,16 @@ export function createRealtimeChatGatewayApp(
       );
     });
 
-    if (persistence === "existing") {
+    if (persistence === "existing" || response.message.target.type === "thread") {
       await acceptedDelivery;
       return;
     }
+
+    if (response.message.target.type !== "channel") {
+      throw new Error("지원하지 않는 메시지 fan-out target입니다.");
+    }
+
+    const channelId = response.message.target.channelId;
 
     const deliveries = [...sessionsById.values()]
       .filter(
@@ -387,6 +420,48 @@ export function createRealtimeChatGatewayApp(
         }
       });
     await Promise.all([acceptedDelivery, ...deliveries]);
+  }
+
+  async function relayMessageEdit(
+    session: LocalGatewaySession,
+    request: EditMessageRequest,
+  ): Promise<void> {
+    if (deps.gatewayApiClient.editMessage === undefined) {
+      throw new Error("메시지 수정 API client가 설정되지 않았습니다.");
+    }
+
+    const response = await deps.gatewayApiClient.editMessage(request, {
+      actorId: session.actorId,
+      requestId: `gateway-request_${createId()}`,
+      signal: messageSendAbortController.signal,
+    });
+    await sendWireEvent(
+      session.socket,
+      response.status === "accepted" ? "chat.message.edit.accepted" : "chat.message.edit.rejected",
+      { ...response },
+    );
+  }
+
+  async function relayMessageDelete(
+    session: LocalGatewaySession,
+    request: DeleteMessageRequest,
+  ): Promise<void> {
+    if (deps.gatewayApiClient.deleteMessage === undefined) {
+      throw new Error("메시지 삭제 API client가 설정되지 않았습니다.");
+    }
+
+    const response = await deps.gatewayApiClient.deleteMessage(request, {
+      actorId: session.actorId,
+      requestId: `gateway-request_${createId()}`,
+      signal: messageSendAbortController.signal,
+    });
+    await sendWireEvent(
+      session.socket,
+      response.status === "accepted"
+        ? "chat.message.delete.accepted"
+        : "chat.message.delete.rejected",
+      { ...response },
+    );
   }
 
   function removeSession(session: LocalGatewaySession): void {
@@ -443,6 +518,24 @@ function readJoinedChannelId(payload: Record<string, unknown>): string | null {
   }
 
   return payload.channelId;
+}
+
+function messageTargetsEqual(
+  left: SendMessageRequest["target"],
+  right: SendMessageRequest["target"],
+): boolean {
+  if (left.type !== right.type) {
+    return false;
+  }
+
+  switch (left.type) {
+    case "channel":
+      return right.type === "channel" && left.channelId === right.channelId;
+    case "dm":
+      return right.type === "dm" && left.dmConversationId === right.dmConversationId;
+    case "thread":
+      return right.type === "thread" && left.threadId === right.threadId;
+  }
 }
 
 function extractTicket(requestUrl: string | undefined): string | null {

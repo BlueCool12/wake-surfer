@@ -31,7 +31,12 @@ export type SendMessageResult =
     }
   | {
       status: "rejected";
-      reason: "invalid_text" | "target_not_found" | "write_forbidden" | "idempotency_conflict";
+      reason:
+        | "invalid_text"
+        | "target_not_found"
+        | "write_forbidden"
+        | "idempotency_conflict"
+        | "message_deleted";
     };
 
 export type SendMessage = (input: SendMessageInput) => Promise<SendMessageResult>;

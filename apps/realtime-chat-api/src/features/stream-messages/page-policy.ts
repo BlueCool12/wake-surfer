@@ -198,15 +198,25 @@ function toPublicMessages(
   return {
     streamId,
     messages: messages.map((message) => {
-      const publicMessage: PublicMessage = {
+      const publicMessageMetadata = {
         messageId: message.messageId,
         streamId: getCanonicalStreamId(message.target),
         sequence: message.sequence,
         senderActorId: message.senderActorId,
         target: message.target,
-        content: message.content,
         createdAt: message.createdAt.toISOString(),
       };
+      const publicMessage: PublicMessage =
+        message.content === null
+          ? {
+              ...publicMessageMetadata,
+              content: null,
+              deletedAt: message.deletedAt.toISOString(),
+            }
+          : {
+              ...publicMessageMetadata,
+              content: message.content,
+            };
 
       return message.sentAtClient === undefined
         ? publicMessage

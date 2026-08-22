@@ -44,6 +44,12 @@ importers:
       '@wake-surfer/realtime-chat-message-contracts':
         specifier: workspace:*
         version: link:../../packages/realtime-chat-message-contracts
+      '@wake-surfer/realtime-chat-message-mutation':
+        specifier: workspace:*
+        version: link:../../packages/realtime-chat-message-mutation
+      '@wake-surfer/realtime-chat-message-mutation-contracts':
+        specifier: workspace:*
+        version: link:../../packages/realtime-chat-message-mutation-contracts
       '@wake-surfer/realtime-chat-message-send':
         specifier: workspace:*
         version: link:../../packages/realtime-chat-message-send
@@ -81,6 +87,9 @@ importers:
       '@wake-surfer/realtime-chat-gateway-ticket-contracts':
         specifier: workspace:*
         version: link:../../packages/realtime-chat-gateway-ticket-contracts
+      '@wake-surfer/realtime-chat-message-mutation-contracts':
+        specifier: workspace:*
+        version: link:../../packages/realtime-chat-message-mutation-contracts
       '@wake-surfer/realtime-chat-message-send-contracts':
         specifier: workspace:*
         version: link:../../packages/realtime-chat-message-send-contracts
@@ -252,6 +261,9 @@ importers:
 
   packages/realtime-chat-message-mutation-contracts:
     dependencies:
+      '@wake-surfer/realtime-chat-message-contracts':
+        specifier: workspace:*
+        version: link:../realtime-chat-message-contracts
       zod:
         specifier: 4.2.1
         version: 4.2.1

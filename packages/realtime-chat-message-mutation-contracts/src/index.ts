@@ -1,6 +1,12 @@
+import { MessageTargetSchema } from "@wake-surfer/realtime-chat-message-contracts";
 import { z } from "zod";
 
 const MessageIdSchema = z.string().trim().min(1);
+const NonBlankStringSchema = z.string().trim().min(1);
+const ISODateTimeSchema = z
+  .string()
+  .trim()
+  .pipe(z.iso.datetime({ offset: true }));
 
 export const EditMessageRequestSchema = z.strictObject({
   messageId: MessageIdSchema,
@@ -66,3 +72,61 @@ export function parseDeleteMessageRequest(input: unknown): DeleteMessageRequestP
     value: parsed.data,
   };
 }
+
+export const EditedTextMessageSchema = z.strictObject({
+  messageId: MessageIdSchema,
+  streamId: NonBlankStringSchema,
+  sequence: z.number().int().safe().positive(),
+  senderActorId: NonBlankStringSchema,
+  target: MessageTargetSchema,
+  version: z.number().int().safe().positive(),
+  text: NonBlankStringSchema,
+  createdAt: ISODateTimeSchema,
+  editedAt: ISODateTimeSchema,
+});
+
+export type EditedTextMessage = z.infer<typeof EditedTextMessageSchema>;
+
+export const DeletedMessageSchema = z.strictObject({
+  messageId: MessageIdSchema,
+  streamId: NonBlankStringSchema,
+  sequence: z.number().int().safe().positive(),
+  senderActorId: NonBlankStringSchema,
+  target: MessageTargetSchema,
+  version: z.number().int().safe().positive(),
+  createdAt: ISODateTimeSchema,
+  deletedAt: ISODateTimeSchema,
+});
+
+export type DeletedMessage = z.infer<typeof DeletedMessageSchema>;
+
+export const EditMessageResponseSchema = z.discriminatedUnion("status", [
+  z.strictObject({
+    status: z.literal("accepted"),
+    message: EditedTextMessageSchema,
+  }),
+  z.strictObject({
+    status: z.literal("rejected"),
+    reason: z.enum(["invalid_content", "write_forbidden"]),
+  }),
+  z.strictObject({
+    status: z.literal("rejected"),
+    reason: z.literal("message_deleted"),
+    message: DeletedMessageSchema,
+  }),
+]);
+
+export type EditMessageResponse = z.infer<typeof EditMessageResponseSchema>;
+
+export const DeleteMessageResponseSchema = z.discriminatedUnion("status", [
+  z.strictObject({
+    status: z.literal("accepted"),
+    message: DeletedMessageSchema,
+  }),
+  z.strictObject({
+    status: z.literal("rejected"),
+    reason: z.literal("write_forbidden"),
+  }),
+]);
+
+export type DeleteMessageResponse = z.infer<typeof DeleteMessageResponseSchema>;

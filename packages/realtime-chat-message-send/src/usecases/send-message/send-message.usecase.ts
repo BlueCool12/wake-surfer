@@ -170,7 +170,10 @@ function resultForExistingReceipt(
   }
 
   if (existing.message === undefined) {
-    throw new Error("tombstone message의 기존 send 결과는 현재 공개 계약으로 반환할 수 없습니다.");
+    return {
+      status: "rejected",
+      reason: "message_deleted",
+    };
   }
 
   return {

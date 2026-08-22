@@ -30,16 +30,26 @@ export type TextMessageContent = {
   text: string;
 };
 
-export type PublicMessage = {
+type PublicMessageBase = {
   messageId: MessageId;
   streamId: StreamId;
   sequence: Sequence;
   senderActorId: ActorId;
   target: MessageTarget;
-  content: TextMessageContent;
   createdAt: ISODateTime;
   sentAtClient?: ISODateTime;
 };
+
+export type PublicTextMessage = PublicMessageBase & {
+  content: TextMessageContent;
+};
+
+export type PublicDeletedMessage = PublicMessageBase & {
+  content: null;
+  deletedAt: ISODateTime;
+};
+
+export type PublicMessage = PublicTextMessage | PublicDeletedMessage;
 
 const NonBlankStringSchema = z.string().trim().min(1);
 const ISODateTimeSchema = z
@@ -70,22 +80,38 @@ export const TextMessageContentSchema = z.strictObject({
   ),
 });
 
-const PublicMessageShapeSchema = z.strictObject({
+const PublicMessageBaseShape = {
   messageId: NonBlankStringSchema,
   streamId: NonBlankStringSchema,
   sequence: z.number().int().safe().positive(),
   senderActorId: NonBlankStringSchema,
   target: MessageTargetSchema,
-  content: TextMessageContentSchema,
   createdAt: ISODateTimeSchema,
   sentAtClient: ISODateTimeSchema.optional(),
+};
+
+const PublicTextMessageSchema = z.strictObject({
+  ...PublicMessageBaseShape,
+  content: TextMessageContentSchema,
 });
 
-export const PublicMessageSchema = PublicMessageShapeSchema.transform((input): PublicMessage => {
-  const { sentAtClient, ...message } = input;
-
-  return sentAtClient === undefined ? message : { ...message, sentAtClient };
+const PublicDeletedMessageSchema = z.strictObject({
+  ...PublicMessageBaseShape,
+  content: z.null(),
+  deletedAt: ISODateTimeSchema,
 });
+
+export const PublicMessageSchema = z
+  .union([PublicTextMessageSchema, PublicDeletedMessageSchema])
+  .transform((input): PublicMessage => {
+    const { sentAtClient, ...message } = input;
+
+    return sentAtClient === undefined ? message : { ...message, sentAtClient };
+  });
+
+export function isDeletedPublicMessage(message: PublicMessage): message is PublicDeletedMessage {
+  return message.content === null;
+}
 
 export function getUtf8ByteLength(value: string): number {
   return new TextEncoder().encode(value).byteLength;

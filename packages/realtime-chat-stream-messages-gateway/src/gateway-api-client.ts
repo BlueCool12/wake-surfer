@@ -1,10 +1,12 @@
 import {
   InternalSyncAfterStreamMessagesHttpRequestSchema,
   InternalSyncAfterStreamMessagesHttpResponseSchema,
+  InternalSyncAfterThreadMessagesHttpRequestSchema,
   RequestIdSchema,
   StreamMessagesHttpErrorResponseSchema,
+  type InternalSyncAfterStreamMessagesHttpRequest,
+  type InternalSyncAfterThreadMessagesHttpRequest,
   type StreamMessagesErrorCode,
-  type SyncAfterStreamMessagesRequest,
   type SyncAfterStreamMessagesResponse,
 } from "@wake-surfer/realtime-chat-stream-messages-contracts";
 
@@ -14,7 +16,15 @@ const RFC_6750_BEARER_TOKEN_PATTERN = new RegExp("^[A-Za-z0-9._~+/-]+=*$");
 
 export type GatewayStreamMessagesApiClient = {
   syncAfter: (
-    request: SyncAfterStreamMessagesRequest,
+    request: InternalSyncAfterStreamMessagesHttpRequest,
+    context: {
+      actorId: string;
+      requestId: string;
+      signal: AbortSignal;
+    },
+  ) => Promise<SyncAfterStreamMessagesResponse>;
+  syncAfterThread?: (
+    request: InternalSyncAfterThreadMessagesHttpRequest,
     context: {
       actorId: string;
       requestId: string;
@@ -80,56 +90,75 @@ export function createGatewayStreamMessagesApiClient(
   return {
     async syncAfter(request, context) {
       const parsedRequest = InternalSyncAfterStreamMessagesHttpRequestSchema.parse(request);
-      const { channelId, ...requestBody } = parsedRequest;
-      const requestId = RequestIdSchema.parse(context.requestId);
-      const actorId = parseNonBlank(context.actorId, "actorId");
-      const timeout = createTimeoutSignal(context.signal, timeoutMilliseconds);
-      const url = new URL(
-        `internal/realtime-chat/channels/${encodeURIComponent(channelId)}/messages/sync-after`,
-        apiBaseUrl,
-      );
-
-      try {
-        const response = await raceWithAbort(
-          fetchImplementation(url, {
-            body: JSON.stringify(requestBody),
-            headers: {
-              accept: "application/json",
-              authorization: `Bearer ${gatewayApiToken}`,
-              "content-type": "application/json",
-              [actorHeader]: actorId,
-              [gatewayIdHeader]: gatewayId,
-              "x-request-id": requestId,
-            },
-            method: "POST",
-            signal: timeout.signal,
-          }),
-          timeout.signal,
-        );
-        const rawText = await raceWithAbort(response.text(), timeout.signal);
-        assertRequestId(response, requestId);
-        const value = parseJson(rawText);
-
-        if (!response.ok) {
-          throw mapHttpError(value);
-        }
-
-        const parsed = InternalSyncAfterStreamMessagesHttpResponseSchema.safeParse(value);
-
-        if (!parsed.success) {
-          throw new GatewayStreamMessagesApiError("stream_messages_unavailable", {
-            retryable: true,
-          });
-        }
-
-        return parsed.data;
-      } catch (error) {
-        throw mapRuntimeError(error, context.signal, timeout.didTimeout);
-      } finally {
-        timeout.dispose();
-      }
+      return requestSyncAfter(parsedRequest, "channels", parsedRequest.channelId, context);
+    },
+    async syncAfterThread(request, context) {
+      const parsedRequest = InternalSyncAfterThreadMessagesHttpRequestSchema.parse(request);
+      return requestSyncAfter(parsedRequest, "threads", parsedRequest.threadId, context);
     },
   };
+
+  async function requestSyncAfter(
+    parsedRequest:
+      InternalSyncAfterStreamMessagesHttpRequest | InternalSyncAfterThreadMessagesHttpRequest,
+    targetKind: "channels" | "threads",
+    targetId: string,
+    context: { actorId: string; requestId: string; signal: AbortSignal },
+  ): Promise<SyncAfterStreamMessagesResponse> {
+    const { afterSequence, throughSequence, limit } = parsedRequest;
+    const requestBody = {
+      afterSequence,
+      ...(throughSequence === undefined ? {} : { throughSequence }),
+      limit,
+    };
+    const requestId = RequestIdSchema.parse(context.requestId);
+    const actorId = parseNonBlank(context.actorId, "actorId");
+    const timeout = createTimeoutSignal(context.signal, timeoutMilliseconds);
+    const url = new URL(
+      `internal/realtime-chat/${targetKind}/${encodeURIComponent(targetId)}/messages/sync-after`,
+      apiBaseUrl,
+    );
+
+    try {
+      const response = await raceWithAbort(
+        fetchImplementation(url, {
+          body: JSON.stringify(requestBody),
+          headers: {
+            accept: "application/json",
+            authorization: `Bearer ${gatewayApiToken}`,
+            "content-type": "application/json",
+            [actorHeader]: actorId,
+            [gatewayIdHeader]: gatewayId,
+            "x-request-id": requestId,
+          },
+          method: "POST",
+          signal: timeout.signal,
+        }),
+        timeout.signal,
+      );
+      const rawText = await raceWithAbort(response.text(), timeout.signal);
+      assertRequestId(response, requestId);
+      const value = parseJson(rawText);
+
+      if (!response.ok) {
+        throw mapHttpError(value);
+      }
+
+      const parsed = InternalSyncAfterStreamMessagesHttpResponseSchema.safeParse(value);
+
+      if (!parsed.success) {
+        throw new GatewayStreamMessagesApiError("stream_messages_unavailable", {
+          retryable: true,
+        });
+      }
+
+      return parsed.data;
+    } catch (error) {
+      throw mapRuntimeError(error, context.signal, timeout.didTimeout);
+    } finally {
+      timeout.dispose();
+    }
+  }
 }
 
 function parseApiBaseUrl(value: string | URL): URL {

@@ -22,6 +22,7 @@ CommonJS로 각각 변환하며, package `exports`의 `import`와 `require` 조�
   `SendMessageResponseSchema`를 정의한다.
 - API와 Gateway 사이에서만 사용하는 저장 결과 포함 `InternalSendMessageResponseSchema`를 정의한다.
 - 공개 `SendMessageResponse`에는 내부 `created | existing` 저장 결과를 포함하지 않는다.
+- 삭제된 기존 message의 idempotent 재시도는 `message_deleted` rejection으로 표현한다.
 - outbound delivery 요청 event의 send 전용 envelope을 정의한다.
 
 ## 책임이 아닌 것

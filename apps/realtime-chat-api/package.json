@@ -6,7 +6,7 @@
   "scripts": {
     "build": "pnpm run build:deps && tsc -p tsconfig.json",
     "build:bundle": "pnpm run build && esbuild src/main.ts --bundle --platform=node --format=esm --target=node24 --banner:js=\"import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);\" --outfile=dist/main.mjs",
-    "build:deps": "pnpm --filter @wake-surfer/api-contracts build && pnpm --filter @wake-surfer/realtime-chat-message-send-contracts build && pnpm --filter @wake-surfer/realtime-chat-message-send build && pnpm --filter @wake-surfer/realtime-chat-database build && pnpm --filter @wake-surfer/realtime-chat-stream-messages-contracts build && pnpm --filter @wake-surfer/realtime-chat-stream-messages build",
+    "build:deps": "pnpm --filter @wake-surfer/api-contracts build && pnpm --filter @wake-surfer/realtime-chat-message-send-contracts build && pnpm --filter @wake-surfer/realtime-chat-message-send build && pnpm --filter @wake-surfer/realtime-chat-message-mutation-contracts build && pnpm --filter @wake-surfer/realtime-chat-message-mutation build && pnpm --filter @wake-surfer/realtime-chat-database build && pnpm --filter @wake-surfer/realtime-chat-stream-messages-contracts build && pnpm --filter @wake-surfer/realtime-chat-stream-messages build",
     "start": "node dist/main.js",
     "test": "pnpm run build:deps && vitest run",
     "typecheck": "pnpm run build:deps && tsc -p tsconfig.test.json"
@@ -18,6 +18,8 @@
     "@wake-surfer/realtime-chat-gateway-ticket": "workspace:*",
     "@wake-surfer/realtime-chat-gateway-ticket-contracts": "workspace:*",
     "@wake-surfer/realtime-chat-message-contracts": "workspace:*",
+    "@wake-surfer/realtime-chat-message-mutation": "workspace:*",
+    "@wake-surfer/realtime-chat-message-mutation-contracts": "workspace:*",
     "@wake-surfer/realtime-chat-message-send": "workspace:*",
     "@wake-surfer/realtime-chat-message-send-contracts": "workspace:*",
     "@wake-surfer/realtime-chat-stream-messages": "workspace:*",

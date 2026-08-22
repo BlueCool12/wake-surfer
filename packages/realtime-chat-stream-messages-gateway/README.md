@@ -7,7 +7,7 @@ Gateway runtime이 Stream Messages의 `sync-after` 공개 계약을 중계할 �
 
 - 인증된 Gateway service credential과 local-session actor를 사용해 API internal sync endpoint를 호출한다.
 - `chat.stream.sync` frame을 검증하고 `chat.stream.synced`, rejection 또는 failure event로 변환한다.
-- session generation, readiness, cancellation과 동일 channel 중복 요청을 처리한다.
+- session generation, readiness, cancellation과 동일 channel 또는 thread 중복 요청을 처리한다.
 - Gateway runtime과 rate limiter는 좁은 port로 주입받는다.
 
 `createGatewayStreamMessagesApiClient`의 `gatewayApiToken`은 최소 32 UTF-8 byte이며 RFC 6750 Bearer token

@@ -10,6 +10,11 @@ import {
 } from "@wake-surfer/realtime-chat-message-send";
 import { getCanonicalStreamId } from "@wake-surfer/realtime-chat-message-contracts";
 import {
+  createDeleteMessage,
+  createEditMessage,
+  type MessageMutationAuthorizer,
+} from "@wake-surfer/realtime-chat-message-mutation";
+import {
   createLoadLatestMessages,
   createLoadOlderMessages,
   createSyncAfterMessages,
@@ -68,7 +73,11 @@ export async function createRuntimeDeps(
       streamId: getCanonicalStreamId(target),
     });
     const authorizeMessageWrite: MessageWriteAuthorizer = ({ target }) =>
-      target.type === "channel" ? { status: "allowed" } : { status: "denied" };
+      target.type === "channel" || target.type === "thread"
+        ? { status: "allowed" }
+        : { status: "denied" };
+    const authorizeMessageMutation: MessageMutationAuthorizer = ({ target }) =>
+      target.type === "channel" || target.type === "thread";
     const sendMessage = createSendMessage({
       authorizeWrite: authorizeMessageWrite,
       db: database.db,
@@ -89,6 +98,14 @@ export async function createRuntimeDeps(
           ],
           allowedOrigins: config.corsAllowedOrigins,
         },
+        deleteMessage: createDeleteMessage({
+          authorize: authorizeMessageMutation,
+          db: database.db,
+        }),
+        editMessage: createEditMessage({
+          authorize: authorizeMessageMutation,
+          db: database.db,
+        }),
         gatewayTicket,
         gatewayApiToken: config.gatewayApiToken,
         loadLatestMessages: createLoadLatestMessages({

@@ -1,9 +1,12 @@
 import {
   LatestStreamMessagesHttpRequestSchema,
+  LatestThreadStreamMessagesHttpRequestSchema,
   InternalSyncAfterStreamMessagesHttpRequestSchema,
+  InternalSyncAfterThreadMessagesHttpRequestSchema,
   InternalSyncAfterStreamMessagesHttpResponseSchema,
   MAX_STREAM_MESSAGES_PAGE_ENVELOPE_UTF8_BYTES,
   OlderStreamMessagesHttpRequestSchema,
+  OlderThreadStreamMessagesHttpRequestSchema,
   getLatestStreamMessagesHttpResponseUtf8ByteLength,
   getOlderStreamMessagesHttpResponseUtf8ByteLength,
   getChatStreamSyncedEventUtf8ByteLength,
@@ -14,7 +17,7 @@ import {
   serializeOlderStreamMessagesHttpResponse,
   type StreamMessagesHttpErrorResponse,
 } from "@wake-surfer/realtime-chat-stream-messages-contracts";
-import { Hono } from "hono";
+import { Hono, type Handler } from "hono";
 import { HTTPException } from "hono/http-exception";
 import { timeout } from "hono/timeout";
 
@@ -25,6 +28,7 @@ import {
   type StreamMessagesFailureCode,
   type SyncAfterMessages,
 } from "@wake-surfer/realtime-chat-stream-messages";
+import type { MessageTarget } from "@wake-surfer/realtime-chat-message-contracts";
 import {
   fitLatestMessagesPage,
   fitOlderMessagesPage,
@@ -81,33 +85,86 @@ export type RegisterStreamMessagesInternalHttpRoutesConfig = {
 
 const MAX_INTERNAL_SYNC_REQUEST_UTF8_BYTES = 16_384;
 
+type HttpStreamTarget = Exclude<MessageTarget, { type: "dm" }>;
+type StreamMessagesQuery = "latest" | "older" | "sync-after";
+type StreamMessagesTargetRoute =
+  | {
+      path: string;
+      parameterName: "channelId";
+      targetType: "channel";
+    }
+  | {
+      path: string;
+      parameterName: "threadId";
+      targetType: "thread";
+    };
+
+const channelLatestRoute: StreamMessagesTargetRoute = {
+  path: "/realtime-chat/channels/:channelId/messages/latest",
+  parameterName: "channelId",
+  targetType: "channel",
+};
+const threadLatestRoute: StreamMessagesTargetRoute = {
+  path: "/realtime-chat/threads/:threadId/messages/latest",
+  parameterName: "threadId",
+  targetType: "thread",
+};
+const channelOlderRoute: StreamMessagesTargetRoute = {
+  path: "/realtime-chat/channels/:channelId/messages/older",
+  parameterName: "channelId",
+  targetType: "channel",
+};
+const threadOlderRoute: StreamMessagesTargetRoute = {
+  path: "/realtime-chat/threads/:threadId/messages/older",
+  parameterName: "threadId",
+  targetType: "thread",
+};
+const channelSyncRoute: StreamMessagesTargetRoute = {
+  path: "/internal/realtime-chat/channels/:channelId/messages/sync-after",
+  parameterName: "channelId",
+  targetType: "channel",
+};
+const threadSyncRoute: StreamMessagesTargetRoute = {
+  path: "/internal/realtime-chat/threads/:threadId/messages/sync-after",
+  parameterName: "threadId",
+  targetType: "thread",
+};
+
 export function registerLoadLatestMessagesHttpRoute(
   app: Hono,
   config: RegisterLoadLatestMessagesHttpRouteConfig,
 ): void {
+  registerLoadLatestTargetHttpRoute(app, config, channelLatestRoute);
+}
+
+export function registerLoadLatestThreadMessagesHttpRoute(
+  app: Hono,
+  config: RegisterLoadLatestMessagesHttpRouteConfig,
+): void {
+  registerLoadLatestTargetHttpRoute(app, config, threadLatestRoute);
+}
+
+function registerLoadLatestTargetHttpRoute(
+  app: Hono,
+  config: RegisterLoadLatestMessagesHttpRouteConfig,
+  route: StreamMessagesTargetRoute,
+): void {
   assertPublicRateLimitConfig(config);
+  registerStreamMessagesRouteMiddleware(app, config, route);
 
-  app.use("/realtime-chat/channels/:channelId/messages/latest", streamMessagesRequestId);
-  registerStreamMessagesTimeouts(app, config.timeoutMilliseconds, [
-    "/realtime-chat/channels/:channelId/messages/latest",
-  ]);
-
-  app.get("/realtime-chat/channels/:channelId/messages/latest", async (context) => {
-    const requestId = context.get("requestId");
-    assertAllowedQueryParameters(context.req.url, []);
-    const actor = await config.authenticateActor(context.req.raw);
-    const request = parseLatestRequest(context.req.param("channelId"));
-    const target = { type: "channel" as const, channelId: request.channelId };
-    const startedAt = performance.now();
-
-    try {
-      await enforcePublicRateLimit(config, context.req.raw, actor.actorId);
-      const usecaseResult = await config.loadLatest(
-        { target },
-        {
-          actorId: actor.actorId,
-        },
+  app.get(
+    route.path,
+    withStreamMessagesHttpErrorHandling(config, route, "latest", async (context) => {
+      const requestId = context.get("requestId");
+      assertAllowedQueryParameters(context.req.url, []);
+      const actor = await config.authenticateActor(context.req.raw);
+      const target = parseLatestTarget(
+        readRouteTarget(context.req.param(route.parameterName), route),
       );
+      const startedAt = performance.now();
+
+      await enforcePublicRateLimit(config, context.req.raw, actor.actorId);
+      const usecaseResult = await config.loadLatest({ target }, { actorId: actor.actorId });
 
       if (usecaseResult.status === "failure") {
         return createStreamMessagesFailureResponse(usecaseResult.code);
@@ -126,7 +183,7 @@ export function registerLoadLatestMessagesHttpRoute(
       );
       config.logger.info(
         {
-          channelId: request.channelId,
+          ...getTargetLogContext(target),
           durationMs: elapsedMilliseconds(startedAt),
           hasMore: result.response.hasMoreBefore,
           messageCount: result.response.messages.length,
@@ -138,37 +195,45 @@ export function registerLoadLatestMessagesHttpRoute(
       );
 
       return createJsonResponse(serialized, 200);
-    } catch (error) {
-      throw mapStreamMessagesHttpError(error, {
-        channelId: request.channelId,
-        logger: config.logger,
-        query: "latest",
-        requestId,
-      });
-    }
-  });
+    }),
+  );
 }
 
 export function registerLoadOlderMessagesHttpRoute(
   app: Hono,
   config: RegisterLoadOlderMessagesHttpRouteConfig,
 ): void {
+  registerLoadOlderTargetHttpRoute(app, config, channelOlderRoute);
+}
+
+export function registerLoadOlderThreadMessagesHttpRoute(
+  app: Hono,
+  config: RegisterLoadOlderMessagesHttpRouteConfig,
+): void {
+  registerLoadOlderTargetHttpRoute(app, config, threadOlderRoute);
+}
+
+function registerLoadOlderTargetHttpRoute(
+  app: Hono,
+  config: RegisterLoadOlderMessagesHttpRouteConfig,
+  route: StreamMessagesTargetRoute,
+): void {
   assertPublicRateLimitConfig(config);
+  registerStreamMessagesRouteMiddleware(app, config, route);
 
-  app.use("/realtime-chat/channels/:channelId/messages/older", streamMessagesRequestId);
-  registerStreamMessagesTimeouts(app, config.timeoutMilliseconds, [
-    "/realtime-chat/channels/:channelId/messages/older",
-  ]);
+  app.get(
+    route.path,
+    withStreamMessagesHttpErrorHandling(config, route, "older", async (context) => {
+      const requestId = context.get("requestId");
+      assertAllowedQueryParameters(context.req.url, ["beforeSequence", "limit"]);
+      const actor = await config.authenticateActor(context.req.raw);
+      const request = parseOlderRequest(
+        readRouteTarget(context.req.param(route.parameterName), route),
+        context.req.url,
+      );
+      const target = request.target;
+      const startedAt = performance.now();
 
-  app.get("/realtime-chat/channels/:channelId/messages/older", async (context) => {
-    const requestId = context.get("requestId");
-    assertAllowedQueryParameters(context.req.url, ["beforeSequence", "limit"]);
-    const actor = await config.authenticateActor(context.req.raw);
-    const request = parseOlderRequest(context.req.param("channelId"), context.req.url);
-    const target = { type: "channel" as const, channelId: request.channelId };
-    const startedAt = performance.now();
-
-    try {
       await enforcePublicRateLimit(config, context.req.raw, actor.actorId);
       const usecaseResult = await config.loadOlder(
         {
@@ -176,9 +241,7 @@ export function registerLoadOlderMessagesHttpRoute(
           beforeSequence: request.beforeSequence,
           limit: request.limit,
         },
-        {
-          actorId: actor.actorId,
-        },
+        { actorId: actor.actorId },
       );
 
       if (usecaseResult.status === "failure") {
@@ -198,7 +261,7 @@ export function registerLoadOlderMessagesHttpRoute(
       );
       config.logger.info(
         {
-          channelId: request.channelId,
+          ...getTargetLogContext(target),
           durationMs: elapsedMilliseconds(startedAt),
           hasMore: result.response.hasMoreBefore,
           messageCount: result.response.messages.length,
@@ -210,15 +273,8 @@ export function registerLoadOlderMessagesHttpRoute(
       );
 
       return createJsonResponse(serialized, 200);
-    } catch (error) {
-      throw mapStreamMessagesHttpError(error, {
-        channelId: request.channelId,
-        logger: config.logger,
-        query: "older",
-        requestId,
-      });
-    }
-  });
+    }),
+  );
 }
 
 async function enforcePublicRateLimit(
@@ -259,23 +315,30 @@ export function registerStreamMessagesInternalHttpRoutes(
   app: Hono,
   config: RegisterStreamMessagesInternalHttpRoutesConfig,
 ): void {
-  app.use(
-    "/internal/realtime-chat/channels/:channelId/messages/sync-after",
-    streamMessagesRequestId,
-  );
-  registerStreamMessagesTimeouts(app, config.timeoutMilliseconds, [
-    "/internal/realtime-chat/channels/:channelId/messages/sync-after",
-  ]);
+  registerSyncAfterTargetHttpRoute(app, config, channelSyncRoute);
+  registerSyncAfterTargetHttpRoute(app, config, threadSyncRoute);
+}
 
-  app.post("/internal/realtime-chat/channels/:channelId/messages/sync-after", async (context) => {
-    const requestId = context.get("requestId");
-    await config.authenticateGateway(context.req.raw);
-    const actor = await config.getAssertedActor(context.req.raw);
-    const request = await parseInternalSyncRequest(context.req.param("channelId"), context.req.raw);
-    const target = { type: "channel" as const, channelId: request.channelId };
-    const startedAt = performance.now();
+function registerSyncAfterTargetHttpRoute(
+  app: Hono,
+  config: RegisterStreamMessagesInternalHttpRoutesConfig,
+  route: StreamMessagesTargetRoute,
+): void {
+  registerStreamMessagesRouteMiddleware(app, config, route);
 
-    try {
+  app.post(
+    route.path,
+    withStreamMessagesHttpErrorHandling(config, route, "sync-after", async (context) => {
+      const requestId = context.get("requestId");
+      await config.authenticateGateway(context.req.raw);
+      const actor = await config.getAssertedActor(context.req.raw);
+      const request = await parseInternalSyncRequest(
+        readRouteTarget(context.req.param(route.parameterName), route),
+        context.req.raw,
+      );
+      const target = request.target;
+      const startedAt = performance.now();
+
       const usecaseResult = await config.syncAfter(
         {
           target,
@@ -311,7 +374,7 @@ export function registerStreamMessagesInternalHttpRoutes(
       const response = InternalSyncAfterStreamMessagesHttpResponseSchema.parse(result.response);
       config.logger.info(
         {
-          channelId: request.channelId,
+          ...getTargetLogContext(target),
           durationMs: elapsedMilliseconds(startedAt),
           hasMore: response.hasMoreAfter,
           messageCount: response.messages.length,
@@ -322,21 +385,46 @@ export function registerStreamMessagesInternalHttpRoutes(
         "stream messages query completed",
       );
       return createJsonResponse(JSON.stringify(response), 200);
-    } catch (error) {
-      throw mapStreamMessagesHttpError(error, {
-        channelId: request.channelId,
-        logger: config.logger,
-        query: "sync-after",
-        requestId,
-      });
-    }
-  });
+    }),
+  );
 }
 
-function registerStreamMessagesTimeouts(
+function registerStreamMessagesRouteMiddleware(
+  app: Hono,
+  config: {
+    logger: StreamMessagesHttpLogger;
+    timeoutMilliseconds?: number;
+  },
+  route: StreamMessagesTargetRoute,
+): void {
+  app.use(route.path, streamMessagesRequestId);
+  registerStreamMessagesTimeout(app, config.timeoutMilliseconds, route.path);
+}
+
+function withStreamMessagesHttpErrorHandling(
+  config: { logger: StreamMessagesHttpLogger },
+  route: StreamMessagesTargetRoute,
+  query: StreamMessagesQuery,
+  handler: Handler,
+): Handler {
+  return async (context, next) => {
+    try {
+      return await handler(context, next);
+    } catch (error) {
+      return mapStreamMessagesHttpError(error, {
+        logger: config.logger,
+        query,
+        requestId: context.get("requestId"),
+        target: readRouteTarget(context.req.param(route.parameterName), route),
+      }).getResponse();
+    }
+  };
+}
+
+function registerStreamMessagesTimeout(
   app: Hono,
   timeoutMilliseconds: number | undefined,
-  paths: readonly string[],
+  path: string,
 ): void {
   if (timeoutMilliseconds === undefined) {
     return;
@@ -346,23 +434,47 @@ function registerStreamMessagesTimeouts(
     throw new TypeError("Stream Messages HTTP timeout은 양의 safe integer여야 합니다.");
   }
 
-  for (const path of paths) {
-    app.use(
-      path,
-      timeout(timeoutMilliseconds, () =>
-        createHttpError(503, {
-          status: "error",
-          code: "stream_messages_unavailable",
-          message: "Stream Messages service unavailable",
-          retryable: true,
-        }),
-      ),
-    );
-  }
+  app.use(
+    path,
+    timeout(timeoutMilliseconds, () =>
+      createHttpError(503, {
+        status: "error",
+        code: "stream_messages_unavailable",
+        message: "Stream Messages service unavailable",
+        retryable: true,
+      }),
+    ),
+  );
 }
 
-function parseLatestRequest(channelId: string) {
-  const parsed = LatestStreamMessagesHttpRequestSchema.safeParse({ channelId });
+function readRouteTarget(
+  targetId: string | undefined,
+  route: StreamMessagesTargetRoute,
+): HttpStreamTarget {
+  if (targetId === undefined) {
+    throw createHttpError(400, {
+      status: "error",
+      code: "bad_request",
+      message: "Stream Messages target이 필요합니다.",
+    });
+  }
+
+  return route.targetType === "channel"
+    ? { type: "channel", channelId: targetId }
+    : { type: "thread", threadId: targetId };
+}
+
+function getTargetLogContext(target: HttpStreamTarget): Record<string, string> {
+  return target.type === "channel"
+    ? { channelId: target.channelId }
+    : { threadId: target.threadId };
+}
+
+function parseLatestTarget(target: HttpStreamTarget): HttpStreamTarget {
+  const parsed =
+    target.type === "channel"
+      ? LatestStreamMessagesHttpRequestSchema.safeParse({ channelId: target.channelId })
+      : LatestThreadStreamMessagesHttpRequestSchema.safeParse({ threadId: target.threadId });
 
   if (!parsed.success) {
     throw createHttpError(400, {
@@ -372,18 +484,29 @@ function parseLatestRequest(channelId: string) {
     });
   }
 
-  return parsed.data;
+  return "channelId" in parsed.data
+    ? { type: "channel", channelId: parsed.data.channelId }
+    : { type: "thread", threadId: parsed.data.threadId };
 }
 
-function parseOlderRequest(channelId: string, requestUrl: string) {
+function parseOlderRequest(target: HttpStreamTarget, requestUrl: string) {
   const searchParams = new URL(requestUrl).searchParams;
-  const parsed = OlderStreamMessagesHttpRequestSchema.safeParse({
-    channelId,
+  const cursor = {
     beforeSequence: parseDecimalSafeInteger(searchParams, "beforeSequence", true),
     ...(searchParams.has("limit")
       ? { limit: parseDecimalSafeInteger(searchParams, "limit", true) }
       : {}),
-  });
+  };
+  const parsed =
+    target.type === "channel"
+      ? OlderStreamMessagesHttpRequestSchema.safeParse({
+          channelId: target.channelId,
+          ...cursor,
+        })
+      : OlderThreadStreamMessagesHttpRequestSchema.safeParse({
+          threadId: target.threadId,
+          ...cursor,
+        });
 
   if (!parsed.success) {
     throw createHttpError(400, {
@@ -393,10 +516,20 @@ function parseOlderRequest(channelId: string, requestUrl: string) {
     });
   }
 
-  return parsed.data;
+  return "channelId" in parsed.data
+    ? {
+        target: { type: "channel" as const, channelId: parsed.data.channelId },
+        beforeSequence: parsed.data.beforeSequence,
+        limit: parsed.data.limit,
+      }
+    : {
+        target: { type: "thread" as const, threadId: parsed.data.threadId },
+        beforeSequence: parsed.data.beforeSequence,
+        limit: parsed.data.limit,
+      };
 }
 
-async function parseInternalSyncRequest(channelId: string, request: Request) {
+async function parseInternalSyncRequest(target: HttpStreamTarget, request: Request) {
   const rawBody = await request.text();
 
   if (new TextEncoder().encode(rawBody).byteLength > MAX_INTERNAL_SYNC_REQUEST_UTF8_BYTES) {
@@ -421,7 +554,7 @@ async function parseInternalSyncRequest(channelId: string, request: Request) {
 
   if (
     isRecord(body) &&
-    ["actorId", "channelId", "streamId"].some((name) => Object.hasOwn(body, name))
+    ["actorId", "channelId", "threadId", "streamId"].some((name) => Object.hasOwn(body, name))
   ) {
     throw createHttpError(400, {
       status: "error",
@@ -430,9 +563,14 @@ async function parseInternalSyncRequest(channelId: string, request: Request) {
     });
   }
 
-  const parsed = InternalSyncAfterStreamMessagesHttpRequestSchema.safeParse(
-    isRecord(body) ? { ...body, channelId } : body,
-  );
+  const parsed =
+    target.type === "channel"
+      ? InternalSyncAfterStreamMessagesHttpRequestSchema.safeParse(
+          isRecord(body) ? { ...body, channelId: target.channelId } : body,
+        )
+      : InternalSyncAfterThreadMessagesHttpRequestSchema.safeParse(
+          isRecord(body) ? { ...body, threadId: target.threadId } : body,
+        );
 
   if (!parsed.success) {
     throw createHttpError(400, {
@@ -442,7 +580,19 @@ async function parseInternalSyncRequest(channelId: string, request: Request) {
     });
   }
 
-  return parsed.data;
+  return "channelId" in parsed.data
+    ? {
+        target: { type: "channel" as const, channelId: parsed.data.channelId },
+        afterSequence: parsed.data.afterSequence,
+        throughSequence: parsed.data.throughSequence,
+        limit: parsed.data.limit,
+      }
+    : {
+        target: { type: "thread" as const, threadId: parsed.data.threadId },
+        afterSequence: parsed.data.afterSequence,
+        throughSequence: parsed.data.throughSequence,
+        limit: parsed.data.limit,
+      };
 }
 
 function parseDecimalSafeInteger(
@@ -501,10 +651,10 @@ function assertFinalEnvelope(
 function mapStreamMessagesHttpError(
   error: unknown,
   context: {
-    channelId: string;
     logger: StreamMessagesHttpLogger;
-    query: "latest" | "older" | "sync-after";
+    query: StreamMessagesQuery;
     requestId: string;
+    target: HttpStreamTarget;
   },
 ): HTTPException {
   if (error instanceof HTTPException) {
@@ -513,7 +663,7 @@ function mapStreamMessagesHttpError(
 
   context.logger.error(
     {
-      channelId: context.channelId,
+      ...getTargetLogContext(context.target),
       errorName: error instanceof Error ? error.name : "UnknownError",
       integrityReason:
         error instanceof StreamMessagesDataIntegrityError ||

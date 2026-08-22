@@ -339,7 +339,7 @@ export class ChatRoomModel extends Emitter {
       sequence: message.sequence,
       senderId: message.senderActorId,
       isMine: message.senderActorId === this.options.actorId,
-      text: message.content.text,
+      text: message.content?.text ?? "삭제된 메시지입니다.",
       createdAt: message.createdAt,
       status: "sent",
     };
