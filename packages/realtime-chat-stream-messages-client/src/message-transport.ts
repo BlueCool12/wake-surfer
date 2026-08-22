@@ -4,19 +4,19 @@ import type {
   EditMessageResponse,
 } from "@wake-surfer/realtime-chat-message-mutation-contracts";
 import type { SendMessageResponse } from "@wake-surfer/realtime-chat-message-send-contracts";
-import type {
-  StreamMessagesClientTarget,
-  StreamMessagesTransport,
-} from "@wake-surfer/realtime-chat-stream-messages-client";
 
 type AcceptedSendMessageResponse = Extract<SendMessageResponse, { status: "accepted" }>;
 
-export type MessageAcceptedResponse = Omit<AcceptedSendMessageResponse, "message"> & {
+export type RealtimeChatMessageAcceptedResponse = Omit<AcceptedSendMessageResponse, "message"> & {
   message: PublicMessage;
 };
-export type MessageRejectedResponse = Extract<SendMessageResponse, { status: "rejected" }>;
 
-export interface ChatMessageTransport {
+export type RealtimeChatMessageRejectedResponse = Extract<
+  SendMessageResponse,
+  { status: "rejected" }
+>;
+
+export interface RealtimeChatMessageTransport {
   connect(): Promise<void>;
   deleteMessage(params: { messageId: string }): void;
   disconnect(): void;
@@ -26,20 +26,8 @@ export interface ChatMessageTransport {
   onConnectionGenerationChanged(listener: (connectionGeneration: string) => void): () => void;
   onDisconnected(listener: () => void): () => void;
   onMessageCreated(listener: (message: PublicMessage) => void): () => void;
-  onMessageAccepted(listener: (response: MessageAcceptedResponse) => void): () => void;
+  onMessageAccepted(listener: (response: RealtimeChatMessageAcceptedResponse) => void): () => void;
   onMessageDeleteResult(listener: (response: DeleteMessageResponse) => void): () => void;
   onMessageEditResult(listener: (response: EditMessageResponse) => void): () => void;
-  onMessageRejected(listener: (response: MessageRejectedResponse) => void): () => void;
+  onMessageRejected(listener: (response: RealtimeChatMessageRejectedResponse) => void): () => void;
 }
-
-export type ChatRoomRuntime = {
-  messageTransport: ChatMessageTransport;
-  streamMessagesTransport: StreamMessagesTransport;
-};
-
-export type ChatRoomRuntimeContext = {
-  actorId: string;
-  target: StreamMessagesClientTarget;
-};
-
-export type ChatRoomRuntimeFactory = (context: ChatRoomRuntimeContext) => ChatRoomRuntime;

@@ -115,15 +115,6 @@ importers:
 
   apps/web:
     dependencies:
-      '@wake-surfer/realtime-chat-message-contracts':
-        specifier: workspace:*
-        version: link:../../packages/realtime-chat-message-contracts
-      '@wake-surfer/realtime-chat-message-mutation-contracts':
-        specifier: workspace:*
-        version: link:../../packages/realtime-chat-message-mutation-contracts
-      '@wake-surfer/realtime-chat-message-send-contracts':
-        specifier: workspace:*
-        version: link:../../packages/realtime-chat-message-send-contracts
       '@wake-surfer/realtime-chat-stream-messages-client':
         specifier: workspace:*
         version: link:../../packages/realtime-chat-stream-messages-client
@@ -287,6 +278,12 @@ importers:
       '@wake-surfer/realtime-chat-message-contracts':
         specifier: workspace:*
         version: link:../realtime-chat-message-contracts
+      '@wake-surfer/realtime-chat-message-mutation-contracts':
+        specifier: workspace:*
+        version: link:../realtime-chat-message-mutation-contracts
+      '@wake-surfer/realtime-chat-message-send-contracts':
+        specifier: workspace:*
+        version: link:../realtime-chat-message-send-contracts
       '@wake-surfer/realtime-chat-stream-messages-contracts':
         specifier: workspace:*
         version: link:../realtime-chat-stream-messages-contracts

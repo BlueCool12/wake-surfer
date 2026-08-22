@@ -3,31 +3,26 @@ import type {
   DeletedMessage,
   EditedTextMessage,
 } from "@wake-surfer/realtime-chat-message-mutation-contracts";
-import {
-  disposeStreamMessagesSession,
-  Emitter,
-  getStreamMessagesSession,
-  type KeyValueStorage,
-  type StreamMessagesClientTarget,
-  type StreamMessagesRecoveryPhase,
-  StreamMessagesTransportError,
-} from "@wake-surfer/realtime-chat-stream-messages-client";
+import type { KeyValueStorage } from "./cursor-storage.js";
+import { Emitter } from "./emitter.js";
+import { StreamMessagesTransportError } from "./errors.js";
+import type { StreamMessagesRecoveryPhase } from "./recovery-model.js";
+import type { RealtimeChatTargetRuntime } from "./runtime.js";
+import { StreamMessagesSessionModel } from "./session-model.js";
+import type { StreamMessagesClientTarget } from "./target.js";
 
-import type { ChatRoomRuntime } from "./transport/chatTransport";
+export type RealtimeChatMessageStatus = "pending" | "sent" | "failed";
 
-export type ChatMessageStatus = "pending" | "sent" | "failed";
-
-export type ChatMessageView = {
+export type RealtimeChatMessage = {
   key: string;
   idempotencyKey?: string;
   messageId?: string;
   sequence?: number;
-  senderId?: string;
-  isMine: boolean;
-  text: string;
+  senderActorId?: string;
+  isOwn: boolean;
+  content: PublicMessage["content"];
   createdAt: string;
-  status: ChatMessageStatus;
-  isDeleted: boolean;
+  status: RealtimeChatMessageStatus;
   isEdited: boolean;
 };
 
@@ -38,20 +33,20 @@ type OptimisticMessage = {
   status: "pending" | "failed";
 };
 
-export type ChatRoomModelOptions = {
+export type RealtimeChatTargetSessionOptions = {
   actorId: string;
   target: StreamMessagesClientTarget;
-  runtime: ChatRoomRuntime;
+  runtime: RealtimeChatTargetRuntime;
   storage: KeyValueStorage;
   createIdempotencyKey?: () => string;
   now?: () => string;
 };
 
-export class ChatRoomModel extends Emitter {
-  readonly options: ChatRoomModelOptions;
+export class RealtimeChatTargetSession extends Emitter {
+  readonly options: RealtimeChatTargetSessionOptions;
   readonly #optimistic = new Map<string, OptimisticMessage>();
   readonly #editedMessageIds = new Set<string>();
-  readonly #runtime: ChatRoomRuntime;
+  readonly #runtime: RealtimeChatTargetRuntime;
   readonly #createIdempotencyKey: () => string;
   readonly #now: () => string;
   readonly #subscriptions: Array<() => void> = [];
@@ -65,13 +60,13 @@ export class ChatRoomModel extends Emitter {
   #loadingOlder = false;
   #olderFailed = false;
 
-  constructor(options: ChatRoomModelOptions) {
+  constructor(options: RealtimeChatTargetSessionOptions) {
     super();
     this.options = options;
     this.#runtime = options.runtime;
     this.#createIdempotencyKey = options.createIdempotencyKey ?? (() => crypto.randomUUID());
     this.#now = options.now ?? (() => new Date().toISOString());
-    this.streamSession = getStreamMessagesSession({
+    this.streamSession = new StreamMessagesSessionModel({
       actorId: options.actorId,
       storage: options.storage,
       target: options.target,
@@ -82,16 +77,15 @@ export class ChatRoomModel extends Emitter {
     );
   }
 
-  get messages(): ChatMessageView[] {
+  get messages(): RealtimeChatMessage[] {
     return [
-      ...this.streamSession.timeline.messages.map((message) => this.#toView(message)),
+      ...this.streamSession.timeline.messages.map((message) => this.#toMessage(message)),
       ...[...this.#optimistic.values()].map((message) => ({
         key: message.idempotencyKey,
         idempotencyKey: message.idempotencyKey,
-        isMine: true,
-        text: message.text,
+        isOwn: true,
+        content: { type: "text" as const, text: message.text },
         createdAt: message.createdAt,
-        isDeleted: false,
         isEdited: false,
         status: message.status,
       })),
@@ -191,7 +185,7 @@ export class ChatRoomModel extends Emitter {
     }
   }
 
-  retryMessage(message: ChatMessageView): void {
+  retryMessage(message: RealtimeChatMessage): void {
     if (message.idempotencyKey === undefined) {
       return;
     }
@@ -215,14 +209,14 @@ export class ChatRoomModel extends Emitter {
     }
   }
 
-  editMessage(message: ChatMessageView, text: string): void {
+  editMessage(message: RealtimeChatMessage, text: string): void {
     const trimmed = text.trim();
 
     if (
       message.messageId === undefined ||
-      !message.isMine ||
+      !message.isOwn ||
       message.status !== "sent" ||
-      message.isDeleted ||
+      message.content === null ||
       trimmed.length === 0
     ) {
       return;
@@ -234,12 +228,12 @@ export class ChatRoomModel extends Emitter {
     });
   }
 
-  deleteMessage(message: ChatMessageView): void {
+  deleteMessage(message: RealtimeChatMessage): void {
     if (
       message.messageId === undefined ||
-      !message.isMine ||
+      !message.isOwn ||
       message.status !== "sent" ||
-      message.isDeleted
+      message.content === null
     ) {
       return;
     }
@@ -247,7 +241,7 @@ export class ChatRoomModel extends Emitter {
     this.#runtime.messageTransport.deleteMessage({ messageId: message.messageId });
   }
 
-  discardMessage(message: ChatMessageView): void {
+  discardMessage(message: RealtimeChatMessage): void {
     if (message.idempotencyKey !== undefined && this.#optimistic.delete(message.idempotencyKey)) {
       this.emit();
     }
@@ -259,11 +253,7 @@ export class ChatRoomModel extends Emitter {
     }
 
     this.#runtime.messageTransport.disconnect();
-    disposeStreamMessagesSession({
-      actorId: this.options.actorId,
-      clearCursor: options.clearCursor,
-      target: this.options.target,
-    });
+    this.streamSession.dispose({ clearCursor: options.clearCursor });
   }
 
   async #runStart(): Promise<void> {
@@ -395,16 +385,15 @@ export class ChatRoomModel extends Emitter {
     }
   }
 
-  #toView(message: PublicMessage): ChatMessageView {
+  #toMessage(message: PublicMessage): RealtimeChatMessage {
     return {
       key: message.messageId,
       messageId: message.messageId,
       sequence: message.sequence,
-      senderId: message.senderActorId,
-      isMine: message.senderActorId === this.options.actorId,
-      text: message.content?.text ?? "삭제된 메시지입니다.",
+      senderActorId: message.senderActorId,
+      isOwn: message.senderActorId === this.options.actorId,
+      content: message.content,
       createdAt: message.createdAt,
-      isDeleted: message.content === null,
       isEdited:
         (message.content !== null && message.editedAt !== undefined) ||
         this.#editedMessageIds.has(message.messageId),
