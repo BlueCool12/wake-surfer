@@ -2,11 +2,13 @@ import type { Kysely } from "kysely";
 
 import {
   assertExpectedSequenceWindow,
-  parseChannelStreamMetadata,
+  createStreamMessagesFailure,
+  parseMessageStreamMetadata,
   parseStreamMessageRow,
   throwSequenceGap,
   type StreamMessage,
   type StreamMessagesFailure,
+  type StreamMessagesTarget,
 } from "../../stream-messages";
 import type { StreamMessagesDatabase } from "../../stream-messages-table";
 
@@ -26,7 +28,7 @@ export async function readMessagesAfter<DB extends StreamMessagesDatabase>(
   db: Kysely<DB>,
   input: {
     streamId: string;
-    channelId: string;
+    target: StreamMessagesTarget;
     afterSequence: number;
     throughSequence?: number;
     limit: number;
@@ -48,7 +50,7 @@ export async function readMessagesAfter<DB extends StreamMessagesDatabase>(
         ])
         .where("stream_id", "=", input.streamId)
         .executeTakeFirst();
-      const stream = parseChannelStreamMetadata(streamRow, input);
+      const stream = parseMessageStreamMetadata(streamRow, input);
       const throughSequence = input.throughSequence ?? stream.headSequence;
 
       if (
@@ -56,20 +58,11 @@ export async function readMessagesAfter<DB extends StreamMessagesDatabase>(
         throughSequence > stream.headSequence ||
         input.afterSequence > throughSequence
       ) {
-        return {
-          status: "failure",
-          code: "invalid_cursor",
-        };
+        return createStreamMessagesFailure("invalid_cursor");
       }
 
       if (stream.status === "missing" || input.afterSequence === throughSequence) {
-        return {
-          status: "success",
-          snapshot: {
-            messages: [],
-            throughSequence,
-          },
-        };
+        return createSyncAfterMessagesReadSuccess([], throughSequence);
       }
 
       const queryLimit = input.limit + 1;
@@ -105,12 +98,19 @@ export async function readMessagesAfter<DB extends StreamMessagesDatabase>(
         streamId: input.streamId,
       });
 
-      return {
-        status: "success",
-        snapshot: {
-          messages: messages.slice(0, input.limit),
-          throughSequence,
-        },
-      };
+      return createSyncAfterMessagesReadSuccess(messages.slice(0, input.limit), throughSequence);
     });
+}
+
+function createSyncAfterMessagesReadSuccess(
+  messages: StreamMessage[],
+  throughSequence: number,
+): SyncAfterMessagesReadResult {
+  return {
+    status: "success",
+    snapshot: {
+      messages,
+      throughSequence,
+    },
+  };
 }

@@ -20,11 +20,10 @@
     "dist"
   ],
   "scripts": {
-    "build": "pnpm --filter @wake-surfer/realtime-chat-message-send build && tsc -p tsconfig.json",
+    "build": "tsc -p tsconfig.json",
     "clean": "tsc -b tsconfig.json --clean"
   },
   "dependencies": {
-    "@wake-surfer/realtime-chat-message-send": "workspace:*",
     "kysely": "0.28.8"
   },
   "devDependencies": {

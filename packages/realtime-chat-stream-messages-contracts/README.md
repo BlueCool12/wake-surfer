@@ -46,7 +46,8 @@ CommonJS로 각각 변환하며, package `exports`의 `import`와 `require` 조�
   `null`이다.
 - sync-after의 `nextAfterSequence`는 마지막 반환 sequence이며, 빈 final page에서는
   `throughSequence`다.
-- 모든 response의 `streamId`는 canonical channel stream ID이며 cursor 경계부터 sequence가 연속돼야 한다.
+- 모든 response의 `streamId`는 canonical message stream ID이며, 각 message target과 일치하고 cursor
+  경계부터 sequence가 연속돼야 한다.
 - domain rejection은 `stream_unavailable`, `invalid_cursor`, `bad_request`, `rate_limited`로 구분한다.
   `rate_limited`에는 양의 safe integer `retryAfterMs`가 필요하다.
 - retryable infrastructure failure는 `stream_messages_unavailable`과 `retryable: true`로 표현한다.
@@ -69,7 +70,7 @@ Handler는 HTTP body나 WebSocket serializer를 import하지 않고, 주입된 �
 이 패키지는 다음을 소유하지 않는다.
 
 - Query Handler, database query, N+1 조회와 authorization
-- channel target을 canonical stream으로 resolve하는 정책
+- message target을 canonical stream으로 resolve하는 정책
 - HTTP route와 Gateway mount, 인증 actor 주입, internal service credential
 - rate-limit 저장소와 실제 재시도 정책
 - Web recovery의 10 page / 500 message / 512KiB orchestration

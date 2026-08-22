@@ -1,5 +1,6 @@
 import {
   getCanonicalStreamId,
+  type MessageTarget,
   type PublicMessage,
 } from "@wake-surfer/realtime-chat-message-contracts";
 import type {
@@ -41,11 +42,11 @@ export type MeasuredPage<Response> = {
 };
 
 export function fitLatestMessagesPage(
-  channelId: string,
+  target: MessageTarget,
   page: LatestMessagesPage,
   measureFinalEnvelope: FinalEnvelopeMeasurer<LatestStreamMessagesResponse>,
 ): MeasuredPage<LatestStreamMessagesResponse> {
-  const transport = toPublicMessages(channelId, page.messages);
+  const transport = toPublicMessages(target, page.messages);
 
   return fitNewestContiguousMessages({
     messages: transport.messages,
@@ -65,11 +66,11 @@ export function fitLatestMessagesPage(
 }
 
 export function fitOlderMessagesPage(
-  channelId: string,
+  target: MessageTarget,
   page: OlderMessagesPage,
   measureFinalEnvelope: FinalEnvelopeMeasurer<OlderStreamMessagesResponse>,
 ): MeasuredPage<OlderStreamMessagesResponse> {
-  const transport = toPublicMessages(channelId, page.messages);
+  const transport = toPublicMessages(target, page.messages);
 
   return fitNewestContiguousMessages({
     messages: transport.messages,
@@ -89,11 +90,11 @@ export function fitOlderMessagesPage(
 }
 
 export function fitSyncAfterMessagesPage(
-  channelId: string,
+  target: MessageTarget,
   page: SyncAfterMessagesPage,
   measureFinalEnvelope: FinalEnvelopeMeasurer<SyncAfterStreamMessagesResponse>,
 ): MeasuredPage<SyncAfterStreamMessagesResponse> {
-  const transport = toPublicMessages(channelId, page.messages);
+  const transport = toPublicMessages(target, page.messages);
 
   return fitOldestContiguousMessages({
     messages: transport.messages,
@@ -186,16 +187,12 @@ function assertValidMeasurement(measurement: FinalEnvelopeMeasurement): void {
 }
 
 function toPublicMessages(
-  channelId: string,
+  target: MessageTarget,
   messages: readonly StreamMessage[],
 ): {
   streamId: string;
   messages: PublicMessage[];
 } {
-  const target = {
-    type: "channel" as const,
-    channelId,
-  };
   const streamId = getCanonicalStreamId(target);
 
   return {
@@ -203,10 +200,10 @@ function toPublicMessages(
     messages: messages.map((message) => {
       const publicMessage: PublicMessage = {
         messageId: message.messageId,
-        streamId,
+        streamId: getCanonicalStreamId(message.target),
         sequence: message.sequence,
         senderActorId: message.senderActorId,
-        target,
+        target: message.target,
         content: message.content,
         createdAt: message.createdAt.toISOString(),
       };

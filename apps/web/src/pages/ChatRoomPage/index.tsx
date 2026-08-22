@@ -11,6 +11,7 @@ import MessageBubble from "./MessageBubble";
 import type { MessageReactionsValue } from "./MessageReactions";
 import RoomListSidebar from "./RoomListSidebar";
 import ThreadPanel, { type RoomMember, type ThreadPanelTab, type ThreadReply } from "./ThreadPanel";
+import { createChatComposerSubmitController } from "./chatComposerKeyPolicy";
 import styles from "./ChatRoomPage.module.css";
 
 /** 커서 바로 앞에서 진행 중인 "@닉네임" 멘션 입력을 찾는다. 공백/줄바꿈이 나오면 멘션 입력이 끝난 것으로 본다. */
@@ -48,6 +49,7 @@ function ChatRoomPage() {
   const scrollRef = useRef<HTMLDivElement>(null);
   const isAtBottomRef = useRef(true);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const submitControllerRef = useRef(createChatComposerSubmitController());
   const [isDraftMultiline, setIsDraftMultiline] = useState(false);
   const singleLineHeightRef = useRef<number | undefined>(undefined);
 
@@ -192,9 +194,10 @@ function ChatRoomPage() {
     el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
   }, [messages]);
 
-  const handleSend = () => {
-    if (draft.trim() === "") return;
-    sendMessage(draft);
+  const handleSend = (text: string) => {
+    submitControllerRef.current.cancelPendingSubmit();
+    if (text.trim() === "") return;
+    sendMessage(text);
     setDraft("");
     setMentionQuery(undefined);
   };
@@ -221,7 +224,11 @@ function ChatRoomPage() {
   };
 
   const handleKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    const submitController = submitControllerRef.current;
+
     if (isMentionOpen) {
+      if (submitController.isImeProcessing(event.nativeEvent)) return;
+
       if (event.key === "ArrowDown") {
         event.preventDefault();
         setMentionActiveIndex((index) => (index + 1) % mentionMatches.length);
@@ -247,10 +254,13 @@ function ChatRoomPage() {
       }
     }
 
-    if (event.key === "Enter" && !event.shiftKey) {
-      event.preventDefault();
-      handleSend();
-    }
+    const result = submitController.handleKeyDown(event.nativeEvent);
+    if (result.shouldPreventDefault) event.preventDefault();
+  };
+
+  const handleKeyUp = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (!submitControllerRef.current.consumeSubmitOnKeyUp(event.nativeEvent)) return;
+    handleSend(event.currentTarget.value);
   };
 
   return (
@@ -375,13 +385,17 @@ function ChatRoomPage() {
                 value={draft}
                 onChange={handleDraftChange}
                 onKeyDown={handleKeyDown}
+                onKeyUp={handleKeyUp}
+                onCompositionStart={() => submitControllerRef.current.compositionStarted()}
+                onCompositionEnd={() => submitControllerRef.current.compositionEnded()}
+                onBlur={() => submitControllerRef.current.cancelPendingSubmit()}
                 placeholder={`#${channelId}에 메시지 보내기`}
                 rows={1}
               />
               <button
                 type="button"
                 className={styles.sendButton}
-                onClick={handleSend}
+                onClick={() => handleSend(draft)}
                 disabled={draft.trim() === ""}
                 aria-label="전송"
               >

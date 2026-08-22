@@ -136,6 +136,13 @@ export async function executeSendMessage(
     requestFingerprint,
   });
 
+  if (appendResult.status === "target_not_found") {
+    return {
+      status: "rejected",
+      reason: "target_not_found",
+    };
+  }
+
   if (appendResult.status === "existing") {
     return resultForExistingReceipt(requestFingerprint, appendResult.receipt);
   }
