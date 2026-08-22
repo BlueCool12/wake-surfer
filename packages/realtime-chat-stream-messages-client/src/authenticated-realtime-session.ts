@@ -511,11 +511,9 @@ export function createGatewayTicketHttpIssuer(
 
       try {
         response = await fetchImplementation(new URL("realtime-chat/gateway-tickets", apiBaseUrl), {
-          body: "{}",
           credentials: "include",
           headers: {
             accept: "application/json",
-            "content-type": "application/json",
           },
           method: "POST",
           signal,

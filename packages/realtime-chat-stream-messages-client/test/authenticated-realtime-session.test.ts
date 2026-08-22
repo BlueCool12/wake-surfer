@@ -28,11 +28,13 @@ describe("authenticated realtime session", () => {
     expect(fetchImplementation).toHaveBeenCalledWith(
       new URL("https://api.example.test/v1/realtime-chat/gateway-tickets"),
       expect.objectContaining({
-        body: "{}",
         credentials: "include",
         method: "POST",
       }),
     );
+    const requestInit = fetchImplementation.mock.calls[0]?.[1];
+    expect(requestInit?.body).toBeUndefined();
+    expect(new Headers(requestInit?.headers).get("content-type")).toBeNull();
 
     const invalidIssuer = createGatewayTicketHttpIssuer({
       apiBaseUrl: "https://api.example.test/",
