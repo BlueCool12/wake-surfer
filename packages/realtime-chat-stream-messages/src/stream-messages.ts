@@ -41,6 +41,7 @@ export type StreamMessage =
         type: "text";
         text: string;
       };
+      editedAt?: Date;
     })
   | (StreamMessageBase & {
       content: null;
@@ -76,6 +77,7 @@ export type RawStreamMessageRow = {
   content: unknown;
   createdAt: unknown;
   deletedAt?: unknown;
+  editedAt?: unknown;
 };
 
 export type RawStreamMetadataRow = {
@@ -258,12 +260,20 @@ export function parseStreamMessageRow(
     throw new StreamMessagesDataIntegrityError("invalid_storage_row", metadata);
   }
 
+  const editedAt =
+    row.editedAt === null || row.editedAt === undefined ? undefined : parseDate(row.editedAt);
+
+  if (row.editedAt !== null && row.editedAt !== undefined && editedAt === undefined) {
+    throw new StreamMessagesDataIntegrityError("invalid_storage_row", metadata);
+  }
+
   const message: StreamMessage = {
     ...base,
     content: {
       type: "text",
       text: content.text,
     },
+    ...(editedAt === undefined ? {} : { editedAt }),
   };
 
   return message;

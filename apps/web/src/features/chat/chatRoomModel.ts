@@ -1,9 +1,14 @@
 import type { PublicMessage } from "@wake-surfer/realtime-chat-message-contracts";
+import type {
+  DeletedMessage,
+  EditedTextMessage,
+} from "@wake-surfer/realtime-chat-message-mutation-contracts";
 import {
   disposeStreamMessagesSession,
   Emitter,
   getStreamMessagesSession,
   type KeyValueStorage,
+  type StreamMessagesClientTarget,
   type StreamMessagesRecoveryPhase,
   StreamMessagesTransportError,
 } from "@wake-surfer/realtime-chat-stream-messages-client";
@@ -22,6 +27,8 @@ export type ChatMessageView = {
   text: string;
   createdAt: string;
   status: ChatMessageStatus;
+  isDeleted: boolean;
+  isEdited: boolean;
 };
 
 type OptimisticMessage = {
@@ -33,7 +40,7 @@ type OptimisticMessage = {
 
 export type ChatRoomModelOptions = {
   actorId: string;
-  channelId: string;
+  target: StreamMessagesClientTarget;
   runtime: ChatRoomRuntime;
   storage: KeyValueStorage;
   createIdempotencyKey?: () => string;
@@ -43,6 +50,7 @@ export type ChatRoomModelOptions = {
 export class ChatRoomModel extends Emitter {
   readonly options: ChatRoomModelOptions;
   readonly #optimistic = new Map<string, OptimisticMessage>();
+  readonly #editedMessageIds = new Set<string>();
   readonly #runtime: ChatRoomRuntime;
   readonly #createIdempotencyKey: () => string;
   readonly #now: () => string;
@@ -65,8 +73,8 @@ export class ChatRoomModel extends Emitter {
     this.#now = options.now ?? (() => new Date().toISOString());
     this.streamSession = getStreamMessagesSession({
       actorId: options.actorId,
-      channelId: options.channelId,
       storage: options.storage,
+      target: options.target,
     });
     this.#subscriptions.push(
       this.streamSession.timeline.subscribe(this.emitViewChange),
@@ -83,6 +91,8 @@ export class ChatRoomModel extends Emitter {
         isMine: true,
         text: message.text,
         createdAt: message.createdAt,
+        isDeleted: false,
+        isEdited: false,
         status: message.status,
       })),
     ];
@@ -167,7 +177,7 @@ export class ChatRoomModel extends Emitter {
     });
     this.emit();
     try {
-      this.#runtime.messageTransport.sendChannelMessage({
+      this.#runtime.messageTransport.sendMessage({
         idempotencyKey,
         text: trimmed,
       });
@@ -195,12 +205,50 @@ export class ChatRoomModel extends Emitter {
     optimistic.status = "pending";
     this.emit();
     try {
-      this.#runtime.messageTransport.sendChannelMessage({
+      this.#runtime.messageTransport.sendMessage({
         idempotencyKey: optimistic.idempotencyKey,
         text: optimistic.text,
       });
     } catch {
       optimistic.status = "failed";
+      this.emit();
+    }
+  }
+
+  editMessage(message: ChatMessageView, text: string): void {
+    const trimmed = text.trim();
+
+    if (
+      message.messageId === undefined ||
+      !message.isMine ||
+      message.status !== "sent" ||
+      message.isDeleted ||
+      trimmed.length === 0
+    ) {
+      return;
+    }
+
+    this.#runtime.messageTransport.editMessage({
+      messageId: message.messageId,
+      text: trimmed,
+    });
+  }
+
+  deleteMessage(message: ChatMessageView): void {
+    if (
+      message.messageId === undefined ||
+      !message.isMine ||
+      message.status !== "sent" ||
+      message.isDeleted
+    ) {
+      return;
+    }
+
+    this.#runtime.messageTransport.deleteMessage({ messageId: message.messageId });
+  }
+
+  discardMessage(message: ChatMessageView): void {
+    if (message.idempotencyKey !== undefined && this.#optimistic.delete(message.idempotencyKey)) {
       this.emit();
     }
   }
@@ -213,8 +261,8 @@ export class ChatRoomModel extends Emitter {
     this.#runtime.messageTransport.disconnect();
     disposeStreamMessagesSession({
       actorId: this.options.actorId,
-      channelId: this.options.channelId,
       clearCursor: options.clearCursor,
+      target: this.options.target,
     });
   }
 
@@ -271,6 +319,21 @@ export class ChatRoomModel extends Emitter {
         if (optimistic !== undefined) {
           optimistic.status = "failed";
           this.emit();
+        }
+      }),
+      this.#runtime.messageTransport.onMessageEditResult((response) => {
+        if (response.status === "accepted") {
+          this.#editedMessageIds.add(response.message.messageId);
+          this.streamSession.timeline.replaceKnown(toPublicEditedMessage(response.message));
+        } else if (response.reason === "message_deleted") {
+          this.#editedMessageIds.delete(response.message.messageId);
+          this.streamSession.timeline.replaceKnown(toPublicDeletedMessage(response.message));
+        }
+      }),
+      this.#runtime.messageTransport.onMessageDeleteResult((response) => {
+        if (response.status === "accepted") {
+          this.#editedMessageIds.delete(response.message.messageId);
+          this.streamSession.timeline.replaceKnown(toPublicDeletedMessage(response.message));
         }
       }),
     );
@@ -341,7 +404,37 @@ export class ChatRoomModel extends Emitter {
       isMine: message.senderActorId === this.options.actorId,
       text: message.content?.text ?? "삭제된 메시지입니다.",
       createdAt: message.createdAt,
+      isDeleted: message.content === null,
+      isEdited:
+        (message.content !== null && message.editedAt !== undefined) ||
+        this.#editedMessageIds.has(message.messageId),
       status: "sent",
     };
   }
+}
+
+function toPublicEditedMessage(message: EditedTextMessage): PublicMessage {
+  return {
+    messageId: message.messageId,
+    streamId: message.streamId,
+    sequence: message.sequence,
+    senderActorId: message.senderActorId,
+    target: message.target,
+    content: { type: "text", text: message.text },
+    createdAt: message.createdAt,
+    editedAt: message.editedAt,
+  };
+}
+
+function toPublicDeletedMessage(message: DeletedMessage): PublicMessage {
+  return {
+    messageId: message.messageId,
+    streamId: message.streamId,
+    sequence: message.sequence,
+    senderActorId: message.senderActorId,
+    target: message.target,
+    content: null,
+    createdAt: message.createdAt,
+    deletedAt: message.deletedAt,
+  };
 }

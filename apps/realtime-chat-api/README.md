@@ -50,7 +50,8 @@ rate limit과 request 관측성을 소유한다. 조회 권한, cursor, watermar
 
 provider의 `status: "failure"` 결과는 app이 `stream_unavailable` 404 또는 `invalid_cursor` 409 응답으로
 변환한다. 성공 결과의 `StreamMessage`에는 transport 전용 `streamId`, target과 ISO timestamp가 없으므로,
-app의 Stream Messages page policy가 요청 `channelId`를 사용해 외부 `PublicMessage`와 response를 조립한다.
+app의 Stream Messages page policy가 요청 target을 사용해 외부 `PublicMessage`와 response를 조립한다.
+수정된 active message는 `editedAt`, 삭제된 message는 원문 없이 `deletedAt`을 포함한다.
 DB·무결성·의존 서비스 예외만 retryable 503으로 처리한다.
 
 Stream Messages 경로의 `x-request-id`는 전용 Hono middleware가 소유한다. 헤더가 없으면 UUID를 만들고,

@@ -216,6 +216,9 @@ function toPublicMessages(
           : {
               ...publicMessageMetadata,
               content: message.content,
+              ...(message.editedAt === undefined
+                ? {}
+                : { editedAt: message.editedAt.toISOString() }),
             };
 
       return message.sentAtClient === undefined

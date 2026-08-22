@@ -1,6 +1,10 @@
 import { ChatRoomModel } from "./chatRoomModel";
 
-import type { KeyValueStorage } from "@wake-surfer/realtime-chat-stream-messages-client";
+import {
+  getStreamMessagesClientTargetKey,
+  type KeyValueStorage,
+  type StreamMessagesClientTarget,
+} from "@wake-surfer/realtime-chat-stream-messages-client";
 import type { ChatRoomRuntimeFactory } from "./transport/chatTransport";
 
 const models = new Map<string, ChatRoomModel>();
@@ -12,17 +16,17 @@ export function configureChatRoomRuntimeFactory(factory: ChatRoomRuntimeFactory)
 
 export function getChatRoomModel(input: {
   actorId: string;
-  channelId: string;
+  target: StreamMessagesClientTarget;
   storage: KeyValueStorage;
 }): ChatRoomModel {
-  const key = JSON.stringify([input.actorId, input.channelId]);
+  const key = JSON.stringify([input.actorId, getStreamMessagesClientTargetKey(input.target)]);
   let model = models.get(key);
 
   if (model === undefined) {
     const runtimeFactory = getRuntimeFactory(input.actorId);
     model = new ChatRoomModel({
       ...input,
-      runtime: runtimeFactory({ actorId: input.actorId, channelId: input.channelId }),
+      runtime: runtimeFactory({ actorId: input.actorId, target: input.target }),
     });
     models.set(key, model);
   }

@@ -17,3 +17,9 @@ docker compose logs -f web
 
 기본 접속 주소는 `http://localhost:5173`이다. API 공개 주소를 바꾸려면 배포 명령을 실행하기 전에
 `VITE_API_BASE_URL`을 지정해 로컬 Vite 빌드에 전달해야 한다.
+
+## Realtime Chat
+
+채팅 화면은 channel과 message-root thread를 같은 Stream Messages client로 조회·복구한다. 스레드 패널의
+답글 전송과 본인 메시지 수정·삭제는 인증된 Gateway WebSocket session을 공유하며, accepted 결과를 현재
+timeline에 반영한다. 다른 session에 대한 thread·mutation fan-out은 Gateway의 별도 책임이다.

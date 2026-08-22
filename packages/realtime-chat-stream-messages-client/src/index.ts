@@ -7,5 +7,6 @@ export * from "./errors.js";
 export * from "./recovery-model.js";
 export * from "./registry.js";
 export * from "./session-model.js";
+export * from "./target.js";
 export * from "./timeline-model.js";
 export * from "./transport.js";

@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useSyncExternalStore } from "react";
 
-import type { KeyValueStorage } from "@wake-surfer/realtime-chat-stream-messages-client";
+import type {
+  KeyValueStorage,
+  StreamMessagesClientTarget,
+} from "@wake-surfer/realtime-chat-stream-messages-client";
 
 import { getChatRoomModel } from "./chatRoomRegistry";
 import { getConfiguredChatActorId } from "./transport/browserChatRuntime";
@@ -23,6 +26,9 @@ export type UseChatRoomResult = {
   olderFailed: boolean;
   hasMoreBefore: boolean;
   recoveryPhase: string;
+  deleteMessage: (message: ChatMessageView) => void;
+  discardMessage: (message: ChatMessageView) => void;
+  editMessage: (message: ChatMessageView, text: string) => void;
   loadOlder: () => void;
   retryRecovery: () => void;
   sendMessage: (text: string) => void;
@@ -33,16 +39,32 @@ export function useChatRoom(
   channelId: string,
   actorId = getConfiguredChatActorId(),
 ): UseChatRoomResult {
-  const model = useMemo(
-    () =>
-      getChatRoomModel({
-        actorId,
-        channelId,
-        // Cursor만 영속화하고 message snapshot은 영속화하지 않으므로 새 문서에서는 latest를 다시 읽는다.
-        storage: pageLifetimeCursorStorage,
-      }),
-    [actorId, channelId],
-  );
+  return useChatTarget({ type: "channel", channelId }, actorId);
+}
+
+export function useChatThread(
+  threadId: string,
+  actorId = getConfiguredChatActorId(),
+): UseChatRoomResult {
+  return useChatTarget({ type: "thread", threadId }, actorId);
+}
+
+function useChatTarget(target: StreamMessagesClientTarget, actorId: string): UseChatRoomResult {
+  const targetType = target.type;
+  const targetId = target.type === "channel" ? target.channelId : target.threadId;
+  const model = useMemo(() => {
+    const stableTarget: StreamMessagesClientTarget =
+      targetType === "channel"
+        ? { type: "channel", channelId: targetId }
+        : { type: "thread", threadId: targetId };
+
+    return getChatRoomModel({
+      actorId,
+      target: stableTarget,
+      // Cursor만 영속화하고 message snapshot은 영속화하지 않으므로 새 문서에서는 latest를 다시 읽는다.
+      storage: pageLifetimeCursorStorage,
+    });
+  }, [actorId, targetId, targetType]);
   const version = useSyncExternalStore(model.subscribe, model.getVersion, model.getVersion);
   void version;
 
@@ -57,6 +79,9 @@ export function useChatRoom(
     olderFailed: model.olderFailed,
     hasMoreBefore: model.hasMoreBefore,
     recoveryPhase: model.recoveryPhase,
+    deleteMessage: (message) => model.deleteMessage(message),
+    discardMessage: (message) => model.discardMessage(message),
+    editMessage: (message, text) => model.editMessage(message, text),
     loadOlder: () => void model.loadOlder().catch(() => undefined),
     retryRecovery: () => void model.start().catch(() => undefined),
     sendMessage: (text) => model.sendMessage(text),

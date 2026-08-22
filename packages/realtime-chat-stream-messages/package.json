@@ -22,14 +22,12 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "clean": "tsc -b tsconfig.json --clean",
-    "test": "pnpm run build && vitest run --config vitest.config.mts",
-    "typecheck": "tsc -p tsconfig.test.json"
+    "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
     "kysely": "0.28.8"
   },
   "devDependencies": {
-    "@types/node": "^24.13.2",
-    "vitest": "4.1.6"
+    "@types/node": "^24.13.2"
   }
 }

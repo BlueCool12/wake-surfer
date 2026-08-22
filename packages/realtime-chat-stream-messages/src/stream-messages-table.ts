@@ -23,5 +23,6 @@ export type StreamMessagesDatabase = {
     content: PersistedMessageContentColumn;
     created_at: GeneratedTimestampColumn;
     deleted_at: NullableTimestampColumn;
+    edited_at: NullableTimestampColumn;
   };
 };

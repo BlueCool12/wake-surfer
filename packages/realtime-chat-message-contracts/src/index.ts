@@ -42,6 +42,7 @@ type PublicMessageBase = {
 
 export type PublicTextMessage = PublicMessageBase & {
   content: TextMessageContent;
+  editedAt?: ISODateTime;
 };
 
 export type PublicDeletedMessage = PublicMessageBase & {
@@ -93,6 +94,7 @@ const PublicMessageBaseShape = {
 const PublicTextMessageSchema = z.strictObject({
   ...PublicMessageBaseShape,
   content: TextMessageContentSchema,
+  editedAt: ISODateTimeSchema.optional(),
 });
 
 const PublicDeletedMessageSchema = z.strictObject({
@@ -104,6 +106,16 @@ const PublicDeletedMessageSchema = z.strictObject({
 export const PublicMessageSchema = z
   .union([PublicTextMessageSchema, PublicDeletedMessageSchema])
   .transform((input): PublicMessage => {
+    if (input.content !== null) {
+      const { editedAt, sentAtClient, ...message } = input;
+      const publicMessage: PublicTextMessage =
+        editedAt === undefined ? message : { ...message, editedAt };
+
+      return sentAtClient === undefined
+        ? publicMessage
+        : { ...publicMessage, sentAtClient };
+    }
+
     const { sentAtClient, ...message } = input;
 
     return sentAtClient === undefined ? message : { ...message, sentAtClient };

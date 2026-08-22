@@ -125,6 +125,7 @@ function toCanonicalPublicMessage(message: PublicMessage): PublicMessage {
             text: message.content.text,
           },
           createdAt: message.createdAt,
+          ...(message.editedAt === undefined ? {} : { editedAt: message.editedAt }),
         };
 
   return message.sentAtClient === undefined

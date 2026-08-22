@@ -2,13 +2,21 @@ import {
   PublicMessageSchema,
   type PublicMessage,
 } from "@wake-surfer/realtime-chat-message-contracts";
+import {
+  DeleteMessageResponseSchema,
+  EditMessageResponseSchema,
+  type DeleteMessageResponse,
+  type EditMessageResponse,
+} from "@wake-surfer/realtime-chat-message-mutation-contracts";
 import { SendMessageResponseSchema } from "@wake-surfer/realtime-chat-message-send-contracts";
 import {
   createBrowserRealtimeEventSocket,
   createBrowserStreamMessagesTransport,
   createGatewayTicketHttpIssuer,
   getAuthenticatedRealtimeSession,
+  streamMessagesClientTargetsEqual,
   type AuthenticatedRealtimeSessionModel,
+  type StreamMessagesClientTarget,
 } from "@wake-surfer/realtime-chat-stream-messages-client";
 
 import { configureChatRoomRuntimeFactory } from "../chatRoomRegistry";
@@ -27,6 +35,12 @@ const CHAT_MESSAGE_SEND_EVENT = "chat.message.send";
 const CHAT_MESSAGE_ACCEPTED_EVENT = "chat.message.accepted";
 const CHAT_MESSAGE_REJECTED_EVENT = "chat.message.rejected";
 const CHAT_MESSAGE_CREATED_EVENT = "chat.message.created";
+const CHAT_MESSAGE_EDIT_EVENT = "chat.message.edit";
+const CHAT_MESSAGE_EDIT_ACCEPTED_EVENT = "chat.message.edit.accepted";
+const CHAT_MESSAGE_EDIT_REJECTED_EVENT = "chat.message.edit.rejected";
+const CHAT_MESSAGE_DELETE_EVENT = "chat.message.delete";
+const CHAT_MESSAGE_DELETE_ACCEPTED_EVENT = "chat.message.delete.accepted";
+const CHAT_MESSAGE_DELETE_REJECTED_EVENT = "chat.message.delete.rejected";
 
 let configuredActorId: string | undefined;
 
@@ -79,7 +93,7 @@ export function createBrowserChatRoomRuntimeFactory(options: {
     throw new TypeError("브라우저 채팅 runtime에 fetch 구현이 필요합니다.");
   }
 
-  return ({ actorId, channelId }) => {
+  return ({ actorId, target }) => {
     const actorFetch = createActorAuthenticatedFetch({
       actorHeader,
       actorId,
@@ -96,8 +110,8 @@ export function createBrowserChatRoomRuntimeFactory(options: {
 
     return {
       messageTransport: createBrowserChatMessageTransport({
-        channelId,
         realtimeSession,
+        target,
       }),
       streamMessagesTransport: createBrowserStreamMessagesTransport({
         apiBaseUrl,
@@ -142,10 +156,10 @@ export type ChatApplicationRealtimeSession = Pick<
 >;
 
 export function createBrowserChatMessageTransport(options: {
-  channelId: string;
   realtimeSession: ChatApplicationRealtimeSession;
+  target: StreamMessagesClientTarget;
 }): ChatMessageTransport {
-  const channelId = parseNonBlank(options.channelId, "channelId");
+  const target = options.target;
   const connectionGenerationListeners = new Set<(connectionGeneration: string) => void>();
   const disconnectedListeners = new Set<() => void>();
   let disconnectionNotified = false;
@@ -168,10 +182,10 @@ export function createBrowserChatMessageTransport(options: {
 
     disconnectionNotified = false;
 
-    if (generation !== lastJoinedConnectionGeneration) {
+    if (target.type === "channel" && generation !== lastJoinedConnectionGeneration) {
       options.realtimeSession.sendApplicationEvent(
         CHAT_CHANNEL_JOIN_EVENT,
-        JSON.stringify({ channelId }),
+        JSON.stringify({ channelId: target.channelId }),
       );
       lastJoinedConnectionGeneration = generation;
     }
@@ -191,20 +205,32 @@ export function createBrowserChatMessageTransport(options: {
       await options.realtimeSession.connect();
       handleCurrentGeneration();
     },
+    deleteMessage({ messageId }) {
+      options.realtimeSession.sendApplicationEvent(
+        CHAT_MESSAGE_DELETE_EVENT,
+        JSON.stringify({ messageId }),
+      );
+    },
     disconnect() {
       unsubscribeConnection();
       connectionGenerationListeners.clear();
       disconnectedListeners.clear();
     },
+    editMessage({ messageId, text }) {
+      options.realtimeSession.sendApplicationEvent(
+        CHAT_MESSAGE_EDIT_EVENT,
+        JSON.stringify({ messageId, text }),
+      );
+    },
     isReady() {
       return options.realtimeSession.state === "ready";
     },
-    sendChannelMessage({ idempotencyKey, text }) {
+    sendMessage({ idempotencyKey, text }) {
       options.realtimeSession.sendApplicationEvent(
         CHAT_MESSAGE_SEND_EVENT,
         JSON.stringify({
           idempotencyKey,
-          target: { type: "channel", channelId },
+          target,
           text,
         }),
       );
@@ -226,8 +252,7 @@ export function createBrowserChatMessageTransport(options: {
 
           if (
             response !== null &&
-            response.message.target.type === "channel" &&
-            response.message.target.channelId === channelId
+            streamMessagesClientTargetsEqual(target, response.message.target)
           ) {
             listener(response);
           }
@@ -246,23 +271,88 @@ export function createBrowserChatMessageTransport(options: {
         },
       );
     },
+    onMessageDeleteResult(listener) {
+      const unsubscribeAccepted = options.realtimeSession.onApplicationEvent(
+        CHAT_MESSAGE_DELETE_ACCEPTED_EVENT,
+        (rawPayload) => {
+          const response = parseDeleteMessageResponse(rawPayload);
+
+          if (
+            response?.status === "accepted" &&
+            streamMessagesClientTargetsEqual(target, response.message.target)
+          ) {
+            listener(response);
+          }
+        },
+      );
+      const unsubscribeRejected = options.realtimeSession.onApplicationEvent(
+        CHAT_MESSAGE_DELETE_REJECTED_EVENT,
+        (rawPayload) => {
+          const response = parseDeleteMessageResponse(rawPayload);
+
+          if (response?.status === "rejected") {
+            listener(response);
+          }
+        },
+      );
+
+      return () => {
+        unsubscribeAccepted();
+        unsubscribeRejected();
+      };
+    },
+    onMessageEditResult(listener) {
+      const handleResponse = (rawPayload: string) => {
+        const response = parseEditMessageResponse(rawPayload);
+
+        if (
+          response !== null &&
+          (response.status === "rejected" && response.reason !== "message_deleted"
+            ? true
+            : streamMessagesClientTargetsEqual(target, response.message.target))
+        ) {
+          listener(response);
+        }
+      };
+      const unsubscribeAccepted = options.realtimeSession.onApplicationEvent(
+        CHAT_MESSAGE_EDIT_ACCEPTED_EVENT,
+        handleResponse,
+      );
+      const unsubscribeRejected = options.realtimeSession.onApplicationEvent(
+        CHAT_MESSAGE_EDIT_REJECTED_EVENT,
+        handleResponse,
+      );
+
+      return () => {
+        unsubscribeAccepted();
+        unsubscribeRejected();
+      };
+    },
     onMessageCreated(listener) {
       return options.realtimeSession.onApplicationEvent(
         CHAT_MESSAGE_CREATED_EVENT,
         (rawPayload) => {
           const message = parsePublicMessage(rawPayload);
 
-          if (
-            message !== null &&
-            message.target.type === "channel" &&
-            message.target.channelId === channelId
-          ) {
+          if (message !== null && streamMessagesClientTargetsEqual(target, message.target)) {
             listener(message);
           }
         },
       );
     },
   };
+}
+
+function parseEditMessageResponse(rawPayload: string): EditMessageResponse | null {
+  const value = parseJson(rawPayload);
+  const parsed = value === null ? undefined : EditMessageResponseSchema.safeParse(value);
+  return parsed?.success === true ? parsed.data : null;
+}
+
+function parseDeleteMessageResponse(rawPayload: string): DeleteMessageResponse | null {
+  const value = parseJson(rawPayload);
+  const parsed = value === null ? undefined : DeleteMessageResponseSchema.safeParse(value);
+  return parsed?.success === true ? parsed.data : null;
 }
 
 function parseAcceptedResponse(rawPayload: string): MessageAcceptedResponse | null {
