@@ -13,7 +13,7 @@ import {
   createLoadLatestMessages,
   createLoadOlderMessages,
   createSyncAfterMessages,
-  type ChannelReadAuthorizer,
+  type MessageStreamReadAuthorizer,
 } from "@wake-surfer/realtime-chat-stream-messages";
 
 import { loadEnv } from "../config/env.js";
@@ -60,7 +60,9 @@ export async function createRuntimeDeps(
       ticketTtlMilliseconds: config.gatewayTicketTtlMilliseconds,
     });
     // MVP 세로 흐름용 임시 정책이다. 실제 channel membership/permission provider로 교체해야 한다.
-    const authorizeChannelRead: ChannelReadAuthorizer = () => ({ status: "allowed" });
+    const authorizeMessageStreamRead: MessageStreamReadAuthorizer = () => ({
+      status: "allowed",
+    });
     const resolveMessageTarget: MessageTargetResolver = ({ target }) => ({
       status: "resolved",
       streamId: getCanonicalStreamId(target),
@@ -90,18 +92,18 @@ export async function createRuntimeDeps(
         gatewayTicket,
         gatewayApiToken: config.gatewayApiToken,
         loadLatestMessages: createLoadLatestMessages({
-          authorizeRead: authorizeChannelRead,
+          authorizeRead: authorizeMessageStreamRead,
           db: database.db,
         }),
         loadOlderMessages: createLoadOlderMessages({
-          authorizeRead: authorizeChannelRead,
+          authorizeRead: authorizeMessageStreamRead,
           db: database.db,
         }),
         logger,
         sendMessage,
         requestTimeoutMilliseconds: config.requestTimeoutMilliseconds,
         syncAfterMessages: createSyncAfterMessages({
-          authorizeRead: authorizeChannelRead,
+          authorizeRead: authorizeMessageStreamRead,
           db: database.db,
         }),
       },

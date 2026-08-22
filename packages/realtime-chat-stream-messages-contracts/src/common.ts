@@ -37,6 +37,23 @@ export const ChannelStreamIdSchema = z.string().refine((streamId) => {
 
   return parsedChannelId.success && parsedChannelId.data === channelId;
 }, "streamId는 canonical channel stream ID여야 합니다.");
+export const MessageStreamIdSchema = z.string().refine((streamId) => {
+  const separatorIndex = streamId.indexOf(":");
+
+  if (separatorIndex <= 0) {
+    return false;
+  }
+
+  const targetType = streamId.slice(0, separatorIndex);
+  const targetId = streamId.slice(separatorIndex + 1);
+  const parsedTargetId = NonBlankStringSchema.safeParse(targetId);
+
+  return (
+    (targetType === "channel" || targetType === "dm" || targetType === "thread") &&
+    parsedTargetId.success &&
+    parsedTargetId.data === targetId
+  );
+}, "streamId는 canonical message stream ID여야 합니다.");
 export const PageLimitSchema = PositiveSafeIntegerSchema.max(MAX_STREAM_MESSAGES_PAGE_LIMIT);
 export const BeforeSequenceSchema = PositiveSafeIntegerSchema;
 export const AfterSequenceSchema = NonNegativeSafeIntegerSchema;
@@ -54,15 +71,6 @@ export function validatePageMessages(
       context.addIssue({
         code: "custom",
         message: "page의 모든 message는 response streamId와 같아야 합니다.",
-        path: ["messages"],
-      });
-      return;
-    }
-
-    if (message.target.type !== "channel") {
-      context.addIssue({
-        code: "custom",
-        message: "Stream Messages 공개 Query는 channel message만 반환할 수 있습니다.",
         path: ["messages"],
       });
       return;

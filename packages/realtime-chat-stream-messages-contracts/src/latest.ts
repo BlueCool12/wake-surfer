@@ -4,8 +4,8 @@ import { z } from "zod";
 import {
   BeforeSequenceSchema,
   ChannelIdSchema,
-  ChannelStreamIdSchema,
   MAX_LATEST_STREAM_MESSAGES,
+  MessageStreamIdSchema,
   ThroughSequenceSchema,
   validatePageMessages,
 } from "./common.js";
@@ -18,7 +18,7 @@ export type LatestStreamMessagesHttpRequest = z.infer<typeof LatestStreamMessage
 
 export const LatestStreamMessagesResponseSchema = z
   .strictObject({
-    streamId: ChannelStreamIdSchema,
+    streamId: MessageStreamIdSchema,
     throughSequence: ThroughSequenceSchema,
     messages: z.array(PublicMessageSchema).max(MAX_LATEST_STREAM_MESSAGES),
     nextBeforeSequence: BeforeSequenceSchema.nullable(),

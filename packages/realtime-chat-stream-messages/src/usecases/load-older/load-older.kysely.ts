@@ -2,11 +2,13 @@ import type { Kysely } from "kysely";
 
 import {
   assertExpectedSequenceWindow,
-  parseChannelStreamMetadata,
+  createStreamMessagesFailure,
+  parseMessageStreamMetadata,
   parseStreamMessageRow,
   throwSequenceGap,
   type StreamMessage,
   type StreamMessagesFailure,
+  type StreamMessagesTarget,
 } from "../../stream-messages";
 import type { StreamMessagesDatabase } from "../../stream-messages-table";
 
@@ -21,7 +23,7 @@ export async function readOlderMessages<DB extends StreamMessagesDatabase>(
   db: Kysely<DB>,
   input: {
     streamId: string;
-    channelId: string;
+    target: StreamMessagesTarget;
     beforeSequence: number;
     limit: number;
   },
@@ -42,20 +44,14 @@ export async function readOlderMessages<DB extends StreamMessagesDatabase>(
         ])
         .where("stream_id", "=", input.streamId)
         .executeTakeFirst();
-      const stream = parseChannelStreamMetadata(streamRow, input);
+      const stream = parseMessageStreamMetadata(streamRow, input);
 
       if (input.beforeSequence > stream.headSequence + 1) {
-        return {
-          status: "failure",
-          code: "invalid_cursor",
-        };
+        return createStreamMessagesFailure("invalid_cursor");
       }
 
       if (stream.status === "missing" || input.beforeSequence === 1) {
-        return {
-          status: "success",
-          messages: [],
-        };
+        return createOlderMessagesReadSuccess([]);
       }
 
       const queryLimit = input.limit + 1;
@@ -91,9 +87,13 @@ export async function readOlderMessages<DB extends StreamMessagesDatabase>(
         streamId: input.streamId,
       });
 
-      return {
-        status: "success",
-        messages: messages.slice(-input.limit),
-      };
+      return createOlderMessagesReadSuccess(messages.slice(-input.limit));
     });
+}
+
+function createOlderMessagesReadSuccess(messages: StreamMessage[]): OlderMessagesReadResult {
+  return {
+    status: "success",
+    messages,
+  };
 }

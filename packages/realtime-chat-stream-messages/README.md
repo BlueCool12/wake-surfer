@@ -1,6 +1,6 @@
 # @wake-surfer/realtime-chat-stream-messages
 
-인증된 actor가 channel message stream을 조회하는 세 개의 독립적인 유스케이스를 제공한다.
+인증된 actor가 message stream을 조회하는 세 개의 독립적인 유스케이스를 제공한다.
 
 ## 공개 유스케이스
 
@@ -20,8 +20,9 @@ stream은 `stream_unavailable`, 현재 stream head와 맞지 않는 cursor는 `i
 
 ## 책임
 
-- channel 읽기 권한을 확인한다.
-- channel을 canonical stream ID로 해석한다.
+- channel과 DM은 해당 conversation 읽기 권한을 확인한다.
+- thread는 root message가 속한 channel 또는 DM의 읽기 권한을 확인한다.
+- message target을 canonical stream ID로 해석한다.
 - cursor, fixed-watermark와 count limit 규칙을 적용한다.
 - PostgreSQL을 일관된 read-only snapshot으로 조회한다.
 - 조회 구간의 sequence 연속성과 저장 row의 무결성을 확인한다.
@@ -51,8 +52,8 @@ import {
 
 const dependencies = {
   db,
-  authorizeRead: ({ actorId, channelId }) =>
-    canReadChannel(actorId, channelId) ? { status: "allowed" } : { status: "denied" },
+  authorizeRead: ({ actorId, target }) =>
+    canReadConversation(actorId, target) ? { status: "allowed" } : { status: "denied" },
 };
 
 const loadLatest = createLoadLatestMessages(dependencies);
@@ -60,7 +61,7 @@ const loadOlder = createLoadOlderMessages(dependencies);
 const syncAfter = createSyncAfterMessages(dependencies);
 
 const result = await loadLatest(
-  { channelId: "channel-1" },
+  { target: { type: "channel", channelId: "channel-1" } },
   { actorId: "actor-1" },
 );
 
@@ -75,8 +76,8 @@ const page = result.page;
 `actorId`는 이미 인증된 application principal의 식별자다. 어떤 header, session, ticket 또는 token에서
 actor를 확정할지는 소비 app이 결정한다.
 
-`StreamMessage`는 channel query에 필요한 message 값만 포함하며 저장소 partition key인 `streamId`를
-공개하지 않는다. 소비 app은 요청의 `channelId`와 조회 결과를 사용해 자신이 소유한 외부 response
+`StreamMessage`는 조회한 channel, DM 또는 thread를 구분하는 `target`을 포함하지만 저장소 partition key인
+`streamId`는 공개하지 않는다. 소비 app은 요청 target과 조회 결과를 사용해 자신이 소유한 외부 response
 contract를 조립한다. 조회 모델의 timestamp는 `Date`이며 ISO 문자열 직렬화도 app 경계의 책임이다.
 
 소비자는 package root와 `./table-contract`만 import하고 `src/usecases`를 직접 import하지 않는다.

@@ -1,19 +1,22 @@
 import type { Kysely } from "kysely";
 
 import {
-  assertChannelId,
-  authorizeChannelRead,
-  getChannelStreamId,
-  type ChannelReadAuthorizer,
+  assertActorId,
+  assertStreamMessagesTarget,
+  authorizeMessageStreamRead,
+  createStreamMessagesFailure,
+  type MessageStreamReadAuthorizer,
   type StreamMessage,
   type StreamMessagesFailure,
   type StreamMessagesQueryContext,
+  type StreamMessagesTarget,
 } from "../../stream-messages";
 import type { StreamMessagesDatabase } from "../../stream-messages-table";
-import { readLatestMessagesSnapshot } from "./load-latest.kysely";
+import { resolveMessageStreamReadTarget } from "../../resolve-read-target.kysely";
+import { readLatestMessagesSnapshot, type LatestMessagesSnapshot } from "./load-latest.kysely";
 
 export type LoadLatestMessagesQuery = {
-  channelId: string;
+  target: StreamMessagesTarget;
 };
 
 export type LatestMessagesPage = {
@@ -32,7 +35,7 @@ export type LoadLatestMessagesResult =
 
 export type LoadLatestMessagesDeps<DB extends StreamMessagesDatabase = StreamMessagesDatabase> = {
   db: Kysely<DB>;
-  authorizeRead: ChannelReadAuthorizer;
+  authorizeRead: MessageStreamReadAuthorizer;
 };
 
 export type LoadLatestMessages = (
@@ -51,25 +54,35 @@ export async function loadLatestMessages<DB extends StreamMessagesDatabase>(
   context: StreamMessagesQueryContext,
   deps: LoadLatestMessagesDeps<DB>,
 ): Promise<LoadLatestMessagesResult> {
-  assertChannelId(query.channelId);
-  const authorization = await authorizeChannelRead(
+  assertStreamMessagesTarget(query.target);
+  assertActorId(context.actorId);
+
+  const resolvedTarget = await resolveMessageStreamReadTarget(deps.db, query.target);
+
+  if (resolvedTarget.status === "unavailable") {
+    return createStreamMessagesFailure("stream_unavailable");
+  }
+
+  const authorization = await authorizeMessageStreamRead(
     deps.authorizeRead,
     context.actorId,
-    query.channelId,
+    resolvedTarget.authorizationTarget,
   );
 
   if (authorization.status === "denied") {
-    return {
-      status: "failure",
-      code: "stream_unavailable",
-    };
+    return createStreamMessagesFailure("stream_unavailable");
   }
 
-  const streamId = getChannelStreamId(query.channelId);
   const snapshot = await readLatestMessagesSnapshot(deps.db, {
-    streamId,
-    channelId: query.channelId,
+    streamId: resolvedTarget.streamId,
+    target: query.target,
   });
+  return createLoadLatestMessagesSuccess(snapshot);
+}
+
+function createLoadLatestMessagesSuccess(
+  snapshot: LatestMessagesSnapshot,
+): LoadLatestMessagesResult {
   const oldest = snapshot.messages[0];
 
   return {

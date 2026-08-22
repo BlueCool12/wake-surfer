@@ -4,9 +4,9 @@ import { z } from "zod";
 import {
   AfterSequenceSchema,
   ChannelIdSchema,
-  ChannelStreamIdSchema,
   DEFAULT_STREAM_MESSAGES_PAGE_LIMIT,
   MAX_STREAM_MESSAGES_PAGE_LIMIT,
+  MessageStreamIdSchema,
   PageLimitSchema,
   RequestIdSchema,
   ThroughSequenceSchema,
@@ -61,7 +61,7 @@ export type ChatStreamSyncEvent = z.infer<typeof ChatStreamSyncEventSchema>;
 
 export const SyncAfterStreamMessagesResponseSchema = z
   .strictObject({
-    streamId: ChannelStreamIdSchema,
+    streamId: MessageStreamIdSchema,
     afterSequence: AfterSequenceSchema,
     throughSequence: ThroughSequenceSchema,
     messages: z.array(PublicMessageSchema).max(MAX_STREAM_MESSAGES_PAGE_LIMIT),
@@ -167,7 +167,7 @@ export type InternalSyncAfterStreamMessagesHttpResponse = SyncAfterStreamMessage
 export const ChatStreamSyncedEventSchema = z
   .strictObject({
     requestId: RequestIdSchema,
-    streamId: ChannelStreamIdSchema,
+    streamId: MessageStreamIdSchema,
     afterSequence: AfterSequenceSchema,
     throughSequence: ThroughSequenceSchema,
     messages: z.array(PublicMessageSchema).max(MAX_STREAM_MESSAGES_PAGE_LIMIT),

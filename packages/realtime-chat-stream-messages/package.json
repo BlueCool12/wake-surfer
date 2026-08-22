@@ -20,19 +20,16 @@
     "dist"
   ],
   "scripts": {
-    "build": "pnpm --filter @wake-surfer/realtime-chat-message-send build && tsc -p tsconfig.json",
+    "build": "tsc -p tsconfig.json",
     "clean": "tsc -b tsconfig.json --clean",
     "test": "pnpm run build && vitest run --config vitest.config.mts",
-    "test:integration": "pnpm run build && pnpm --filter @wake-surfer/realtime-chat-database build && vitest run --config vitest.integration.config.mts",
     "typecheck": "tsc -p tsconfig.test.json"
   },
   "dependencies": {
-    "@wake-surfer/realtime-chat-message-send": "workspace:*",
     "kysely": "0.28.8"
   },
   "devDependencies": {
     "@types/node": "^24.13.2",
-    "@wake-surfer/realtime-chat-database": "workspace:*",
     "vitest": "4.1.6"
   }
 }

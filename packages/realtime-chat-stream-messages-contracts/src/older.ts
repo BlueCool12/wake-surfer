@@ -4,9 +4,9 @@ import { z } from "zod";
 import {
   BeforeSequenceSchema,
   ChannelIdSchema,
-  ChannelStreamIdSchema,
   DEFAULT_STREAM_MESSAGES_PAGE_LIMIT,
   MAX_STREAM_MESSAGES_PAGE_LIMIT,
+  MessageStreamIdSchema,
   PageLimitSchema,
   validatePageMessages,
 } from "./common.js";
@@ -21,7 +21,7 @@ export type OlderStreamMessagesHttpRequest = z.infer<typeof OlderStreamMessagesH
 
 export const OlderStreamMessagesResponseSchema = z
   .strictObject({
-    streamId: ChannelStreamIdSchema,
+    streamId: MessageStreamIdSchema,
     beforeSequence: BeforeSequenceSchema,
     messages: z.array(PublicMessageSchema).max(MAX_STREAM_MESSAGES_PAGE_LIMIT),
     nextBeforeSequence: BeforeSequenceSchema.nullable(),

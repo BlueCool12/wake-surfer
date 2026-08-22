@@ -1,12 +1,26 @@
-import { parsePersistedTextMessageContent } from "@wake-surfer/realtime-chat-message-send/persisted-message-content";
 import { StreamMessagesDataIntegrityError } from "./errors";
+import { parsePersistedTextMessageContent } from "./persisted-message-content";
 
-export type ChannelReadAuthorization = { status: "allowed" } | { status: "denied" };
+export type StreamMessagesTarget =
+  | {
+      type: "channel";
+      channelId: string;
+    }
+  | {
+      type: "dm";
+      dmConversationId: string;
+    }
+  | {
+      type: "thread";
+      threadId: string;
+    };
 
-export type ChannelReadAuthorizer = (input: {
+export type MessageStreamReadAuthorization = { status: "allowed" } | { status: "denied" };
+
+export type MessageStreamReadAuthorizer = (input: {
   actorId: string;
-  channelId: string;
-}) => ChannelReadAuthorization | Promise<ChannelReadAuthorization>;
+  target: Exclude<StreamMessagesTarget, { type: "thread" }>;
+}) => MessageStreamReadAuthorization | Promise<MessageStreamReadAuthorization>;
 
 export type StreamMessagesQueryContext = {
   actorId: string;
@@ -16,6 +30,7 @@ export type StreamMessage = {
   messageId: string;
   sequence: number;
   senderActorId: string;
+  target: StreamMessagesTarget;
   content: {
     type: "text";
     text: string;
@@ -30,6 +45,15 @@ export type StreamMessagesFailure<Code extends StreamMessagesFailureCode> = {
   status: "failure";
   code: Code;
 };
+
+export function createStreamMessagesFailure<Code extends StreamMessagesFailureCode>(
+  code: Code,
+): StreamMessagesFailure<Code> {
+  return {
+    status: "failure",
+    code,
+  };
+}
 
 export const MAX_LATEST_MESSAGES_QUERY_COUNT = 5;
 export const MAX_STREAM_MESSAGES_QUERY_PAGE_SIZE = 100;
@@ -51,7 +75,7 @@ export type RawStreamMetadataRow = {
   headSequence: unknown;
 };
 
-export type ChannelStreamMetadata =
+export type MessageStreamMetadata =
   | {
       status: "missing";
       headSequence: 0;
@@ -61,20 +85,38 @@ export type ChannelStreamMetadata =
       headSequence: number;
     };
 
-export async function authorizeChannelRead(
-  authorizeRead: ChannelReadAuthorizer,
+export async function authorizeMessageStreamRead(
+  authorizeRead: MessageStreamReadAuthorizer,
   actorId: string,
-  channelId: string,
-): Promise<ChannelReadAuthorization> {
-  if (actorId.trim().length === 0) {
-    throw new TypeError("Stream Messages actorId는 비어 있을 수 없습니다.");
-  }
+  target: Exclude<StreamMessagesTarget, { type: "thread" }>,
+): Promise<MessageStreamReadAuthorization> {
+  assertActorId(actorId);
 
-  return authorizeRead({ actorId, channelId });
+  return authorizeRead({ actorId, target });
 }
 
-export function assertChannelId(channelId: string): void {
-  assertNonBlankIdentifier(channelId, "channelId");
+export function assertActorId(actorId: string): void {
+  assertNonBlankIdentifier(actorId, "actorId");
+}
+
+export function assertStreamMessagesTarget(target: StreamMessagesTarget): void {
+  if (target === null || typeof target !== "object") {
+    throw new TypeError("target은 message target 객체여야 합니다.");
+  }
+
+  switch (target.type) {
+    case "channel":
+      assertNonBlankIdentifier(target.channelId, "target.channelId");
+      return;
+    case "dm":
+      assertNonBlankIdentifier(target.dmConversationId, "target.dmConversationId");
+      return;
+    case "thread":
+      assertNonBlankIdentifier(target.threadId, "target.threadId");
+      return;
+    default:
+      throw new TypeError("지원하지 않는 message target입니다.");
+  }
 }
 
 export function assertBeforeSequence(beforeSequence: number): void {
@@ -95,17 +137,13 @@ export function assertQueryPageSize(limit: number): void {
   assertSafeIntegerInRange(limit, "limit", 1, MAX_STREAM_MESSAGES_QUERY_PAGE_SIZE);
 }
 
-export function getChannelStreamId(channelId: string): string {
-  return `channel:${channelId}`;
-}
-
-export function parseChannelStreamMetadata(
+export function parseMessageStreamMetadata(
   row: RawStreamMetadataRow | undefined,
   expected: {
     streamId: string;
-    channelId: string;
+    target: StreamMessagesTarget;
   },
-): ChannelStreamMetadata {
+): MessageStreamMetadata {
   if (row === undefined) {
     return {
       status: "missing",
@@ -113,11 +151,14 @@ export function parseChannelStreamMetadata(
     };
   }
 
-  if (row.targetType !== "channel" || row.targetId !== expected.channelId) {
+  const expectedTargetType = getStreamMessagesTargetType(expected.target);
+  const expectedTargetId = getStreamMessagesTargetId(expected.target);
+
+  if (row.targetType !== expectedTargetType || row.targetId !== expectedTargetId) {
     throw new StreamMessagesDataIntegrityError("stream_target_mismatch", {
       streamId: expected.streamId,
-      expectedTargetType: "channel",
-      expectedTargetId: expected.channelId,
+      expectedTargetType,
+      expectedTargetId,
       actualTargetType: String(row.targetType),
       actualTargetId: String(row.targetId),
     });
@@ -140,7 +181,7 @@ export function parseStreamMessageRow(
   row: RawStreamMessageRow,
   expected: {
     streamId: string;
-    channelId: string;
+    target: StreamMessagesTarget;
   },
 ): StreamMessage {
   const metadata = {
@@ -149,10 +190,13 @@ export function parseStreamMessageRow(
     sequence: String(row.sequence),
   };
 
+  const expectedTargetType = getStreamMessagesTargetType(expected.target);
+  const expectedTargetId = getStreamMessagesTargetId(expected.target);
+
   if (
     row.streamId !== expected.streamId ||
-    row.targetType !== "channel" ||
-    row.targetId !== expected.channelId
+    row.targetType !== expectedTargetType ||
+    row.targetId !== expectedTargetId
   ) {
     throw new StreamMessagesDataIntegrityError("stream_target_mismatch", metadata);
   }
@@ -182,6 +226,7 @@ export function parseStreamMessageRow(
     messageId,
     sequence,
     senderActorId,
+    target: expected.target,
     content: {
       type: "text",
       text: content.text,
@@ -190,6 +235,27 @@ export function parseStreamMessageRow(
   };
 
   return message;
+}
+
+export function getStreamMessagesTargetType(
+  target: StreamMessagesTarget,
+): StreamMessagesTarget["type"] {
+  return target.type;
+}
+
+export function getStreamMessagesTargetId(target: StreamMessagesTarget): string {
+  switch (target.type) {
+    case "channel":
+      return target.channelId;
+    case "dm":
+      return target.dmConversationId;
+    case "thread":
+      return target.threadId;
+  }
+}
+
+export function getCanonicalStreamMessagesId(target: StreamMessagesTarget): string {
+  return `${getStreamMessagesTargetType(target)}:${getStreamMessagesTargetId(target)}`;
 }
 
 export function assertExpectedSequenceWindow(

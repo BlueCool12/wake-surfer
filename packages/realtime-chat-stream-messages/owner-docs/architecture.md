@@ -2,18 +2,18 @@
 
 ## 책임 경계
 
-이 패키지는 인증된 actor를 위한 channel message 조회 유스케이스와 Kysely 구현만 소유한다. 외부
+이 패키지는 인증된 actor를 위한 message stream 조회 유스케이스와 Kysely 구현만 소유한다. 외부
 request/response나 HTTP/WebSocket runtime을 조립하지 않는다.
 
 패키지는 다음을 소유한다.
 
-- channel 읽기 권한 확인
+- channel/DM 읽기 권한과 thread의 parent conversation 읽기 권한 확인
 - canonical stream identity 해석
 - exclusive cursor와 fixed-watermark 규칙
 - count limit 기반 논리적 page
 - sequence 정렬·연속성과 storage row 무결성
 - Kysely 기반 read-only snapshot Query
-- transport와 독립적인 channel `StreamMessage` 조회 모델
+- transport와 독립적인 target-aware `StreamMessage` 조회 모델
 
 패키지는 다음을 소유하지 않는다.
 
@@ -46,6 +46,8 @@ src/usecases/
 예상 가능한 유스케이스 실패는 `status: "failure"` 값으로 반환한다. 권한 판정의 `denied`는
 `stream_unavailable`로, snapshot의 현재 head와 맞지 않는 cursor는 `invalid_cursor`로 번역한다. storage
 row 훼손과 DB 장애는 정상 실패값으로 바꾸지 않고 예외로 전파한다.
+존재하지 않는 thread stream도 `stream_unavailable`이며, 이미 생성된 thread는 root message가
+tombstone이어도 조회할 수 있다.
 
 ## 의존 원칙
 
@@ -56,17 +58,15 @@ Stream Messages는 물리적으로 `message_streams`와 `messages`를 함께 사
 타입을 재사용하지 않는다. `StreamMessagesDatabase`는 읽기에 필요한 열만 독립적으로 선언하며, 실제 전체
 database 타입은 TypeScript structural typing으로 이 계약을 만족한다.
 
-`messages.content` JSONB의 형식만은 여러 reader가 재정의하지 않는다. canonical owner인
-`@wake-surfer/realtime-chat-message-send/persisted-message-content`의 parser/type을 소비하고, 저장 row를
-현재 `StreamMessage.content`로 명시적으로 변환한다. Target은 `messages`의 중복 열이 아니라
-`message_streams`에서 읽는다.
+`messages.content` JSONB는 package 내부 parser로 현재 저장 형식을 검증한 뒤 `StreamMessage.content`로
+명시적으로 변환한다. Target은 `messages`의 중복 열이 아니라 `message_streams`에서 읽는다.
 
 Query별 cursor, watermark, 조회 방향과 page 진행 의미는 공통화하지 않는다. row parsing이나 공통 오류처럼
 Query 의미가 없는 안정된 primitive만 공유한다.
 
 DB 조회 결과는 정적 table 타입을 그대로 신뢰하지 않고 `RawStreamMetadataRow`와
 `RawStreamMessageRow`의 `unknown` 필드로 받은 뒤 검증한다. 세 Query가 공통으로 읽는 stream metadata의
-missing/target/head 검증은 `parseChannelStreamMetadata`가 한 번만 소유한다.
+missing/target/head 검증은 `parseMessageStreamMetadata`가 한 번만 소유한다.
 
 ## 전송 경계
 
@@ -77,7 +77,6 @@ internal API client와 WebSocket relay는 `@wake-surfer/realtime-chat-stream-mes
 의존 방향은 항상 transport/app에서 이 패키지로 향하며 이 패키지는 transport contract나 adapter를 역으로
 참조하지 않는다.
 
-따라서 이 패키지는 `@wake-surfer/realtime-chat-message-contracts`의 `PublicMessage`나 runtime schema에
-의존하지 않는다. 내부 `StreamMessage`를 외부 `PublicMessage`와 stream response로 바꾸는 작업은 소비 app의
-조립 경계가 담당한다. `streamId`는 DB partition 조회와 무결성 검증에만 사용하며 page 결과에는 노출하지
-않는다.
+따라서 이 패키지는 app 간 wire contract나 다른 message usecase provider에 의존하지 않는다. 내부
+`StreamMessage`를 외부 `PublicMessage`와 stream response로 바꾸는 작업은 소비 app의 조립 경계가 담당한다.
+`streamId`는 DB partition 조회와 무결성 검증에만 사용하며 page 결과에는 노출하지 않는다.

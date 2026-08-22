@@ -1,5 +1,6 @@
-import type { PersistedTextMessageContent } from "@wake-surfer/realtime-chat-message-send/persisted-message-content";
 import type { ColumnType, Generated } from "kysely";
+
+import type { PersistedTextMessageContent } from "./persisted-message-content";
 
 type DatabaseGeneratedIdColumn = ColumnType<string, never, never>;
 type GeneratedTimestampColumn = ColumnType<Date, string | Date | undefined, never>;

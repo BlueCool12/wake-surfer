@@ -2,21 +2,24 @@ import type { Kysely } from "kysely";
 
 import {
   assertAfterSequence,
-  assertChannelId,
+  assertActorId,
+  assertStreamMessagesTarget,
   assertQueryPageSize,
   assertThroughSequence,
-  authorizeChannelRead,
-  getChannelStreamId,
-  type ChannelReadAuthorizer,
+  authorizeMessageStreamRead,
+  createStreamMessagesFailure,
+  type MessageStreamReadAuthorizer,
   type StreamMessage,
   type StreamMessagesFailure,
   type StreamMessagesQueryContext,
+  type StreamMessagesTarget,
 } from "../../stream-messages";
 import type { StreamMessagesDatabase } from "../../stream-messages-table";
-import { readMessagesAfter } from "./sync-after.kysely";
+import { resolveMessageStreamReadTarget } from "../../resolve-read-target.kysely";
+import { readMessagesAfter, type SyncAfterMessagesSnapshot } from "./sync-after.kysely";
 
 export type SyncAfterMessagesQuery = {
-  channelId: string;
+  target: StreamMessagesTarget;
   afterSequence: number;
   throughSequence?: number;
   limit: number;
@@ -39,7 +42,7 @@ export type SyncAfterMessagesResult =
 
 export type SyncAfterMessagesDeps<DB extends StreamMessagesDatabase = StreamMessagesDatabase> = {
   db: Kysely<DB>;
-  authorizeRead: ChannelReadAuthorizer;
+  authorizeRead: MessageStreamReadAuthorizer;
 };
 
 export type SyncAfterMessages = (
@@ -58,32 +61,35 @@ export async function syncAfterMessages<DB extends StreamMessagesDatabase>(
   context: StreamMessagesQueryContext,
   deps: SyncAfterMessagesDeps<DB>,
 ): Promise<SyncAfterMessagesResult> {
-  assertChannelId(query.channelId);
+  assertStreamMessagesTarget(query.target);
   assertAfterSequence(query.afterSequence);
   assertThroughSequence(query.throughSequence);
   assertQueryPageSize(query.limit);
+  assertActorId(context.actorId);
 
   if (query.throughSequence !== undefined && query.afterSequence > query.throughSequence) {
     throw new TypeError("afterSequence는 throughSequence보다 클 수 없습니다.");
   }
 
-  const authorization = await authorizeChannelRead(
+  const resolvedTarget = await resolveMessageStreamReadTarget(deps.db, query.target);
+
+  if (resolvedTarget.status === "unavailable") {
+    return createStreamMessagesFailure("stream_unavailable");
+  }
+
+  const authorization = await authorizeMessageStreamRead(
     deps.authorizeRead,
     context.actorId,
-    query.channelId,
+    resolvedTarget.authorizationTarget,
   );
 
   if (authorization.status === "denied") {
-    return {
-      status: "failure",
-      code: "stream_unavailable",
-    };
+    return createStreamMessagesFailure("stream_unavailable");
   }
 
-  const streamId = getChannelStreamId(query.channelId);
   const result = await readMessagesAfter(deps.db, {
-    streamId,
-    channelId: query.channelId,
+    streamId: resolvedTarget.streamId,
+    target: query.target,
     afterSequence: query.afterSequence,
     ...(query.throughSequence === undefined ? {} : { throughSequence: query.throughSequence }),
     limit: query.limit,
@@ -93,17 +99,24 @@ export async function syncAfterMessages<DB extends StreamMessagesDatabase>(
     return result;
   }
 
-  const newest = result.snapshot.messages.at(-1);
-  const nextAfterSequence = newest?.sequence ?? result.snapshot.throughSequence;
+  return createSyncAfterMessagesSuccess(query.afterSequence, result.snapshot);
+}
+
+function createSyncAfterMessagesSuccess(
+  afterSequence: number,
+  snapshot: SyncAfterMessagesSnapshot,
+): SyncAfterMessagesResult {
+  const newest = snapshot.messages.at(-1);
+  const nextAfterSequence = newest?.sequence ?? snapshot.throughSequence;
 
   return {
     status: "success",
     page: {
-      afterSequence: query.afterSequence,
-      throughSequence: result.snapshot.throughSequence,
-      messages: result.snapshot.messages,
+      afterSequence,
+      throughSequence: snapshot.throughSequence,
+      messages: snapshot.messages,
       nextAfterSequence,
-      hasMoreAfter: nextAfterSequence < result.snapshot.throughSequence,
+      hasMoreAfter: nextAfterSequence < snapshot.throughSequence,
     },
   };
 }
