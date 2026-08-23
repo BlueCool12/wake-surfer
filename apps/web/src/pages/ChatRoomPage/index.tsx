@@ -1,12 +1,14 @@
 import { useEffect, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
-import { Menu, PanelRight, Send } from "lucide-react";
+import { Menu, PanelRight, Phone, Send } from "lucide-react";
 
 import Loading from "../../components/Loading";
 import ThemeToggle from "../../components/ThemeToggle";
 import { useChatRoom, type ChatMessageView } from "../../features/chat/useChatRoom";
+import { useVoiceCall } from "../../features/voice/useVoiceCall";
 import useVisualViewportHeight from "../../hooks/useVisualViewportHeight";
 import MentionPicker from "./MentionPicker";
+import { VoiceCallBar } from "./VoiceCallBar";
 import MessageBubble from "./MessageBubble";
 import type { MessageReactionsValue } from "./MessageReactions";
 import RoomListSidebar from "./RoomListSidebar";
@@ -45,6 +47,8 @@ function ChatRoomPage() {
     sendMessage,
     retryMessage,
   } = useChatRoom(channelId);
+  // 통화 방은 채팅 채널과 같은 식별자를 쓴다. 채널에 있으면 그 방의 통화에 들어갈 수 있다.
+  const voice = useVoiceCall(channelId);
   const [draft, setDraft] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
   const isAtBottomRef = useRef(true);
@@ -296,6 +300,16 @@ function ChatRoomPage() {
           </button>
           <span className={styles.channelHash}>#</span>
           <h1 className={styles.channelName}>{channelId}</h1>
+          <button
+            type="button"
+            className={styles.callButton}
+            onClick={voice.status === "idle" ? voice.join : voice.leave}
+            disabled={voice.status === "joining"}
+            aria-pressed={voice.status === "connected"}
+            aria-label={voice.status === "idle" ? "음성 통화 참가" : "음성 통화 나가기"}
+          >
+            <Phone size={18} aria-hidden="true" />
+          </button>
           <ThemeToggle className={styles.themeToggle} />
           <button
             type="button"
@@ -306,6 +320,15 @@ function ChatRoomPage() {
             <PanelRight size={18} aria-hidden="true" />
           </button>
         </header>
+
+        <VoiceCallBar
+          status={voice.status}
+          participants={voice.participants}
+          isMuted={voice.isMuted}
+          error={voice.error}
+          leave={voice.leave}
+          toggleMute={voice.toggleMute}
+        />
 
         <div className={styles.page}>
           <div className={styles.messages} ref={scrollRef} onScroll={handleScroll}>

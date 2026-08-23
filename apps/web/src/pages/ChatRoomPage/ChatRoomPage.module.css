@@ -53,6 +53,37 @@
   margin-left: auto;
 }
 
+/* .iconButton은 모바일 전용이라 숨겨져 있어 재사용할 수 없다. */
+.callButton {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  margin-left: auto;
+  width: var(--space-11);
+  height: var(--space-11);
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+}
+
+.callButton:hover:not(:disabled) {
+  background: var(--color-overlay-hover);
+  color: var(--color-text);
+}
+
+.callButton:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.callButton[aria-pressed="true"] {
+  color: var(--color-accent, #2563eb);
+}
+
 .iconButton {
   display: none;
   align-items: center;
