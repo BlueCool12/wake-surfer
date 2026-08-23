@@ -308,7 +308,7 @@ function ChatRoomPage() {
             aria-pressed={voice.status === "connected"}
             aria-label={voice.status === "idle" ? "음성 통화 참가" : "음성 통화 나가기"}
           >
-            <Phone size={18} aria-hidden="true" />
+            <Phone size={16} aria-hidden="true" />
           </button>
           <ThemeToggle className={styles.themeToggle} />
           <button
