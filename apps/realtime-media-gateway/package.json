@@ -1,0 +1,22 @@
+{
+  "name": "@wake-surfer/realtime-media-gateway",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "node scripts/build-worker.mjs && node scripts/build-client.mjs && node src/main.ts",
+    "build:client": "node scripts/build-client.mjs",
+    "build:worker": "node scripts/build-worker.mjs",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "mediasoup": "3.19.17",
+    "mediasoup-client": "3.15.2",
+    "ws": "^8.18.3"
+  },
+  "devDependencies": {
+    "@types/node": "^24.13.2",
+    "@types/ws": "^8.18.1",
+    "esbuild": "0.28.0"
+  }
+}
