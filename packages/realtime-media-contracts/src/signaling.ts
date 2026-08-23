@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { RequestFrameSchema, type RequestFrame } from "./envelope.js";
+import { RequestFrameSchema, type MediaErrorCode, type RequestFrame } from "./envelope.js";
 
 /**
  * mediasoup이 소유하고 검증하는 구조 (RTP·DTLS·ICE 파라미터).
@@ -24,6 +24,12 @@ export type PeerId = z.infer<typeof PeerIdSchema>;
 const IdSchema = z.string().min(1);
 const EmptyPayloadSchema = z.object({}).strict();
 
+/** 방 식별자. 지금은 클라이언트가 정하는 임의 문자열이며, 인증이 붙으면 권한 검사 대상이 된다. */
+export const RoomIdSchema = z.string().min(1).max(64);
+export type RoomId = z.infer<typeof RoomIdSchema>;
+
+const JoinPayloadSchema = z.object({ roomId: RoomIdSchema }).strict();
+
 const ConnectTransportPayloadSchema = z
   .object({ transportId: IdSchema, dtlsParameters: MediasoupPayloadSchema })
   .strict();
@@ -41,7 +47,7 @@ const ConsumePayloadSchema = z.object({ transportId: IdSchema, producerId: IdSch
 const ResumeConsumerPayloadSchema = z.object({ consumerId: IdSchema }).strict();
 
 const REQUEST_PAYLOAD_SCHEMAS = {
-  getRouterRtpCapabilities: EmptyPayloadSchema,
+  join: JoinPayloadSchema,
   createWebRtcTransport: EmptyPayloadSchema,
   connectTransport: ConnectTransportPayloadSchema,
   setRtpCapabilities: SetRtpCapabilitiesPayloadSchema,
@@ -69,7 +75,7 @@ export type MediaRequest = {
 }[MediaMethod];
 
 export type MediaRequestParseResult =
-  { ok: true; value: MediaRequest } | { ok: false; message: string };
+  { ok: true; value: MediaRequest } | { ok: false; code: MediaErrorCode; message: string };
 
 /**
  * 프레임 봉투와 method별 payload를 함께 검증한다.
@@ -81,7 +87,7 @@ export function parseMediaRequest(raw: unknown): MediaRequestParseResult {
   const frame = RequestFrameSchema.safeParse(raw);
 
   if (!frame.success) {
-    return { ok: false, message: "요청 봉투 형식이 올바르지 않습니다." };
+    return { ok: false, code: "invalid_payload", message: "요청 봉투 형식이 올바르지 않습니다." };
   }
 
   return parseMediaRequestFrame(frame.data);
@@ -89,13 +95,17 @@ export function parseMediaRequest(raw: unknown): MediaRequestParseResult {
 
 export function parseMediaRequestFrame(frame: RequestFrame): MediaRequestParseResult {
   if (!isMediaMethod(frame.method)) {
-    return { ok: false, message: `알 수 없는 method: ${frame.method}` };
+    return { ok: false, code: "unknown_method", message: `알 수 없는 method: ${frame.method}` };
   }
 
   const payload = REQUEST_PAYLOAD_SCHEMAS[frame.method].safeParse(frame.data ?? {});
 
   if (!payload.success) {
-    return { ok: false, message: `${frame.method} payload가 올바르지 않습니다.` };
+    return {
+      ok: false,
+      code: "invalid_payload",
+      message: `${frame.method} payload가 올바르지 않습니다.`,
+    };
   }
 
   return {
@@ -105,6 +115,18 @@ export function parseMediaRequestFrame(frame: RequestFrame): MediaRequestParseRe
 }
 
 // ── 게이트웨이가 돌려주는 응답 ──────────────────────────────────────────────
+
+/**
+ * `join` 응답.
+ *
+ * 방마다 Router가 다르므로 코덱 능력도 방에 따라 달라진다. 참가와 능력 조회를 한 번에 묶어
+ * 왕복을 줄이고, "참가하지 않고 능력만 묻는" 상태를 아예 만들지 않는다.
+ */
+export type JoinResult = {
+  roomId: RoomId;
+  routerRtpCapabilities: MediasoupPayload;
+  peerCount: number;
+};
 
 /** `createWebRtcTransport` 응답. 그대로 mediasoup-client의 `createSendTransport`에 넘긴다. */
 export type WebRtcTransportDescriptor = {
