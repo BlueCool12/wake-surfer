@@ -28,6 +28,16 @@ import { createLogger, serializeError } from "./runtime/logger.ts";
 
 const PORT = Number(process.env.PORT ?? 4000);
 const MAX_PEERS_PER_ROOM = Number(process.env.MEDIA_MAX_PEERS_PER_ROOM ?? 8);
+
+/** 모든 WebRTC transport가 공유하는 미디어 포트. udp·tcp 양쪽에서 같은 번호를 쓴다. */
+const RTC_PORT = Number(process.env.MEDIA_RTC_PORT ?? 44444);
+
+/**
+ * worker가 개별 포트를 잡아야 하는 transport에 쓰는 범위.
+ *
+ * WebRTC transport는 위 `RTC_PORT` 하나를 공유하므로 여기 해당하지 않는다. 녹음을 붙일 때
+ * 쓰게 될 PlainTransport 같은 것들이 이 범위에서 포트를 받는다.
+ */
 const RTC_MIN_PORT = Number(process.env.MEDIA_RTC_MIN_PORT ?? 40000);
 const RTC_MAX_PORT = Number(process.env.MEDIA_RTC_MAX_PORT ?? 40100);
 const logger = createLogger(process.env.LOG_LEVEL ?? "info");
@@ -91,13 +101,25 @@ worker.on("died", () => {
   process.exit(1);
 });
 
-// transport 하나가 udp·tcp 포트를 하나씩, 참가자가 transport를 둘(송신·수신) 쓴다.
-const PORTS_PER_PEER = 4;
+/**
+ * 모든 WebRTC transport가 공유하는 고정 포트.
+ *
+ * transport마다 포트를 따로 잡으면 참가자 한 명이 4개(송신·수신 × udp·tcp)를 먹어, 포트 범위가
+ * 곧 전역 동시 접속 상한이 된다. WebRtcServer는 ICE username fragment로 트래픽을 구분하므로
+ * 포트 하나에 전부 다중화할 수 있다. 방화벽·컨테이너 포트 공개도 한 줄로 끝난다.
+ */
+const webRtcServer = await worker.createWebRtcServer({
+  listenInfos: [
+    { protocol: "udp", ip: "0.0.0.0", announcedAddress: ANNOUNCED_ADDRESS, port: RTC_PORT },
+    { protocol: "tcp", ip: "0.0.0.0", announcedAddress: ANNOUNCED_ADDRESS, port: RTC_PORT },
+  ],
+});
+
 logger.info(
   {
     announcedAddress: ANNOUNCED_ADDRESS,
-    globalPeerCeiling: Math.floor((RTC_MAX_PORT - RTC_MIN_PORT + 1) / PORTS_PER_PEER),
     maxPeersPerRoom: MAX_PEERS_PER_ROOM,
+    rtcPort: RTC_PORT,
     workerPid: worker.pid,
   },
   "mediasoup worker 기동",
@@ -231,10 +253,7 @@ async function route(peer: Peer, request: MediaRequest): Promise<unknown> {
     case "createWebRtcTransport": {
       const room = await requireRoom(peer);
       const transport = await room.router.createWebRtcTransport({
-        listenInfos: [
-          { protocol: "udp", ip: "0.0.0.0", announcedAddress: ANNOUNCED_ADDRESS },
-          { protocol: "tcp", ip: "0.0.0.0", announcedAddress: ANNOUNCED_ADDRESS },
-        ],
+        webRtcServer,
         enableUdp: true,
         enableTcp: true,
         preferUdp: true,
