@@ -51,6 +51,10 @@
   --radius-full: 9999px;
 
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.12);
+  /* 본문 위에 떠 있는 요소용. sm으로는 콘텐츠와 분리돼 보이지 않는다. */
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.18);
+  /* 끌고 있는 요소처럼 잠시 더 들려 있어야 할 때. */
+  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.24);
 }
 
 @media (prefers-color-scheme: dark) {
