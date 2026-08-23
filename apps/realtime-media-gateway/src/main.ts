@@ -2,9 +2,7 @@
 // 인증, 재연결 내성, 녹음은 아직 없다. 이후 단계에서 이 위에 얹는다.
 import { randomUUID } from "node:crypto";
 import { createServer } from "node:http";
-import { readFile } from "node:fs/promises";
 import { networkInterfaces } from "node:os";
-import { fileURLToPath, URL } from "node:url";
 import process from "node:process";
 
 import {
@@ -125,27 +123,19 @@ logger.info(
   "mediasoup worker 기동",
 );
 
-const publicDirectory = fileURLToPath(new URL("../public/", import.meta.url));
-const httpServer = createServer(async (request, response) => {
-  const requestedPath = (request.url ?? "/").split("?")[0] ?? "/";
-  // ".." 를 막지 않으면 public/ 밖의 임의 파일이 노출된다.
-  const name = requestedPath === "/" ? "index.html" : requestedPath.replace(/^\//, "");
-
-  if (name.includes("..")) {
-    response.writeHead(400).end("bad request");
+/**
+ * WebSocket이 얹힐 자리이자 상태 확인 창구.
+ *
+ * 브라우저 코드는 `apps/web`이 소유하므로 여기서 정적 파일을 서빙하지 않는다.
+ */
+const httpServer = createServer((request, response) => {
+  if (request.url === "/health") {
+    response.writeHead(200, { "content-type": "application/json; charset=utf-8" });
+    response.end(JSON.stringify({ rooms: rooms.size, peers: peers.size, status: "ok" }));
     return;
   }
 
-  try {
-    const body = await readFile(publicDirectory + name);
-    const type = name.endsWith(".html")
-      ? "text/html; charset=utf-8"
-      : "text/javascript; charset=utf-8";
-    response.writeHead(200, { "content-type": type });
-    response.end(body);
-  } catch {
-    response.writeHead(404).end("not found");
-  }
+  response.writeHead(404).end("not found");
 });
 
 const websocketServer = new WebSocketServer({

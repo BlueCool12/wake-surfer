@@ -20,8 +20,9 @@
   상한인 Apple clang 14에는 없다. 올리려면 Linux 또는 최신 툴체인이 먼저 필요하다.
 - `scripts/build-worker.mjs`의 우회(헤더 include 주입, `SSL_CERT_FILE` 지정)는 upstream 문제
   때문이다. Linux에서는 불필요하므로 환경이 바뀌면 함께 걷어낸다.
-- 브라우저 코드(`client/`)와 확인용 페이지(`public/`)는 임시다. 클라이언트가 `apps/web`으로
-  옮겨가면 정적 서버와 함께 제거한다.
+- **브라우저 코드는 이 앱이 소유하지 않는다.** 통화 UI와 mediasoup-client 사용은
+  `apps/web/src/features/voice/`에 있다. 여기서 정적 파일을 서빙하지 않으며, HTTP 서버는
+  WebSocket이 얹힐 자리와 `/health` 확인 창구로만 쓴다.
 - 방 하나가 Router 하나를 갖는다. Router는 자기 안의 producer끼리만 연결할 수 있는 경계이므로,
   **방 격리는 Router 분리로 얻는다.** 방은 첫 참가 때 만들고 마지막 참가자가 나갈 때 닫는다.
 - `join` 이전에는 어떤 미디어 요청도 받지 않는다(`not_joined`). 실패 사유는 사람이 읽는 문구가 아니라
