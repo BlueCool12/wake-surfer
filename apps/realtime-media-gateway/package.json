@@ -7,9 +7,11 @@
     "dev": "node scripts/build-worker.mjs && node scripts/build-client.mjs && node src/main.ts",
     "build:client": "node scripts/build-client.mjs",
     "build:worker": "node scripts/build-worker.mjs",
-    "typecheck": "tsc -p tsconfig.json"
+    "typecheck": "tsc -p tsconfig.json",
+    "build:deps": "pnpm --filter @wake-surfer/realtime-media-contracts build"
   },
   "dependencies": {
+    "@wake-surfer/realtime-media-contracts": "workspace:*",
     "mediasoup": "3.19.17",
     "mediasoup-client": "3.15.2",
     "ws": "^8.18.3"

@@ -7,6 +7,9 @@
 - 미디어는 mediasoup worker(별도 C++ 프로세스)와 브라우저가 직접 주고받는다. Node는 제어만 하며
   **오디오 경로에 있지 않다.** 협상이 끝난 뒤 이 프로세스가 죽어도 진행 중인 통화는 유지된다.
 - RTP·DTLS·ICE 파라미터는 해석하지 않고 mediasoup에 그대로 넘긴다. 검증은 mediasoup이 한다.
+- 클라이언트가 보낸 프레임은 `@wake-surfer/realtime-media-contracts`로 검증한 뒤에만 처리한다.
+  **새 method를 추가할 때는 계약을 먼저 갱신한다.** 응답할 `id`가 있으면 해당 요청만 실패로
+  돌려주고, 봉투가 깨져 응답할 대상이 없을 때만 연결을 닫는다.
 - 참가자 상태는 WebSocket 연결이 사는 동안만 존재하는 메모리 Map이며 **단일 인스턴스를 전제한다.**
   스케일아웃 시 이 registry만 교체하도록 경계를 유지한다.
 - `announcedAddress`에 loopback 주소를 쓰지 않는다. 루프백을 주면 브라우저가 relay 후보를 만들지

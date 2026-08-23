@@ -1,4 +1,13 @@
 // walking skeleton 클라이언트. 이후 단계에서 apps/web으로 옮긴다.
+import {
+  ResponseFrameSchema,
+  parseMediaNotification,
+  type ConsumerDescriptor,
+  type MediaMethod,
+  type ProduceResult,
+  type ProducerDescriptor,
+  type WebRtcTransportDescriptor,
+} from "@wake-surfer/realtime-media-contracts";
 import { Device } from "mediasoup-client";
 import type { types } from "mediasoup-client";
 
@@ -15,17 +24,16 @@ const pending = new Map<
   { resolve: (value: unknown) => void; reject: (error: Error) => void }
 >();
 let requestId = 0;
-let myPeerId = "";
 
 /**
  * SFU 시그널링은 요청/응답 성격이 강해 id 상관관계가 필요하다.
  *
- * 응답 payload는 아직 검증하지 않는다. 호출부가 기대하는 모양을 타입 인자로 선언하며,
- * 그 모양이 곧 계약 패키지에서 스키마로 고정해야 할 대상이다.
+ * 응답 payload의 형태는 계약이 타입으로만 규정하고 런타임 검증은 하지 않는다. 게이트웨이가
+ * 보내는 값이며, 그걸 못 믿는 상황이라면 검증으로 해결될 문제가 아니다.
  */
-function request<T = unknown>(method: string, data: unknown = {}): Promise<T> {
+function request<T = unknown>(method: MediaMethod, data: unknown = {}): Promise<T> {
   const id = ++requestId;
-  return new Promise((resolve, reject) => {
+  return new Promise<T>((resolve, reject) => {
     pending.set(id, { resolve: resolve as (value: unknown) => void, reject });
     socket.send(JSON.stringify({ id, method, data }));
   });
@@ -36,39 +44,51 @@ let sendTransport: types.Transport | undefined;
 let recvTransport: types.Transport | undefined;
 
 socket.addEventListener("message", (event) => {
-  const message = JSON.parse(event.data);
+  const message: unknown = JSON.parse(event.data);
+  const response = ResponseFrameSchema.safeParse(message);
 
-  if (message.id !== undefined) {
-    const entry = pending.get(message.id);
-    pending.delete(message.id);
+  if (response.success) {
+    const entry = pending.get(response.data.id);
+    pending.delete(response.data.id);
+
     if (!entry) return;
 
-    if (message.ok) {
-      entry.resolve(message.data);
+    if (response.data.ok) {
+      entry.resolve(response.data.data);
     } else {
-      entry.reject(new Error(message.error));
+      entry.reject(new Error(response.data.error));
     }
 
     return;
   }
 
-  if (message.method === "welcome") {
-    myPeerId = message.data.peerId;
-    log(`접속됨 — 내 peerId: ${myPeerId}`);
-    return;
-  }
-
-  if (message.method === "newProducer") {
-    log(`새 producer 감지: ${message.data.peerId}`);
-    void consume(message.data.producerId, message.data.peerId);
-    return;
-  }
-
-  if (message.method === "peerClosed") {
-    log(`참가자 퇴장: ${message.data.peerId}`);
-    document.getElementById(`audio-${message.data.peerId}`)?.remove();
-  }
+  handleNotification(message);
 });
+
+function handleNotification(message: unknown): void {
+  if (typeof message !== "object" || message === null || !("method" in message)) return;
+
+  const { method, data } = message as { method: unknown; data: unknown };
+  if (typeof method !== "string") return;
+
+  const notification = parseMediaNotification(method, data);
+  if (notification === undefined) return;
+
+  switch (notification.method) {
+    case "welcome":
+      log(`접속됨 — 내 peerId: ${notification.data.peerId}`);
+      return;
+
+    case "newProducer":
+      log(`새 producer 감지: ${notification.data.peerId}`);
+      void consume(notification.data.producerId, notification.data.peerId);
+      return;
+
+    case "peerClosed":
+      log(`참가자 퇴장: ${notification.data.peerId}`);
+      document.getElementById(`audio-${notification.data.peerId}`)?.remove();
+  }
+}
 
 async function start() {
   const routerRtpCapabilities = await request<types.RtpCapabilities>("getRouterRtpCapabilities");
@@ -76,19 +96,15 @@ async function start() {
   await request("setRtpCapabilities", { rtpCapabilities: device.rtpCapabilities });
   log("device 로드 완료");
 
-  sendTransport = device.createSendTransport(
-    await request<types.TransportOptions>("createWebRtcTransport"),
-  );
+  sendTransport = device.createSendTransport(await createTransport());
   wireTransport(sendTransport);
   sendTransport.on("produce", ({ kind, rtpParameters }, callback, errback) => {
-    request<{ id: string }>("produce", { transportId: sendTransport!.id, kind, rtpParameters })
+    request<ProduceResult>("produce", { transportId: sendTransport!.id, kind, rtpParameters })
       .then(({ id }) => callback({ id }))
       .catch(errback);
   });
 
-  recvTransport = device.createRecvTransport(
-    await request<types.TransportOptions>("createWebRtcTransport"),
-  );
+  recvTransport = device.createRecvTransport(await createTransport());
   wireTransport(recvTransport);
 
   const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -102,11 +118,20 @@ async function start() {
   log("내 오디오 송출 시작");
 
   // 내가 들어오기 전부터 있던 참가자들을 받아온다.
-  const existing = await request<{ producerId: string; peerId: string }[]>("listProducers");
+  const existing = await request<ProducerDescriptor[]>("listProducers");
 
   for (const { producerId, peerId } of existing) {
     await consume(producerId, peerId);
   }
+}
+
+/**
+ * 게이트웨이는 mediasoup 구조를 그대로 돌려주므로 mediasoup-client 타입으로 단언한다.
+ * 계약이 형태를 규정하지 않는 쪽이 의도된 설계다.
+ */
+async function createTransport(): Promise<types.TransportOptions> {
+  const descriptor = await request<WebRtcTransportDescriptor>("createWebRtcTransport");
+  return descriptor as unknown as types.TransportOptions;
 }
 
 function wireTransport(transport: types.Transport) {
@@ -123,11 +148,11 @@ function wireTransport(transport: types.Transport) {
 async function consume(producerId: string, peerId: string) {
   if (!recvTransport) return;
 
-  const parameters = await request<types.ConsumerOptions>("consume", {
+  const descriptor = await request<ConsumerDescriptor>("consume", {
     transportId: recvTransport.id,
     producerId,
   });
-  const consumer = await recvTransport.consume(parameters);
+  const consumer = await recvTransport.consume(descriptor as unknown as types.ConsumerOptions);
   await request("resumeConsumer", { consumerId: consumer.id });
 
   const element = document.createElement("audio");
