@@ -40,12 +40,6 @@ const ConsumePayloadSchema = z.object({ transportId: IdSchema, producerId: IdSch
 
 const ResumeConsumerPayloadSchema = z.object({ consumerId: IdSchema }).strict();
 
-/**
- * method 이름은 점 표기(`media.transport.create`)를 쓰지 않는다.
- *
- * 채팅 게이트웨이는 한 소켓에 여러 기능을 다중화하므로 네임스페이스가 필요하지만, 미디어
- * 게이트웨이의 소켓은 미디어 전용이라 접두사가 정보를 더하지 않는다.
- */
 const REQUEST_PAYLOAD_SCHEMAS = {
   getRouterRtpCapabilities: EmptyPayloadSchema,
   createWebRtcTransport: EmptyPayloadSchema,
