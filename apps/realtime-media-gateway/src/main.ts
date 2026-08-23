@@ -4,7 +4,6 @@ import { createServer } from "node:http";
 import { readFile } from "node:fs/promises";
 import { networkInterfaces } from "node:os";
 import { fileURLToPath, URL } from "node:url";
-import console from "node:console";
 import process from "node:process";
 
 import {
@@ -22,7 +21,10 @@ import {
 import * as mediasoup from "mediasoup";
 import { WebSocketServer, WebSocket } from "ws";
 
+import { createLogger, serializeError } from "./runtime/logger.ts";
+
 const PORT = Number(process.env.PORT ?? 4000);
+const logger = createLogger(process.env.LOG_LEVEL ?? "info");
 
 /**
  * 클라이언트에게 알려줄 ICE 주소.
@@ -53,12 +55,15 @@ const worker = await mediasoup.createWorker({
   rtcMaxPort: 40100,
 });
 worker.on("died", () => {
-  console.error("[media] mediasoup worker 종료. 프로세스를 내린다.");
+  logger.error({ workerPid: worker.pid }, "mediasoup worker가 종료되어 프로세스를 내립니다");
   process.exit(1);
 });
 
 const router = await worker.createRouter({ mediaCodecs: MEDIA_CODECS });
-console.log(`[media] worker pid=${worker.pid}, announcedAddress=${ANNOUNCED_ADDRESS}`);
+logger.info(
+  { announcedAddress: ANNOUNCED_ADDRESS, workerPid: worker.pid },
+  "mediasoup worker 기동",
+);
 
 const publicDirectory = fileURLToPath(new URL("../public/", import.meta.url));
 const httpServer = createServer(async (request, response) => {
@@ -97,20 +102,20 @@ websocketServer.on("connection", (socket) => {
     consumers: new Map(),
   };
   peers.set(peer.id, peer);
-  console.log(`[peer] 접속 ${peer.id} (총 ${peers.size})`);
+  logger.info({ peerCount: peers.size, peerId: peer.id }, "peer 접속");
 
   notify(socket, { method: "welcome", data: { peerId: peer.id } });
 
   socket.on("message", (raw) => {
     void receive(peer, raw.toString()).catch((error: unknown) => {
-      console.error(`[peer] ${peer.id} 처리 실패`, error);
+      logger.error({ error: serializeError(error), peerId: peer.id }, "peer 프레임 처리 실패");
     });
   });
 
   socket.once("close", () => {
     for (const transport of peer.transports.values()) transport.close();
     peers.delete(peer.id);
-    console.log(`[peer] 종료 ${peer.id} (총 ${peers.size})`);
+    logger.info({ peerCount: peers.size, peerId: peer.id }, "peer 종료");
     broadcast(peer.id, { method: "peerClosed", data: { peerId: peer.id } });
   });
 });
@@ -154,7 +159,10 @@ async function receive(peer: Peer, text: string): Promise<void> {
     send(peer.socket, { id: parsed.value.id, ok: true, data: await route(peer, parsed.value) });
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error);
-    console.error(`[rpc] ${parsed.value.method} 실패: ${detail}`);
+    logger.warn(
+      { error: serializeError(error), method: parsed.value.method, peerId: peer.id },
+      "요청 처리 실패",
+    );
     send(peer.socket, { id: parsed.value.id, ok: false, error: detail });
   }
 }
@@ -209,7 +217,7 @@ async function route(peer: Peer, request: MediaRequest): Promise<unknown> {
         rtpParameters: request.data.rtpParameters as mediasoup.types.RtpParameters,
       });
       peer.producers.set(producer.id, producer);
-      console.log(`[produce] ${peer.id} → producer ${producer.id}`);
+      logger.info({ peerId: peer.id, producerId: producer.id }, "producer 생성");
       // 다른 참가자에게 새 producer를 알린다. 그쪽이 consume 요청을 보내온다.
       broadcast(peer.id, {
         method: "newProducer",
@@ -243,7 +251,7 @@ async function route(peer: Peer, request: MediaRequest): Promise<unknown> {
         paused: true, // 먼저 만들고 클라이언트 준비 후 resume 하는 것이 권장 순서다.
       });
       peer.consumers.set(consumer.id, consumer);
-      console.log(`[consume] ${peer.id} ← producer ${producerId}`);
+      logger.info({ consumerId: consumer.id, peerId: peer.id, producerId }, "consumer 생성");
       const descriptor: ConsumerDescriptor = {
         id: consumer.id,
         producerId: consumer.producerId,
@@ -296,4 +304,4 @@ function detectLanAddress(): string {
   throw new Error("LAN 주소를 찾지 못했습니다. MEDIASOUP_ANNOUNCED_ADDRESS를 지정하세요.");
 }
 
-httpServer.listen(PORT, () => console.log(`[http] http://localhost:${PORT}`));
+httpServer.listen(PORT, () => logger.info({ port: PORT }, "HTTP·WebSocket 수신 시작"));
