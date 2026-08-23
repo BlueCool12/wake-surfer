@@ -12,6 +12,22 @@ import type {
   RealtimeChatErrorCode,
 } from "@wake-surfer/realtime-chat-gateway-ticket-contracts";
 import {
+  type DeleteMessage,
+  type DeleteMessageResult,
+  type DeletedMessage as DomainDeletedMessage,
+  type EditMessage,
+  type EditMessageResult,
+  type EditedTextMessage as DomainEditedTextMessage,
+} from "@wake-surfer/realtime-chat-message-mutation";
+import {
+  parseDeleteMessageRequest,
+  parseEditMessageRequest,
+  type DeleteMessageResponse,
+  type DeletedMessage,
+  type EditMessageResponse,
+  type EditedTextMessage,
+} from "@wake-surfer/realtime-chat-message-mutation-contracts";
+import {
   toAcceptedTextMessage,
   type SendMessage,
   type SendMessageResult,
@@ -32,7 +48,9 @@ import { timeout } from "hono/timeout";
 
 import {
   registerLoadLatestMessagesHttpRoute,
+  registerLoadLatestThreadMessagesHttpRoute,
   registerLoadOlderMessagesHttpRoute,
+  registerLoadOlderThreadMessagesHttpRoute,
   registerStreamMessagesInternalHttpRoutes,
 } from "./features/stream-messages/routes.js";
 
@@ -68,6 +86,8 @@ export type RealtimeChatApiAppDeps = {
   gatewayTicket: GatewayTicketService;
   getAssertedActor?: (request: Request) => Promise<AuthenticatedActor> | AuthenticatedActor;
   gatewayApiToken: string;
+  deleteMessage?: DeleteMessage;
+  editMessage?: EditMessage;
   loadLatestMessages?: LoadLatestMessages;
   loadOlderMessages?: LoadOlderMessages;
   logger: AppLogger;
@@ -99,6 +119,8 @@ export function createRealtimeChatApiApp(deps: RealtimeChatApiAppDeps): Hono {
   const {
     authenticateActor,
     authenticateGateway,
+    deleteMessage,
+    editMessage,
     gatewayTicket,
     getAssertedActor,
     logger,
@@ -268,8 +290,23 @@ export function createRealtimeChatApiApp(deps: RealtimeChatApiAppDeps): Hono {
     });
   }
 
+  registerMessageMutationHttpRoutes(app, {
+    authenticateGateway,
+    deleteMessage,
+    editMessage,
+    getAssertedActor,
+  });
+
   if (deps.loadLatestMessages !== undefined) {
     registerLoadLatestMessagesHttpRoute(app, {
+      authenticateActor,
+      loadLatest: deps.loadLatestMessages,
+      logger,
+      ...(deps.requestTimeoutMilliseconds === undefined
+        ? {}
+        : { timeoutMilliseconds: deps.requestTimeoutMilliseconds }),
+    });
+    registerLoadLatestThreadMessagesHttpRoute(app, {
       authenticateActor,
       loadLatest: deps.loadLatestMessages,
       logger,
@@ -281,6 +318,14 @@ export function createRealtimeChatApiApp(deps: RealtimeChatApiAppDeps): Hono {
 
   if (deps.loadOlderMessages !== undefined) {
     registerLoadOlderMessagesHttpRoute(app, {
+      authenticateActor,
+      loadOlder: deps.loadOlderMessages,
+      logger,
+      ...(deps.requestTimeoutMilliseconds === undefined
+        ? {}
+        : { timeoutMilliseconds: deps.requestTimeoutMilliseconds }),
+    });
+    registerLoadOlderThreadMessagesHttpRoute(app, {
       authenticateActor,
       loadOlder: deps.loadOlderMessages,
       logger,
@@ -360,6 +405,113 @@ export function createRealtimeChatApiApp(deps: RealtimeChatApiAppDeps): Hono {
   });
 
   return app;
+}
+
+function registerMessageMutationHttpRoutes(
+  app: Hono,
+  config: {
+    authenticateGateway: RealtimeChatApiAppDeps["authenticateGateway"];
+    deleteMessage: DeleteMessage | undefined;
+    editMessage: EditMessage | undefined;
+    getAssertedActor: RealtimeChatApiAppDeps["getAssertedActor"];
+  },
+): void {
+  const { authenticateGateway, deleteMessage, editMessage, getAssertedActor } = config;
+
+  // Mutation slice는 부분 app에서 완전히 빠지거나, 실행 의존성이 모두 갖춰진 상태로만 mount한다.
+  if (editMessage === undefined && deleteMessage === undefined) {
+    return;
+  }
+
+  if (editMessage === undefined || deleteMessage === undefined || getAssertedActor === undefined) {
+    throw new TypeError(
+      "메시지 mutation route에는 edit, delete와 asserted actor provider가 함께 필요합니다.",
+    );
+  }
+
+  app.post("/internal/realtime-chat/messages/edit", async (context) => {
+    await authenticateGateway(context.req.raw);
+    const actor = await getAssertedActor(context.req.raw);
+    const body = await readRequiredJsonBody(context.req.raw);
+    const parsed = parseEditMessageRequest(body);
+
+    if (!parsed.ok) {
+      throw new AppHttpError(400, "bad_request", parsed.message);
+    }
+
+    let result: EditMessageResult;
+
+    try {
+      result = await editMessage(parsed.value, { actorId: actor.actorId });
+    } catch (error) {
+      throw new AppHttpError(503, "internal_error", "message edit service unavailable", {
+        cause: error,
+      });
+    }
+
+    return context.json(toEditMessageResponse(result));
+  });
+
+  app.post("/internal/realtime-chat/messages/delete", async (context) => {
+    await authenticateGateway(context.req.raw);
+    const actor = await getAssertedActor(context.req.raw);
+    const body = await readRequiredJsonBody(context.req.raw);
+    const parsed = parseDeleteMessageRequest(body);
+
+    if (!parsed.ok) {
+      throw new AppHttpError(400, "bad_request", parsed.message);
+    }
+
+    let result: DeleteMessageResult;
+
+    try {
+      result = await deleteMessage(parsed.value, { actorId: actor.actorId });
+    } catch (error) {
+      throw new AppHttpError(503, "internal_error", "message delete service unavailable", {
+        cause: error,
+      });
+    }
+
+    return context.json(toDeleteMessageResponse(result));
+  });
+}
+
+function toEditMessageResponse(result: EditMessageResult): EditMessageResponse {
+  if (result.status === "accepted") {
+    return { status: "accepted", message: toEditedTextMessage(result.message) };
+  }
+
+  if (result.reason === "message_deleted") {
+    return {
+      status: "rejected",
+      reason: result.reason,
+      message: toDeletedMessage(result.message),
+    };
+  }
+
+  return { status: "rejected", reason: result.reason };
+}
+
+function toDeleteMessageResponse(result: DeleteMessageResult): DeleteMessageResponse {
+  return result.status === "accepted"
+    ? { status: "accepted", message: toDeletedMessage(result.message) }
+    : { status: "rejected", reason: result.reason };
+}
+
+function toEditedTextMessage(message: DomainEditedTextMessage): EditedTextMessage {
+  return {
+    ...message,
+    createdAt: message.createdAt.toISOString(),
+    editedAt: message.editedAt.toISOString(),
+  };
+}
+
+function toDeletedMessage(message: DomainDeletedMessage): DeletedMessage {
+  return {
+    ...message,
+    createdAt: message.createdAt.toISOString(),
+    deletedAt: message.deletedAt.toISOString(),
+  };
 }
 
 function getHttpExceptionResponse(error: unknown): Response | undefined {

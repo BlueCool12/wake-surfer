@@ -15,12 +15,15 @@
     "dist"
   ],
   "scripts": {
-    "build": "pnpm --filter @wake-surfer/realtime-chat-gateway-ticket-contracts build && pnpm --filter @wake-surfer/realtime-chat-message-contracts build && pnpm --filter @wake-surfer/realtime-chat-stream-messages-contracts build && tsc -p tsconfig.json",
-    "clean": "tsc -b tsconfig.json --clean"
+    "build": "pnpm --filter @wake-surfer/realtime-chat-gateway-ticket-contracts build && pnpm --filter @wake-surfer/realtime-chat-message-contracts build && pnpm --filter @wake-surfer/realtime-chat-message-mutation-contracts build && pnpm --filter @wake-surfer/realtime-chat-message-send-contracts build && pnpm --filter @wake-surfer/realtime-chat-stream-messages-contracts build && tsc -p tsconfig.json",
+    "clean": "tsc -b tsconfig.json --clean",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
     "@wake-surfer/realtime-chat-gateway-ticket-contracts": "workspace:*",
     "@wake-surfer/realtime-chat-message-contracts": "workspace:*",
+    "@wake-surfer/realtime-chat-message-mutation-contracts": "workspace:*",
+    "@wake-surfer/realtime-chat-message-send-contracts": "workspace:*",
     "@wake-surfer/realtime-chat-stream-messages-contracts": "workspace:*"
   }
 }

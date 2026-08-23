@@ -21,7 +21,8 @@
   ],
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "clean": "tsc -b tsconfig.json --clean"
+    "clean": "tsc -b tsconfig.json --clean",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
     "kysely": "0.28.8"

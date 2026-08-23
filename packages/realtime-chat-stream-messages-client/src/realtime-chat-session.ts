@@ -1,27 +1,29 @@
 import type { PublicMessage } from "@wake-surfer/realtime-chat-message-contracts";
-import {
-  disposeStreamMessagesSession,
-  Emitter,
-  getStreamMessagesSession,
-  type KeyValueStorage,
-  type StreamMessagesRecoveryPhase,
-  StreamMessagesTransportError,
-} from "@wake-surfer/realtime-chat-stream-messages-client";
+import type {
+  DeletedMessage,
+  EditedTextMessage,
+} from "@wake-surfer/realtime-chat-message-mutation-contracts";
+import type { KeyValueStorage } from "./cursor-storage.js";
+import { Emitter } from "./emitter.js";
+import { StreamMessagesTransportError } from "./errors.js";
+import type { StreamMessagesRecoveryPhase } from "./recovery-model.js";
+import type { RealtimeChatTargetRuntime } from "./runtime.js";
+import { StreamMessagesSessionModel } from "./session-model.js";
+import type { StreamMessagesClientTarget } from "./target.js";
 
-import type { ChatRoomRuntime } from "./transport/chatTransport";
+export type RealtimeChatMessageStatus = "pending" | "sent" | "failed";
 
-export type ChatMessageStatus = "pending" | "sent" | "failed";
-
-export type ChatMessageView = {
+export type RealtimeChatMessage = {
   key: string;
   idempotencyKey?: string;
   messageId?: string;
   sequence?: number;
-  senderId?: string;
-  isMine: boolean;
-  text: string;
+  senderActorId?: string;
+  isOwn: boolean;
+  content: PublicMessage["content"];
   createdAt: string;
-  status: ChatMessageStatus;
+  status: RealtimeChatMessageStatus;
+  isEdited: boolean;
 };
 
 type OptimisticMessage = {
@@ -31,19 +33,20 @@ type OptimisticMessage = {
   status: "pending" | "failed";
 };
 
-export type ChatRoomModelOptions = {
+export type RealtimeChatTargetSessionOptions = {
   actorId: string;
-  channelId: string;
-  runtime: ChatRoomRuntime;
+  target: StreamMessagesClientTarget;
+  runtime: RealtimeChatTargetRuntime;
   storage: KeyValueStorage;
   createIdempotencyKey?: () => string;
   now?: () => string;
 };
 
-export class ChatRoomModel extends Emitter {
-  readonly options: ChatRoomModelOptions;
+export class RealtimeChatTargetSession extends Emitter {
+  readonly options: RealtimeChatTargetSessionOptions;
   readonly #optimistic = new Map<string, OptimisticMessage>();
-  readonly #runtime: ChatRoomRuntime;
+  readonly #editedMessageIds = new Set<string>();
+  readonly #runtime: RealtimeChatTargetRuntime;
   readonly #createIdempotencyKey: () => string;
   readonly #now: () => string;
   readonly #subscriptions: Array<() => void> = [];
@@ -57,16 +60,16 @@ export class ChatRoomModel extends Emitter {
   #loadingOlder = false;
   #olderFailed = false;
 
-  constructor(options: ChatRoomModelOptions) {
+  constructor(options: RealtimeChatTargetSessionOptions) {
     super();
     this.options = options;
     this.#runtime = options.runtime;
     this.#createIdempotencyKey = options.createIdempotencyKey ?? (() => crypto.randomUUID());
     this.#now = options.now ?? (() => new Date().toISOString());
-    this.streamSession = getStreamMessagesSession({
+    this.streamSession = new StreamMessagesSessionModel({
       actorId: options.actorId,
-      channelId: options.channelId,
       storage: options.storage,
+      target: options.target,
     });
     this.#subscriptions.push(
       this.streamSession.timeline.subscribe(this.emitViewChange),
@@ -74,15 +77,16 @@ export class ChatRoomModel extends Emitter {
     );
   }
 
-  get messages(): ChatMessageView[] {
+  get messages(): RealtimeChatMessage[] {
     return [
-      ...this.streamSession.timeline.messages.map((message) => this.#toView(message)),
+      ...this.streamSession.timeline.messages.map((message) => this.#toMessage(message)),
       ...[...this.#optimistic.values()].map((message) => ({
         key: message.idempotencyKey,
         idempotencyKey: message.idempotencyKey,
-        isMine: true,
-        text: message.text,
+        isOwn: true,
+        content: { type: "text" as const, text: message.text },
         createdAt: message.createdAt,
+        isEdited: false,
         status: message.status,
       })),
     ];
@@ -167,7 +171,7 @@ export class ChatRoomModel extends Emitter {
     });
     this.emit();
     try {
-      this.#runtime.messageTransport.sendChannelMessage({
+      this.#runtime.messageTransport.sendMessage({
         idempotencyKey,
         text: trimmed,
       });
@@ -181,7 +185,7 @@ export class ChatRoomModel extends Emitter {
     }
   }
 
-  retryMessage(message: ChatMessageView): void {
+  retryMessage(message: RealtimeChatMessage): void {
     if (message.idempotencyKey === undefined) {
       return;
     }
@@ -195,12 +199,50 @@ export class ChatRoomModel extends Emitter {
     optimistic.status = "pending";
     this.emit();
     try {
-      this.#runtime.messageTransport.sendChannelMessage({
+      this.#runtime.messageTransport.sendMessage({
         idempotencyKey: optimistic.idempotencyKey,
         text: optimistic.text,
       });
     } catch {
       optimistic.status = "failed";
+      this.emit();
+    }
+  }
+
+  editMessage(message: RealtimeChatMessage, text: string): void {
+    const trimmed = text.trim();
+
+    if (
+      message.messageId === undefined ||
+      !message.isOwn ||
+      message.status !== "sent" ||
+      message.content === null ||
+      trimmed.length === 0
+    ) {
+      return;
+    }
+
+    this.#runtime.messageTransport.editMessage({
+      messageId: message.messageId,
+      text: trimmed,
+    });
+  }
+
+  deleteMessage(message: RealtimeChatMessage): void {
+    if (
+      message.messageId === undefined ||
+      !message.isOwn ||
+      message.status !== "sent" ||
+      message.content === null
+    ) {
+      return;
+    }
+
+    this.#runtime.messageTransport.deleteMessage({ messageId: message.messageId });
+  }
+
+  discardMessage(message: RealtimeChatMessage): void {
+    if (message.idempotencyKey !== undefined && this.#optimistic.delete(message.idempotencyKey)) {
       this.emit();
     }
   }
@@ -211,11 +253,7 @@ export class ChatRoomModel extends Emitter {
     }
 
     this.#runtime.messageTransport.disconnect();
-    disposeStreamMessagesSession({
-      actorId: this.options.actorId,
-      channelId: this.options.channelId,
-      clearCursor: options.clearCursor,
-    });
+    this.streamSession.dispose({ clearCursor: options.clearCursor });
   }
 
   async #runStart(): Promise<void> {
@@ -271,6 +309,21 @@ export class ChatRoomModel extends Emitter {
         if (optimistic !== undefined) {
           optimistic.status = "failed";
           this.emit();
+        }
+      }),
+      this.#runtime.messageTransport.onMessageEditResult((response) => {
+        if (response.status === "accepted") {
+          this.#editedMessageIds.add(response.message.messageId);
+          this.streamSession.timeline.replaceKnown(toPublicEditedMessage(response.message));
+        } else if (response.reason === "message_deleted") {
+          this.#editedMessageIds.delete(response.message.messageId);
+          this.streamSession.timeline.replaceKnown(toPublicDeletedMessage(response.message));
+        }
+      }),
+      this.#runtime.messageTransport.onMessageDeleteResult((response) => {
+        if (response.status === "accepted") {
+          this.#editedMessageIds.delete(response.message.messageId);
+          this.streamSession.timeline.replaceKnown(toPublicDeletedMessage(response.message));
         }
       }),
     );
@@ -332,16 +385,45 @@ export class ChatRoomModel extends Emitter {
     }
   }
 
-  #toView(message: PublicMessage): ChatMessageView {
+  #toMessage(message: PublicMessage): RealtimeChatMessage {
     return {
       key: message.messageId,
       messageId: message.messageId,
       sequence: message.sequence,
-      senderId: message.senderActorId,
-      isMine: message.senderActorId === this.options.actorId,
-      text: message.content.text,
+      senderActorId: message.senderActorId,
+      isOwn: message.senderActorId === this.options.actorId,
+      content: message.content,
       createdAt: message.createdAt,
+      isEdited:
+        (message.content !== null && message.editedAt !== undefined) ||
+        this.#editedMessageIds.has(message.messageId),
       status: "sent",
     };
   }
+}
+
+function toPublicEditedMessage(message: EditedTextMessage): PublicMessage {
+  return {
+    messageId: message.messageId,
+    streamId: message.streamId,
+    sequence: message.sequence,
+    senderActorId: message.senderActorId,
+    target: message.target,
+    content: { type: "text", text: message.text },
+    createdAt: message.createdAt,
+    editedAt: message.editedAt,
+  };
+}
+
+function toPublicDeletedMessage(message: DeletedMessage): PublicMessage {
+  return {
+    messageId: message.messageId,
+    streamId: message.streamId,
+    sequence: message.sequence,
+    senderActorId: message.senderActorId,
+    target: message.target,
+    content: null,
+    createdAt: message.createdAt,
+    deletedAt: message.deletedAt,
+  };
 }

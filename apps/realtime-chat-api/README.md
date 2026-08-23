@@ -8,6 +8,7 @@ The app owns runtime wiring only:
 - create the PostgreSQL/Kysely runtime resource
 - assemble `@wake-surfer/realtime-chat-gateway-ticket`
 - assemble `@wake-surfer/realtime-chat-message-send`
+- assemble `@wake-surfer/realtime-chat-message-mutation`
 - assemble the three `@wake-surfer/realtime-chat-stream-messages` query slices
 - expose Hono HTTP endpoints
 - own the internal Message Send HTTP transport mapping
@@ -27,14 +28,19 @@ GET  /health
 POST /realtime-chat/gateway-tickets
 POST /internal/realtime-chat/gateway-tickets/consume
 POST /internal/realtime-chat/messages
+POST /internal/realtime-chat/messages/edit
+POST /internal/realtime-chat/messages/delete
 GET  /realtime-chat/channels/:channelId/messages/latest
 GET  /realtime-chat/channels/:channelId/messages/older
 POST /internal/realtime-chat/channels/:channelId/messages/sync-after
+GET  /realtime-chat/threads/:threadId/messages/latest
+GET  /realtime-chat/threads/:threadId/messages/older
+POST /internal/realtime-chat/threads/:threadId/messages/sync-after
 ```
 
 실행 런타임은 Message Send와 Stream Messages의 세 조회 유스케이스를 같은 PostgreSQL 연결에 조립한다.
-현재 MVP는 인증된 actor의 모든 channel 읽기·쓰기를 허용하고 DM과 thread 쓰기는 거절한다. 이는 채팅
-세로 흐름을 검증하기 위한 임시 정책이며, 실제 channel membership/permission provider로 교체해야 한다.
+현재 MVP는 인증된 actor의 channel과 thread 읽기·쓰기를 허용하고 DM 쓰기는 거절한다. 이는 채팅 세로
+흐름을 검증하기 위한 임시 정책이며, 실제 conversation membership/permission provider로 교체해야 한다.
 actor 인증과 Gateway service 인증은 이 임시 권한 정책과 별개로 계속 필수다.
 
 Stream Messages route는 구성에 따라 해당 개별 유스케이스가 app dependency로 제공될 때만 mount할 수도
@@ -44,7 +50,8 @@ rate limit과 request 관측성을 소유한다. 조회 권한, cursor, watermar
 
 provider의 `status: "failure"` 결과는 app이 `stream_unavailable` 404 또는 `invalid_cursor` 409 응답으로
 변환한다. 성공 결과의 `StreamMessage`에는 transport 전용 `streamId`, target과 ISO timestamp가 없으므로,
-app의 Stream Messages page policy가 요청 `channelId`를 사용해 외부 `PublicMessage`와 response를 조립한다.
+app의 Stream Messages page policy가 요청 target을 사용해 외부 `PublicMessage`와 response를 조립한다.
+수정된 active message는 `editedAt`, 삭제된 message는 원문 없이 `deletedAt`을 포함한다.
 DB·무결성·의존 서비스 예외만 retryable 503으로 처리한다.
 
 Stream Messages 경로의 `x-request-id`는 전용 Hono middleware가 소유한다. 헤더가 없으면 UUID를 만들고,
@@ -64,6 +71,10 @@ trusted headers, so `actorId` and other server-owned fields are rejected from th
 commands both return the internal `InternalSendMessageResponse` with HTTP 200. An accepted response includes the
 `created | existing` persistence outcome for Gateway fan-out decisions; the public WebSocket response omits it.
 Persistence failures return the common error envelope with HTTP 503.
+
+`POST /internal/realtime-chat/messages/edit`와 `/delete`는 Gateway가 확인한 actor를 수정·삭제 유스케이스에
+전달한다. domain rejection도 HTTP 200의 공유 mutation response로 반환하고, DB·무결성 실패만 503으로
+변환한다.
 
 모든 `/internal/realtime-chat/*` 요청은 Hono Bearer Auth middleware를 먼저 통과한다. 헤더가 없거나 token이
 다르면 401, Authorization 형식이나 RFC 6750 Bearer token 문자가 올바르지 않으면 400을 반환하며,

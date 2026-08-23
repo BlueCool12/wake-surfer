@@ -4,9 +4,8 @@ Stream Messages의 latest, older, sync-after 조회 경계에서 공유하는 ve
 
 ## 공개 계약
 
-- `GET /realtime-chat/channels/:channelId/messages/latest`의 request/response schema
-- `GET /realtime-chat/channels/:channelId/messages/older`의 request/response schema
-- `POST /internal/realtime-chat/channels/:channelId/messages/sync-after`의 request/response schema
+- channel과 thread의 latest/older 공개 HTTP request/response schema
+- channel과 thread의 internal sync-after HTTP request/response schema
 - `chat.stream.sync`, `chat.stream.synced`, `chat.stream.sync.rejected`,
   `chat.stream.sync.failed` WebSocket payload schema
 - cursor, watermark, page limit, request ID와 공개 오류 코드
@@ -33,6 +32,7 @@ CommonJS로 각각 변환하며, package `exports`의 `import`와 `require` 조�
 ## 입력과 pagination
 
 - latest request에는 client-controlled cursor와 limit가 없다.
+- channel request는 `channelId`, thread request는 `threadId`를 사용하며 두 field를 섞지 않는다.
 - older와 sync-after의 limit는 생략 시 50이며 1~100 safe integer만 허용한다.
 - older와 sync-after response도 page당 최대 100개 message만 허용한다.
 - `beforeSequence`는 1 이상의 safe integer, `afterSequence`와 `throughSequence`는 0 이상의 safe integer다.

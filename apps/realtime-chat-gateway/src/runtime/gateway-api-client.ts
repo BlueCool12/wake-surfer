@@ -1,4 +1,14 @@
 import {
+  DeleteMessageRequestSchema,
+  DeleteMessageResponseSchema,
+  EditMessageRequestSchema,
+  EditMessageResponseSchema,
+  type DeleteMessageRequest,
+  type DeleteMessageResponse,
+  type EditMessageRequest,
+  type EditMessageResponse,
+} from "@wake-surfer/realtime-chat-message-mutation-contracts";
+import {
   ConsumeGatewayTicketResponseSchema,
   type ConsumeGatewayTicketResponse,
 } from "@wake-surfer/realtime-chat-gateway-ticket-contracts";
@@ -15,14 +25,24 @@ export type GatewayApiClient = {
     signal: AbortSignal;
     ticket: string;
   }) => Promise<ConsumeGatewayTicketResponse>;
+  deleteMessage?: (
+    request: DeleteMessageRequest,
+    context: GatewayActorRequestContext,
+  ) => Promise<DeleteMessageResponse>;
+  editMessage?: (
+    request: EditMessageRequest,
+    context: GatewayActorRequestContext,
+  ) => Promise<EditMessageResponse>;
   sendMessage: (
     request: SendMessageRequest,
-    context: {
-      actorId: string;
-      requestId: string;
-      signal: AbortSignal;
-    },
+    context: GatewayActorRequestContext,
   ) => Promise<InternalSendMessageResponse>;
+};
+
+type GatewayActorRequestContext = {
+  actorId: string;
+  requestId: string;
+  signal: AbortSignal;
 };
 
 export type CreateGatewayApiClientOptions = {
@@ -59,6 +79,49 @@ export function createGatewayApiClient(options: CreateGatewayApiClientOptions): 
 
       if (!parsed.success) {
         throw new Error("게이트웨이 티켓 소비 응답 형식이 올바르지 않습니다.");
+      }
+
+      return parsed.data;
+    },
+    async deleteMessage(request, context) {
+      const parsedRequest = DeleteMessageRequestSchema.parse(request);
+      const value = await requestJson(
+        new URL("internal/realtime-chat/messages/delete", apiBaseUrl),
+        {
+          body: parsedRequest,
+          context,
+          fetchImplementation,
+          headers: {
+            ...createInternalHeaders(options, context.requestId),
+            [options.actorHeader]: context.actorId,
+          },
+          timeoutMilliseconds: options.timeoutMilliseconds,
+        },
+      );
+      const parsed = DeleteMessageResponseSchema.safeParse(value);
+
+      if (!parsed.success) {
+        throw new Error("메시지 삭제 응답 형식이 올바르지 않습니다.");
+      }
+
+      return parsed.data;
+    },
+    async editMessage(request, context) {
+      const parsedRequest = EditMessageRequestSchema.parse(request);
+      const value = await requestJson(new URL("internal/realtime-chat/messages/edit", apiBaseUrl), {
+        body: parsedRequest,
+        context,
+        fetchImplementation,
+        headers: {
+          ...createInternalHeaders(options, context.requestId),
+          [options.actorHeader]: context.actorId,
+        },
+        timeoutMilliseconds: options.timeoutMilliseconds,
+      });
+      const parsed = EditMessageResponseSchema.safeParse(value);
+
+      if (!parsed.success) {
+        throw new Error("메시지 수정 응답 형식이 올바르지 않습니다.");
       }
 
       return parsed.data;

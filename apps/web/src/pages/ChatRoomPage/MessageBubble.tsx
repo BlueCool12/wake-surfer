@@ -13,10 +13,6 @@ type MessageBubbleProps = {
   onRetry?: (() => void) | undefined;
   /** 전송 실패한 메시지를 삭제할 때 호출. */
   onDelete?: (() => void) | undefined;
-  /** 삭제된 메시지인지. */
-  isDeleted?: boolean;
-  /** 수정된 메시지인지 ("수정됨" 표시용). */
-  isEdited?: boolean;
   /** 이 메시지에 달린 답글 수. 0이면 답글 표시를 하지 않는다. */
   replyCount?: number;
   /** 오른쪽 패널에 이 메시지의 스레드가 열려있는지. */
@@ -36,8 +32,6 @@ function MessageBubble({
   message,
   onRetry,
   onDelete,
-  isDeleted = false,
-  isEdited = false,
   replyCount = 0,
   isThreadActive = false,
   onOpenThread,
@@ -49,7 +43,9 @@ function MessageBubble({
   const isCoarsePointer = useIsCoarsePointer();
   const [isActionSheetOpen, setIsActionSheetOpen] = useState(false);
   const hasFailedActions =
-    message.status === "failed" && !isDeleted && (onRetry !== undefined || onDelete !== undefined);
+    message.status === "failed" &&
+    !message.isDeleted &&
+    (onRetry !== undefined || onDelete !== undefined);
   const usesActionSheet = isCoarsePointer && hasFailedActions;
 
   const isClickable = usesActionSheet || (message.status === "sent" && onOpenThread !== undefined);
@@ -61,7 +57,7 @@ function MessageBubble({
     message.isMine ? styles.bubbleMine : styles.bubbleOther,
     message.status === "pending" ? styles.bubblePending : "",
     message.status === "failed" ? styles.bubbleFailed : "",
-    isDeleted ? styles.bubbleDeleted : "",
+    message.isDeleted ? styles.bubbleDeleted : "",
     isThreadActive ? styles.bubbleThreadActive : "",
     isClickable ? styles.bubbleClickable : "",
   ]
@@ -83,7 +79,8 @@ function MessageBubble({
     }
   };
 
-  const showReactions = message.status === "sent" && !isDeleted && onToggleReaction !== undefined;
+  const showReactions =
+    message.status === "sent" && !message.isDeleted && onToggleReaction !== undefined;
   const reactionsNode = showReactions ? (
     <MessageReactions reactions={reactions} onToggle={onToggleReaction} isMine={message.isMine} />
   ) : null;
@@ -105,7 +102,7 @@ function MessageBubble({
           tabIndex={isClickable ? 0 : undefined}
           onKeyDown={isClickable ? handleKeyDown : undefined}
         >
-          {isDeleted ? (
+          {message.isDeleted ? (
             <span className={styles.deletedText}>삭제된 메시지입니다</span>
           ) : (
             <>
@@ -154,7 +151,7 @@ function MessageBubble({
                   <span className={styles.metaText}>
                     {message.status === "pending"
                       ? "전송 중…"
-                      : isEdited
+                      : message.isEdited
                         ? `수정됨 · ${formatTime(message.createdAt)}`
                         : formatTime(message.createdAt)}
                   </span>

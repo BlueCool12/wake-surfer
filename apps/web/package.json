@@ -6,12 +6,10 @@
   "scripts": {
     "dev": "vite",
     "build": "pnpm run build:deps && tsc -b && vite build",
-    "build:deps": "pnpm --filter @wake-surfer/realtime-chat-message-send-contracts build && pnpm --filter @wake-surfer/realtime-chat-stream-messages-client build",
+    "build:deps": "pnpm --filter @wake-surfer/realtime-chat-stream-messages-client build",
     "preview": "vite preview"
   },
   "dependencies": {
-    "@wake-surfer/realtime-chat-message-contracts": "workspace:*",
-    "@wake-surfer/realtime-chat-message-send-contracts": "workspace:*",
     "@wake-surfer/realtime-chat-stream-messages-client": "workspace:*",
     "lucide-react": "^1.23.0",
     "react": "^19.2.7",

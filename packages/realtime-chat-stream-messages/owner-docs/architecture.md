@@ -59,7 +59,9 @@ Stream Messages는 물리적으로 `message_streams`와 `messages`를 함께 사
 database 타입은 TypeScript structural typing으로 이 계약을 만족한다.
 
 `messages.content` JSONB는 package 내부 parser로 현재 저장 형식을 검증한 뒤 `StreamMessage.content`로
-명시적으로 변환한다. Target은 `messages`의 중복 열이 아니라 `message_streams`에서 읽는다.
+명시적으로 변환한다. `content = null`과 유효한 `deleted_at` 조합은 원문 없는 tombstone으로 반환하고,
+두 lifecycle 열이 어긋난 row는 무결성 오류다. Target은 `messages`의 중복 열이 아니라
+`message_streams`에서 읽는다.
 
 Query별 cursor, watermark, 조회 방향과 page 진행 의미는 공통화하지 않는다. row parsing이나 공통 오류처럼
 Query 의미가 없는 안정된 primitive만 공유한다.

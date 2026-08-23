@@ -34,6 +34,8 @@ header를 보낼 수 없으므로 티켓은 query parameter로 받는다.
 
 - `chat.channel.join`: `{ channelId }`
 - `chat.message.send`: `SendMessageRequest`
+- `chat.message.edit`: `EditMessageRequest`
+- `chat.message.delete`: `DeleteMessageRequest`
 - `chat.stream.sync`: `ChatStreamSyncEvent`
 
 지원하는 server event:
@@ -43,14 +45,17 @@ header를 보낼 수 없으므로 티켓은 query parameter로 받는다.
 - `chat.message.accepted`
 - `chat.message.rejected`
 - `chat.message.created`: flat `PublicMessage`
+- `chat.message.edit.accepted`, `chat.message.edit.rejected`
+- `chat.message.delete.accepted`, `chat.message.delete.rejected`
 - `chat.stream.synced`
 - `chat.stream.sync.rejected`
 - `chat.stream.sync.failed`
 
-메시지 전송은 `POST /internal/realtime-chat/messages`로 중계한다. 새로 저장된 accepted message만 같은
-channel을 구독한 현재 인스턴스의 ready session에 fan-out한다. 기존 메시지를 반환한 멱등 재시도는
-송신자에게 accepted를 다시 보내지만 created를 재발행하지 않는다. 다중 Gateway 간 전달과 durable
-broker는 이 MVP의 범위가 아니다.
+메시지 전송은 `POST /internal/realtime-chat/messages`로 중계한다. 새 channel message만 같은 channel을
+구독한 현재 인스턴스의 ready session에 fan-out한다. thread message는 송신자 accepted까지만 전달하며
+신규 thread fan-out은 하지 않는다. 수정·삭제도 API에 중계하고 요청자에게 accepted/rejected 결과만
+돌려준다. 기존 메시지를 반환한 멱등 재시도는 created를 재발행하지 않는다. 다중 Gateway 간 전달과
+durable broker는 이 MVP의 범위가 아니다.
 
 ## 로컬 실행
 

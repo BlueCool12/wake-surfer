@@ -67,6 +67,8 @@ export async function readOlderMessages<DB extends StreamMessagesDatabase>(
           "message_streams.target_id as targetId",
           "messages.content",
           "messages.created_at as createdAt",
+          "messages.deleted_at as deletedAt",
+          "messages.edited_at as editedAt",
         ])
         .where("messages.stream_id", "=", input.streamId)
         .where("messages.sequence", "<", input.beforeSequence)

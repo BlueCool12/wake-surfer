@@ -1,4 +1,5 @@
 import type { StreamMessagesRecoveryPhase } from "./recovery-model.js";
+import { getStreamMessagesClientTargetKey, type StreamMessagesClientTarget } from "./target.js";
 
 export type KeyValueStorage = {
   getItem: (key: string) => string | null;
@@ -22,7 +23,7 @@ const STORAGE_VERSION = "v1";
 
 export function createStreamMessagesCursorStorage(input: {
   actorId: string;
-  channelId: string;
+  target: StreamMessagesClientTarget;
   storage: KeyValueStorage;
 }): StreamMessagesCursorStorage {
   const key = [
@@ -30,7 +31,7 @@ export function createStreamMessagesCursorStorage(input: {
     "stream-messages",
     STORAGE_VERSION,
     encodeURIComponent(assertNonBlank(input.actorId, "actorId")),
-    encodeURIComponent(assertNonBlank(input.channelId, "channelId")),
+    encodeURIComponent(getStreamMessagesClientTargetKey(input.target)),
   ].join(":");
 
   return {

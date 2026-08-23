@@ -10,6 +10,11 @@ import type {
 
 import { Emitter } from "./emitter.js";
 import { StreamMessageProtocolError } from "./errors.js";
+import {
+  copyStreamMessagesClientTarget,
+  streamMessagesClientTargetsEqual,
+  type StreamMessagesClientTarget,
+} from "./target.js";
 
 export class StreamMessagesTimelineModel extends Emitter {
   readonly #messages: PublicMessage[] = [];
@@ -22,12 +27,15 @@ export class StreamMessagesTimelineModel extends Emitter {
   hasMoreBefore = false;
   historyBeforeCursor: number | null = null;
 
-  constructor(readonly channelId: string) {
+  readonly target: StreamMessagesClientTarget;
+
+  constructor(target: StreamMessagesClientTarget) {
     super();
+    this.target = copyStreamMessagesClientTarget(target);
   }
 
   get streamId(): string {
-    return getCanonicalStreamId({ type: "channel", channelId: this.channelId });
+    return getCanonicalStreamId(this.target);
   }
 
   get messages(): readonly PublicMessage[] {
@@ -133,6 +141,31 @@ export class StreamMessagesTimelineModel extends Emitter {
 
   applyAccepted(message: PublicMessage): void {
     this.applyLive(message);
+  }
+
+  replaceKnown(message: PublicMessage): void {
+    this.#assertMessageTarget(message);
+    this.#assertIdentity(message);
+    const sequence = this.#messageIdToSequence.get(message.messageId);
+
+    if (sequence !== undefined) {
+      const index = this.#messages.findIndex(
+        (candidate) => candidate.messageId === message.messageId,
+      );
+
+      if (index === -1) {
+        this.#throwIdentityConflict(message);
+      }
+
+      this.#messages[index] = message;
+      this.emit();
+      return;
+    }
+
+    if (this.#bufferedMessageIdToSequence.has(message.messageId)) {
+      this.#bufferedBySequence.set(message.sequence, message);
+      this.emit();
+    }
   }
 
   #insertLoadedMessage(message: PublicMessage): void {
@@ -263,8 +296,7 @@ export class StreamMessagesTimelineModel extends Emitter {
   #assertMessageTarget(message: PublicMessage): void {
     if (
       message.streamId !== this.streamId ||
-      message.target.type !== "channel" ||
-      message.target.channelId !== this.channelId
+      !streamMessagesClientTargetsEqual(this.target, message.target)
     ) {
       throw new StreamMessageProtocolError("message_target_mismatch", {
         expectedStreamId: this.streamId,
