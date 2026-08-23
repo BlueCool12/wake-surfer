@@ -66,13 +66,6 @@ pnpm --filter @wake-surfer/realtime-chat-gateway build
 pnpm --filter @wake-surfer/realtime-chat-gateway start
 ```
 
-## 검증
-
-```powershell
-pnpm --filter @wake-surfer/realtime-chat-gateway typecheck
-pnpm --filter @wake-surfer/realtime-chat-gateway test
-```
-
 ## Docker 배포
 
 이 앱의 `docker/`가 Gateway Compose·환경 파일·Dockerfile을 소유한다. 배포 스크립트가 호스트에서

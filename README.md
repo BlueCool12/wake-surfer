@@ -122,6 +122,7 @@ pnpm docker:up
 ## 검증
 
 ```bash
+pnpm build:realtime-chat
 pnpm lint
 pnpm format:check
 ```

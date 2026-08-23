@@ -43,7 +43,7 @@ POST /internal/realtime-chat/threads/:threadId/messages/sync-after
 흐름을 검증하기 위한 임시 정책이며, 실제 conversation membership/permission provider로 교체해야 한다.
 actor 인증과 Gateway service 인증은 이 임시 권한 정책과 별개로 계속 필수다.
 
-Stream Messages route는 테스트처럼 해당 개별 유스케이스가 app dependency로 제공될 때만 mount할 수도
+Stream Messages route는 구성에 따라 해당 개별 유스케이스가 app dependency로 제공될 때만 mount할 수도
 있다. app은 외부 schema 검증, 인증된 actor context 연결, 48KiB final-envelope 조정, HTTP 오류/status,
 rate limit과 request 관측성을 소유한다. 조회 권한, cursor, watermark와 Kysely는
 `@wake-surfer/realtime-chat-stream-messages`가 소유한다.
