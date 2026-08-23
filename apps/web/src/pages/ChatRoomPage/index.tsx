@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
-import { Menu, PanelRight, Phone, Send } from "lucide-react";
+import { Headset, Menu, PanelRight, Send } from "lucide-react";
 
 import Loading from "../../components/Loading";
 import ThemeToggle from "../../components/ThemeToggle";
@@ -300,15 +300,16 @@ function ChatRoomPage() {
           </button>
           <span className={styles.channelHash}>#</span>
           <h1 className={styles.channelName}>{channelId}</h1>
+          {/* 참가 전용이다. 음소거·나가기는 통화 중에만 나타나는 아래 바가 전담한다. */}
           <button
             type="button"
             className={styles.callButton}
-            onClick={voice.status === "idle" ? voice.join : voice.leave}
-            disabled={voice.status === "joining"}
+            onClick={voice.join}
+            disabled={voice.status === "joining" || voice.status === "connected"}
             aria-pressed={voice.status === "connected"}
-            aria-label={voice.status === "idle" ? "음성 통화 참가" : "음성 통화 나가기"}
+            aria-label={voice.status === "connected" ? "음성 통화 참가 중" : "음성 통화 참가"}
           >
-            <Phone size={16} aria-hidden="true" />
+            <Headset size={16} aria-hidden="true" />
           </button>
           <ThemeToggle className={styles.themeToggle} />
           <button
@@ -321,6 +322,7 @@ function ChatRoomPage() {
           </button>
         </header>
 
+        {/* 화면 위를 떠다니므로 레이아웃상 위치는 의미가 없다. 헤더 다음에 두어 읽기 쉽게만 한다. */}
         <VoiceCallBar
           status={voice.status}
           participants={voice.participants}
@@ -328,6 +330,7 @@ function ChatRoomPage() {
           error={voice.error}
           leave={voice.leave}
           toggleMute={voice.toggleMute}
+          anchorRef={scrollRef}
         />
 
         <div className={styles.page}>

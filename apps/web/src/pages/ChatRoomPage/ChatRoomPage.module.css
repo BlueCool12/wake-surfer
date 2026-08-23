@@ -103,12 +103,16 @@
 }
 
 .callButton:disabled {
-  opacity: 0.5;
   cursor: default;
 }
 
+/* 연결 중일 때만 흐리게. 통화 중에는 "참가해 있다"는 표시라 또렷해야 한다. */
+.callButton:disabled:not([aria-pressed="true"]) {
+  opacity: 0.5;
+}
+
 .callButton[aria-pressed="true"] {
-  color: var(--color-accent, #2563eb);
+  color: var(--color-accent);
 }
 
 .channelHash {
