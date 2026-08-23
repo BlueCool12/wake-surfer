@@ -1,0 +1,33 @@
+<!doctype html>
+<meta charset="utf-8" />
+<title>미디어 게이트웨이 스켈레톤</title>
+<style>
+  body {
+    font:
+      14px/1.6 -apple-system,
+      sans-serif;
+    max-width: 720px;
+    margin: 2rem auto;
+    padding: 0 1rem;
+  }
+  button {
+    padding: 0.5rem 1rem;
+    font-size: 15px;
+  }
+  #log {
+    margin-top: 1rem;
+    background: #f5f5f5;
+    padding: 0.75rem;
+    border-radius: 6px;
+    font-family: ui-monospace, monospace;
+    font-size: 12px;
+    max-height: 340px;
+    overflow-y: auto;
+  }
+</style>
+<h1>미디어 게이트웨이 스켈레톤</h1>
+<p>탭 두 개에서 각각 참가하면 서로의 소리가 들려야 합니다.</p>
+<button id="join">통화 참가</button>
+<div id="audios"></div>
+<div id="log"></div>
+<script type="module" src="/dist/client.js"></script>
