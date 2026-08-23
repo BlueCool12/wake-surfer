@@ -1,5 +1,6 @@
 // mediasoup SFU 시그널링 게이트웨이.
-// 인증, 여러 방, 정원 제한, 재연결 내성, 녹음은 아직 없다. 이후 단계에서 이 위에 얹는다.
+// 인증, 재연결 내성, 녹음은 아직 없다. 이후 단계에서 이 위에 얹는다.
+import { randomUUID } from "node:crypto";
 import { createServer } from "node:http";
 import { readFile } from "node:fs/promises";
 import { networkInterfaces } from "node:os";
@@ -12,6 +13,8 @@ import {
   getUtf8ByteLength,
   parseMediaRequestFrame,
   type ConsumerDescriptor,
+  type JoinResult,
+  type MediaErrorCode,
   type MediaNotification,
   type MediaRequest,
   type ProduceResult,
@@ -24,6 +27,9 @@ import { WebSocketServer, WebSocket } from "ws";
 import { createLogger, serializeError } from "./runtime/logger.ts";
 
 const PORT = Number(process.env.PORT ?? 4000);
+const MAX_PEERS_PER_ROOM = Number(process.env.MEDIA_MAX_PEERS_PER_ROOM ?? 8);
+const RTC_MIN_PORT = Number(process.env.MEDIA_RTC_MIN_PORT ?? 40000);
+const RTC_MAX_PORT = Number(process.env.MEDIA_RTC_MAX_PORT ?? 40100);
 const logger = createLogger(process.env.LOG_LEVEL ?? "info");
 
 /**
@@ -38,30 +44,62 @@ const MEDIA_CODECS: mediasoup.types.RouterRtpCodecCapability[] = [
   { kind: "audio", mimeType: "audio/opus", clockRate: 48000, channels: 2 },
 ];
 
+/** 방 하나가 Router 하나를 갖는다. Router는 자기 안의 producer끼리만 연결할 수 있는 경계다. */
+type Room = {
+  id: string;
+  router: mediasoup.types.Router;
+  peerIds: Set<string>;
+};
+
 type Peer = {
   id: string;
   socket: WebSocket;
+  roomId?: string | undefined;
   rtpCapabilities?: mediasoup.types.RtpCapabilities;
   transports: Map<string, mediasoup.types.WebRtcTransport>;
   producers: Map<string, mediasoup.types.Producer>;
   consumers: Map<string, mediasoup.types.Consumer>;
 };
 
+/**
+ * 값이 아니라 **Promise**를 담는다.
+ *
+ * `createRouter`가 비동기라, 두 참가자가 같은 새 방에 동시에 들어오면 둘 다 "방이 없다"를 보고
+ * Router를 각자 만들어 하나가 유실된다. 그 경우 서로의 오디오가 다른 Router에 걸려 들리지 않는다.
+ * 생성 중인 Promise를 먼저 등록해 두 번째 요청이 같은 것을 기다리게 한다.
+ */
+const rooms = new Map<string, Promise<Room>>();
 const peers = new Map<string, Peer>();
+
+class MediaRequestError extends Error {
+  readonly code: MediaErrorCode;
+
+  constructor(code: MediaErrorCode, message: string) {
+    super(message);
+    this.name = "MediaRequestError";
+    this.code = code;
+  }
+}
 
 const worker = await mediasoup.createWorker({
   logLevel: "warn",
-  rtcMinPort: 40000,
-  rtcMaxPort: 40100,
+  rtcMinPort: RTC_MIN_PORT,
+  rtcMaxPort: RTC_MAX_PORT,
 });
 worker.on("died", () => {
   logger.error({ workerPid: worker.pid }, "mediasoup worker가 종료되어 프로세스를 내립니다");
   process.exit(1);
 });
 
-const router = await worker.createRouter({ mediaCodecs: MEDIA_CODECS });
+// transport 하나가 udp·tcp 포트를 하나씩, 참가자가 transport를 둘(송신·수신) 쓴다.
+const PORTS_PER_PEER = 4;
 logger.info(
-  { announcedAddress: ANNOUNCED_ADDRESS, workerPid: worker.pid },
+  {
+    announcedAddress: ANNOUNCED_ADDRESS,
+    globalPeerCeiling: Math.floor((RTC_MAX_PORT - RTC_MIN_PORT + 1) / PORTS_PER_PEER),
+    maxPeersPerRoom: MAX_PEERS_PER_ROOM,
+    workerPid: worker.pid,
+  },
   "mediasoup worker 기동",
 );
 
@@ -95,7 +133,7 @@ const websocketServer = new WebSocketServer({
 
 websocketServer.on("connection", (socket) => {
   const peer: Peer = {
-    id: `peer_${Math.random().toString(36).slice(2, 10)}`,
+    id: `peer_${randomUUID()}`,
     socket,
     transports: new Map(),
     producers: new Map(),
@@ -113,10 +151,9 @@ websocketServer.on("connection", (socket) => {
   });
 
   socket.once("close", () => {
-    for (const transport of peer.transports.values()) transport.close();
-    peers.delete(peer.id);
-    logger.info({ peerCount: peers.size, peerId: peer.id }, "peer 종료");
-    broadcast(peer.id, { method: "peerClosed", data: { peerId: peer.id } });
+    void closePeer(peer).catch((error: unknown) => {
+      logger.error({ error: serializeError(error), peerId: peer.id }, "peer 정리 실패");
+    });
   });
 });
 
@@ -151,19 +188,25 @@ async function receive(peer: Peer, text: string): Promise<void> {
   const parsed = parseMediaRequestFrame(frame.data);
 
   if (!parsed.ok) {
-    send(peer.socket, { id: frame.data.id, ok: false, error: parsed.message });
+    send(peer.socket, {
+      id: frame.data.id,
+      ok: false,
+      code: parsed.code,
+      error: parsed.message,
+    });
     return;
   }
 
   try {
     send(peer.socket, { id: parsed.value.id, ok: true, data: await route(peer, parsed.value) });
   } catch (error) {
+    const code = error instanceof MediaRequestError ? error.code : "internal";
     const detail = error instanceof Error ? error.message : String(error);
     logger.warn(
-      { error: serializeError(error), method: parsed.value.method, peerId: peer.id },
+      { code, error: serializeError(error), method: parsed.value.method, peerId: peer.id },
       "요청 처리 실패",
     );
-    send(peer.socket, { id: parsed.value.id, ok: false, error: detail });
+    send(peer.socket, { id: parsed.value.id, ok: false, code, error: detail });
   }
 }
 
@@ -175,11 +218,19 @@ async function receive(peer: Peer, text: string): Promise<void> {
  */
 async function route(peer: Peer, request: MediaRequest): Promise<unknown> {
   switch (request.method) {
-    case "getRouterRtpCapabilities":
-      return router.rtpCapabilities;
+    case "join": {
+      const room = await joinRoom(peer, request.data.roomId);
+      const result: JoinResult = {
+        roomId: room.id,
+        routerRtpCapabilities: room.router.rtpCapabilities,
+        peerCount: room.peerIds.size,
+      };
+      return result;
+    }
 
     case "createWebRtcTransport": {
-      const transport = await router.createWebRtcTransport({
+      const room = await requireRoom(peer);
+      const transport = await room.router.createWebRtcTransport({
         listenInfos: [
           { protocol: "udp", ip: "0.0.0.0", announcedAddress: ANNOUNCED_ADDRESS },
           { protocol: "tcp", ip: "0.0.0.0", announcedAddress: ANNOUNCED_ADDRESS },
@@ -211,15 +262,16 @@ async function route(peer: Peer, request: MediaRequest): Promise<unknown> {
       return {};
 
     case "produce": {
+      const room = await requireRoom(peer);
       const transport = requireTransport(peer, request.data.transportId);
       const producer = await transport.produce({
         kind: request.data.kind,
         rtpParameters: request.data.rtpParameters as mediasoup.types.RtpParameters,
       });
       peer.producers.set(producer.id, producer);
-      logger.info({ peerId: peer.id, producerId: producer.id }, "producer 생성");
-      // 다른 참가자에게 새 producer를 알린다. 그쪽이 consume 요청을 보내온다.
-      broadcast(peer.id, {
+      logger.info({ peerId: peer.id, producerId: producer.id, roomId: room.id }, "producer 생성");
+      // 같은 방의 다른 참가자에게 알린다. 그쪽이 consume 요청을 보내온다.
+      await broadcastToRoom(room, peer.id, {
         method: "newProducer",
         data: { producerId: producer.id, peerId: peer.id },
       });
@@ -228,21 +280,29 @@ async function route(peer: Peer, request: MediaRequest): Promise<unknown> {
     }
 
     case "listProducers": {
-      const descriptors: ProducerDescriptor[] = [...peers.values()]
-        .filter((other) => other.id !== peer.id)
-        .flatMap((other) =>
-          [...other.producers.keys()].map((producerId) => ({ producerId, peerId: other.id })),
-        );
+      const room = await requireRoom(peer);
+      const descriptors: ProducerDescriptor[] = [...room.peerIds]
+        .filter((peerId) => peerId !== peer.id)
+        .flatMap((peerId) => {
+          const other = peers.get(peerId);
+          return other === undefined
+            ? []
+            : [...other.producers.keys()].map((producerId) => ({ producerId, peerId }));
+        });
       return descriptors;
     }
 
     case "consume": {
+      const room = await requireRoom(peer);
       const { transportId, producerId } = request.data;
       const transport = requireTransport(peer, transportId);
 
-      if (!peer.rtpCapabilities) throw new Error("rtpCapabilities가 아직 없음");
-      if (!router.canConsume({ producerId, rtpCapabilities: peer.rtpCapabilities })) {
-        throw new Error(`consume 불가: ${producerId}`);
+      if (!peer.rtpCapabilities) {
+        throw new MediaRequestError("not_joined", "rtpCapabilities가 아직 등록되지 않았습니다.");
+      }
+
+      if (!room.router.canConsume({ producerId, rtpCapabilities: peer.rtpCapabilities })) {
+        throw new MediaRequestError("not_found", `consume 불가: ${producerId}`);
       }
 
       const consumer = await transport.consume({
@@ -251,7 +311,18 @@ async function route(peer: Peer, request: MediaRequest): Promise<unknown> {
         paused: true, // 먼저 만들고 클라이언트 준비 후 resume 하는 것이 권장 순서다.
       });
       peer.consumers.set(consumer.id, consumer);
-      logger.info({ consumerId: consumer.id, peerId: peer.id, producerId }, "consumer 생성");
+      // producer가 닫히면 mediasoup이 consumer도 닫는다. Map에 죽은 항목이 쌓이지 않게 지운다.
+      consumer.on("producerclose", () => {
+        peer.consumers.delete(consumer.id);
+        logger.info(
+          { consumerId: consumer.id, peerId: peer.id },
+          "producer 종료에 따라 consumer 정리",
+        );
+      });
+      logger.info(
+        { consumerId: consumer.id, peerId: peer.id, producerId, roomId: room.id },
+        "consumer 생성",
+      );
       const descriptor: ConsumerDescriptor = {
         id: consumer.id,
         producerId: consumer.producerId,
@@ -263,18 +334,116 @@ async function route(peer: Peer, request: MediaRequest): Promise<unknown> {
 
     case "resumeConsumer": {
       const consumer = peer.consumers.get(request.data.consumerId);
-      if (!consumer) throw new Error(`consumer 없음: ${request.data.consumerId}`);
+
+      if (!consumer) {
+        throw new MediaRequestError("not_found", `consumer 없음: ${request.data.consumerId}`);
+      }
+
       await consumer.resume();
       return {};
     }
   }
 }
 
+// ── 방 생명주기 ─────────────────────────────────────────────────────────────
+
+async function joinRoom(peer: Peer, roomId: string): Promise<Room> {
+  if (peer.roomId !== undefined) {
+    throw new MediaRequestError("already_joined", `이미 ${peer.roomId}에 참가 중입니다.`);
+  }
+
+  const room = await getOrCreateRoom(roomId);
+
+  if (room.peerIds.size >= MAX_PEERS_PER_ROOM) {
+    throw new MediaRequestError("room_full", `방 정원(${MAX_PEERS_PER_ROOM}명)이 찼습니다.`);
+  }
+
+  room.peerIds.add(peer.id);
+  peer.roomId = roomId;
+  logger.info({ peerCount: room.peerIds.size, peerId: peer.id, roomId }, "방 참가");
+  return room;
+}
+
+function getOrCreateRoom(roomId: string): Promise<Room> {
+  const pending = rooms.get(roomId);
+
+  if (pending !== undefined) {
+    return pending;
+  }
+
+  const creating = worker
+    .createRouter({ mediaCodecs: MEDIA_CODECS })
+    .then((router) => {
+      logger.info({ roomId }, "방 생성");
+      return { id: roomId, router, peerIds: new Set<string>() };
+    })
+    .catch((error: unknown) => {
+      // 실패한 Promise가 남으면 이후 참가가 전부 같은 실패를 재사용한다.
+      rooms.delete(roomId);
+      throw error;
+    });
+
+  rooms.set(roomId, creating);
+  return creating;
+}
+
+async function requireRoom(peer: Peer): Promise<Room> {
+  if (peer.roomId === undefined) {
+    throw new MediaRequestError("not_joined", "먼저 join 해야 합니다.");
+  }
+
+  const pending = rooms.get(peer.roomId);
+
+  if (pending === undefined) {
+    throw new MediaRequestError("not_found", `방이 없습니다: ${peer.roomId}`);
+  }
+
+  return pending;
+}
+
+/** 참가자가 나갈 때 방에서 제거하고, 마지막 한 명이었으면 Router까지 닫는다. */
+async function leaveRoom(peer: Peer): Promise<void> {
+  const roomId = peer.roomId;
+
+  if (roomId === undefined) {
+    return;
+  }
+
+  peer.roomId = undefined;
+  const pending = rooms.get(roomId);
+
+  if (pending === undefined) {
+    return;
+  }
+
+  const room = await pending;
+  room.peerIds.delete(peer.id);
+  await broadcastToRoom(room, peer.id, { method: "peerClosed", data: { peerId: peer.id } });
+
+  if (room.peerIds.size === 0) {
+    rooms.delete(roomId);
+    room.router.close();
+    logger.info({ roomId }, "마지막 참가자가 나가 방을 닫습니다");
+  }
+}
+
+async function closePeer(peer: Peer): Promise<void> {
+  for (const transport of peer.transports.values()) {
+    transport.close();
+  }
+
+  peers.delete(peer.id);
+  await leaveRoom(peer);
+  logger.info({ peerCount: peers.size, peerId: peer.id }, "peer 종료");
+}
+
+// ── 전송 도우미 ─────────────────────────────────────────────────────────────
+
 function requireTransport(peer: Peer, transportId: string): mediasoup.types.WebRtcTransport {
   const transport = peer.transports.get(transportId);
 
   if (!transport) {
-    throw new Error(`transport 없음: ${transportId}`);
+    throw new MediaRequestError("not_found", `transport 없음: ${transportId}`);
   }
 
   return transport;
@@ -288,9 +457,16 @@ function notify(socket: WebSocket, notification: MediaNotification): void {
   send(socket, notification);
 }
 
-function broadcast(exceptPeerId: string, notification: MediaNotification): void {
-  for (const peer of peers.values()) {
-    if (peer.id !== exceptPeerId) notify(peer.socket, notification);
+async function broadcastToRoom(
+  room: Room,
+  exceptPeerId: string,
+  notification: MediaNotification,
+): Promise<void> {
+  for (const peerId of room.peerIds) {
+    if (peerId === exceptPeerId) continue;
+
+    const peer = peers.get(peerId);
+    if (peer !== undefined) notify(peer.socket, notification);
   }
 }
 

@@ -3,6 +3,7 @@ import {
   ResponseFrameSchema,
   parseMediaNotification,
   type ConsumerDescriptor,
+  type JoinResult,
   type MediaMethod,
   type ProduceResult,
   type ProducerDescriptor,
@@ -90,9 +91,16 @@ function handleNotification(message: unknown): void {
   }
 }
 
+/** 방은 URL로 고른다. 인증이 붙으면 여기서 권한 검사를 거치게 된다. */
+const roomId = new URLSearchParams(location.search).get("room") ?? "general";
+
 async function start() {
-  const routerRtpCapabilities = await request<types.RtpCapabilities>("getRouterRtpCapabilities");
-  await device.load({ routerRtpCapabilities });
+  const joined = await request<JoinResult>("join", { roomId });
+  log(`방 참가: ${joined.roomId} (현재 ${joined.peerCount}명)`);
+
+  await device.load({
+    routerRtpCapabilities: joined.routerRtpCapabilities as types.RtpCapabilities,
+  });
   await request("setRtpCapabilities", { rtpCapabilities: device.rtpCapabilities });
   log("device 로드 완료");
 
