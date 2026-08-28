@@ -33,6 +33,13 @@
   font-size: var(--font-size-sm);
 }
 
+.error {
+  margin: 0 0 var(--space-5);
+  color: var(--color-danger, #c0392b);
+  font-size: var(--font-size-sm);
+  line-height: 1.5;
+}
+
 .githubButton {
   display: inline-flex;
   align-items: center;
