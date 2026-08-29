@@ -14,8 +14,12 @@
   스케일아웃 시 이 registry만 교체하도록 경계를 유지한다.
 - `announcedAddress`에 loopback 주소를 쓰지 않는다. 루프백을 주면 브라우저가 relay 후보를 만들지
   않으면서 **에러도 발생시키지 않아** 원인 추적이 매우 어렵다. 기본값은 LAN 주소 탐지다.
-- **`pnpm run <script>`를 쓰지 않는다.** 실행 전 의존성 검사가 재설치를 유발해 빌드해둔 worker
-  바이너리와 헤더 패치를 지운다. `node scripts/build-worker.mjs`처럼 직접 호출한다.
+- **이 앱의 스크립트는 `pnpm run` 대신 직접 호출한다**(`node scripts/build-worker.mjs`). 실행 전
+  의존성 검사가 재설치를 유발하면 빌드해둔 worker 바이너리와 헤더 패치가 지워진다.
+- **workspace `allowBuilds`에서 mediasoup은 `false`다.** 허용하면 postinstall의 worker 컴파일이
+  실패하는 환경에서 install 전체가 죽고, 그 install을 부르는 `pnpm lint`·`pnpm format`까지 같이
+  멈춘다. 바이너리는 로컬에서 `scripts/build-worker.mjs`가, 배포에서는 Dockerfile의 worker
+  스테이지가 각각 따로 만든다.
 - mediasoup은 **3.19.17에 고정**한다. 3.19.18부터 C++20 `std::ranges`를 요구하는데 macOS 12의
   상한인 Apple clang 14에는 없다. 올리려면 Linux 또는 최신 툴체인이 먼저 필요하다.
 - `scripts/build-worker.mjs`의 우회(헤더 include 주입, `SSL_CERT_FILE` 지정)는 upstream 문제

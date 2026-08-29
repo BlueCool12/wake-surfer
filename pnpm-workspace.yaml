@@ -6,7 +6,11 @@ allowBuilds:
   "@prisma/engines": true
   cpu-features: true
   esbuild: true
-  mediasoup: true
+  # mediasoup의 postinstall은 worker 바이너리를 컴파일한다. 이걸 허용하면 컴파일이 실패하는
+  # 환경에서 install 전체가 죽고, pnpm run의 의존성 검사까지 막혀 lint·format처럼 무관한
+  # 스크립트가 함께 멈춘다. 바이너리는 로컬에서 apps/realtime-media-gateway/scripts/build-worker.mjs가,
+  # 배포에서는 그 앱 Dockerfile의 worker 스테이지가 각각 따로 만드므로 여기서는 필요 없다.
+  mediasoup: false
   prisma: true
   protobufjs: true
   ssh2: true
