@@ -1,0 +1,35 @@
+services:
+  realtime-media-gateway:
+    image: wake-surfer/realtime-media-gateway:local
+    pull_policy: build
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    init: true
+    restart: unless-stopped
+    env_file:
+      - ./runtime.dev.env
+    ports:
+      - "127.0.0.1:${MEDIA_GATEWAY_PORT:-4000}:4000"
+      - "127.0.0.1:${MEDIA_GATEWAY_RTC_PORT:-44444}:44444/udp"
+      - "127.0.0.1:${MEDIA_GATEWAY_RTC_PORT:-44444}:44444/tcp"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:4000/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - default
+      - media-gateway-host-access
+    stop_grace_period: 10s
+
+networks:
+  media-gateway-host-access:
+    driver: bridge

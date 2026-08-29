@@ -9,6 +9,10 @@ const appBuilds = new Map([
     "realtime-chat-gateway",
     ["--filter", "@wake-surfer/realtime-chat-gateway", "run", "build:bundle"],
   ],
+  [
+    "realtime-media-gateway",
+    ["--filter", "@wake-surfer/realtime-media-gateway", "run", "build:bundle"],
+  ],
   ["web", ["--filter", "web", "run", "build"]],
 ]);
 const appServices = [...appBuilds.keys()];
