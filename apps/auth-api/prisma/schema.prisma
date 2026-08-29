@@ -1,0 +1,33 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+/// 우리 서비스 회원. 로그인 수단과 분리해 여러 provider를 붙일 수 있게 한다.
+model User {
+  id         String     @id @default(uuid())
+  email      String
+  login      String
+  createdAt  DateTime   @default(now()) @map("created_at")
+  identities Identity[]
+
+  @@map("users")
+}
+
+/// 회원이 사용하는 로그인 수단. (provider, providerUserId)가 매핑 키다.
+/// providerUserId는 provider마다 타입이 달라 문자열로 통일한다.
+model Identity {
+  id             Int      @id @default(autoincrement())
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId         String   @map("user_id")
+  provider       String
+  providerUserId String   @map("provider_user_id")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  @@unique([provider, providerUserId])
+  @@map("identities")
+}

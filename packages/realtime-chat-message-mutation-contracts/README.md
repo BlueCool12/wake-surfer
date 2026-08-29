@@ -8,12 +8,19 @@ Web, Gateway, API가 공유하는 메시지 수정 요청과 삭제 요청의 �
 
 - `EditMessageRequestSchema`, `EditMessageRequest`, `parseEditMessageRequest`
 - `DeleteMessageRequestSchema`, `DeleteMessageRequest`, `parseDeleteMessageRequest`
+- `EditMessageResponseSchema`, `EditMessageResponse`
+- `DeleteMessageResponseSchema`, `DeleteMessageResponse`
+- ISO datetime으로 직렬화된 `EditedTextMessageSchema`, `DeletedMessageSchema`
 
 수정 요청은 변경할 `messageId`와 기존 본문을 대체할 `text`를 전달한다. 삭제 요청은 삭제할
 `messageId`만 전달한다.
 
 요청 계약은 필드의 구조와 자료형을 검사한다. 수정 본문의 공백 여부와 길이 같은 업무 규칙은 메시지 수정
 기능에서 판단한다.
+
+응답 계약은 accepted와 domain rejection을 구분한다. 수정은 `invalid_content`, `write_forbidden`,
+`message_deleted`, 삭제는 `write_forbidden`을 rejection reason으로 사용한다. `message_deleted` 수정 결과는
+현재 tombstone을 함께 반환한다.
 
 ## 모듈 형식
 

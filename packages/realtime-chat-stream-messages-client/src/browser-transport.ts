@@ -4,9 +4,11 @@ import {
   ChatStreamSyncRejectedEventSchema,
   ChatStreamSyncedEventSchema,
   LatestStreamMessagesHttpRequestSchema,
+  LatestThreadStreamMessagesHttpRequestSchema,
   LatestStreamMessagesResponseSchema,
   MAX_STREAM_MESSAGES_PAGE_ENVELOPE_UTF8_BYTES,
   OlderStreamMessagesHttpRequestSchema,
+  OlderThreadStreamMessagesHttpRequestSchema,
   OlderStreamMessagesResponseSchema,
   RequestIdSchema,
   StreamMessagesHttpErrorResponseSchema,
@@ -14,7 +16,9 @@ import {
   SyncAfterStreamMessagesResponseSchema,
   type ChatStreamSyncEvent,
   type LatestStreamMessagesHttpRequest,
+  type LatestThreadStreamMessagesHttpRequest,
   type OlderStreamMessagesHttpRequest,
+  type OlderThreadStreamMessagesHttpRequest,
   type SyncAfterStreamMessagesRequest,
   type SyncAfterStreamMessagesResponse,
 } from "@wake-surfer/realtime-chat-stream-messages-contracts";
@@ -55,7 +59,10 @@ export function createBrowserStreamMessagesTransport(
 
   return {
     loadLatest: (request, context) => {
-      const parsedRequest = LatestStreamMessagesHttpRequestSchema.parse(request);
+      const parsedRequest =
+        "threadId" in request
+          ? LatestThreadStreamMessagesHttpRequestSchema.parse(request)
+          : LatestStreamMessagesHttpRequestSchema.parse(request);
       return loadHttpPage({
         context,
         createRequestId,
@@ -66,7 +73,10 @@ export function createBrowserStreamMessagesTransport(
       });
     },
     loadOlder: (request, context) => {
-      const parsedRequest = OlderStreamMessagesHttpRequestSchema.parse(request);
+      const parsedRequest =
+        "threadId" in request
+          ? OlderThreadStreamMessagesHttpRequestSchema.parse(request)
+          : OlderStreamMessagesHttpRequestSchema.parse(request);
       return loadHttpPage({
         context,
         createRequestId,
@@ -207,16 +217,27 @@ async function syncAfter(
   }
 }
 
-function createLatestUrl(baseUrl: URL, request: LatestStreamMessagesHttpRequest): URL {
+function createLatestUrl(
+  baseUrl: URL,
+  request: LatestStreamMessagesHttpRequest | LatestThreadStreamMessagesHttpRequest,
+): URL {
+  const [targetKind, targetId] =
+    "threadId" in request ? ["threads", request.threadId] : ["channels", request.channelId];
+
   return new URL(
-    `realtime-chat/channels/${encodeURIComponent(request.channelId)}/messages/latest`,
+    `realtime-chat/${targetKind}/${encodeURIComponent(targetId)}/messages/latest`,
     baseUrl,
   );
 }
 
-function createOlderUrl(baseUrl: URL, request: OlderStreamMessagesHttpRequest): URL {
+function createOlderUrl(
+  baseUrl: URL,
+  request: OlderStreamMessagesHttpRequest | OlderThreadStreamMessagesHttpRequest,
+): URL {
+  const [targetKind, targetId] =
+    "threadId" in request ? ["threads", request.threadId] : ["channels", request.channelId];
   const url = new URL(
-    `realtime-chat/channels/${encodeURIComponent(request.channelId)}/messages/older`,
+    `realtime-chat/${targetKind}/${encodeURIComponent(targetId)}/messages/older`,
     baseUrl,
   );
   url.searchParams.set("beforeSequence", String(request.beforeSequence));

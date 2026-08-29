@@ -8,10 +8,11 @@ transport와 저장 구현에 독립적인 공개 message value 계약을 제공
 - `PublicMessage`와 text content의 타입 및 strict runtime schema
 - UTF-8 기준 text 최대 8,192 byte 정책
 
-`PublicMessage`는 `messageId`, `streamId`, `sequence`, `senderActorId`, `target`, `content`, `createdAt`을
-포함하고 `sentAtClient`를 선택적으로 받는다. `clientMessageId`는 public message value에 포함하지
-않는다. 현재 content variant는 `{ type: "text", text }`만 지원하며, 알 수 없는 필드와 variant는
-strict runtime schema가 거절한다.
+`PublicMessage`는 active text message와 tombstone의 union이다. active message는 기존
+`{ type: "text", text }` content와 선택적인 `editedAt`을 유지한다. 삭제된 message는 `content: null`과 `deletedAt`을 가지며
+원문을 노출하지 않는다. 두 variant 모두 `messageId`, `streamId`, `sequence`, `senderActorId`, `target`,
+`createdAt`을 포함하고 `sentAtClient`를 선택적으로 받는다. 알 수 없는 필드와 variant는 strict runtime
+schema가 거절한다.
 
 `getCanonicalStreamId(target)`은 `{target.type}:{targetId}`를 반환한다. 예를 들어 channel target의
 canonical stream ID는 `channel:{channelId}`다. canonical stream identity가 필요한 consumer는 이 함수를

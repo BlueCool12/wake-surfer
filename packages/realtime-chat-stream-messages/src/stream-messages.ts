@@ -26,18 +26,27 @@ export type StreamMessagesQueryContext = {
   actorId: string;
 };
 
-export type StreamMessage = {
+type StreamMessageBase = {
   messageId: string;
   sequence: number;
   senderActorId: string;
   target: StreamMessagesTarget;
-  content: {
-    type: "text";
-    text: string;
-  };
   createdAt: Date;
   sentAtClient?: Date;
 };
+
+export type StreamMessage =
+  | (StreamMessageBase & {
+      content: {
+        type: "text";
+        text: string;
+      };
+      editedAt?: Date;
+    })
+  | (StreamMessageBase & {
+      content: null;
+      deletedAt: Date;
+    });
 
 export type StreamMessagesFailureCode = "stream_unavailable" | "invalid_cursor";
 
@@ -67,6 +76,8 @@ export type RawStreamMessageRow = {
   targetId: unknown;
   content: unknown;
   createdAt: unknown;
+  deletedAt?: unknown;
+  editedAt?: unknown;
 };
 
 export type RawStreamMetadataRow = {
@@ -205,13 +216,6 @@ export function parseStreamMessageRow(
   const sequence = parsePositiveSafeInteger(row.sequence);
   const senderActorId = parseNonBlankString(row.senderActorId);
   const createdAt = parseDate(row.createdAt);
-  let content;
-
-  try {
-    content = parsePersistedTextMessageContent(row.content);
-  } catch {
-    throw new StreamMessagesDataIntegrityError("invalid_storage_row", metadata);
-  }
 
   if (
     messageId === undefined ||
@@ -222,16 +226,54 @@ export function parseStreamMessageRow(
     throw new StreamMessagesDataIntegrityError("invalid_storage_row", metadata);
   }
 
-  const message: StreamMessage = {
+  const base = {
     messageId,
     sequence,
     senderActorId,
     target: expected.target,
+    createdAt,
+  };
+
+  if (row.content === null) {
+    const deletedAt = parseDate(row.deletedAt);
+
+    if (deletedAt === undefined) {
+      throw new StreamMessagesDataIntegrityError("invalid_storage_row", metadata);
+    }
+
+    return {
+      ...base,
+      content: null,
+      deletedAt,
+    };
+  }
+
+  if (row.deletedAt !== null && row.deletedAt !== undefined) {
+    throw new StreamMessagesDataIntegrityError("invalid_storage_row", metadata);
+  }
+
+  let content;
+
+  try {
+    content = parsePersistedTextMessageContent(row.content);
+  } catch {
+    throw new StreamMessagesDataIntegrityError("invalid_storage_row", metadata);
+  }
+
+  const editedAt =
+    row.editedAt === null || row.editedAt === undefined ? undefined : parseDate(row.editedAt);
+
+  if (row.editedAt !== null && row.editedAt !== undefined && editedAt === undefined) {
+    throw new StreamMessagesDataIntegrityError("invalid_storage_row", metadata);
+  }
+
+  const message: StreamMessage = {
+    ...base,
     content: {
       type: "text",
       text: content.text,
     },
-    createdAt,
+    ...(editedAt === undefined ? {} : { editedAt }),
   };
 
   return message;

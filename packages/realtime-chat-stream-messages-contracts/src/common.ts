@@ -3,6 +3,7 @@ import type {
   ChannelId,
   PublicMessage,
   StreamId,
+  ThreadId,
 } from "@wake-surfer/realtime-chat-message-contracts";
 import { z } from "zod";
 
@@ -25,6 +26,7 @@ export const RequestIdSchema = z
   .max(MAX_REQUEST_ID_LENGTH)
   .refine((requestId) => requestId.trim().length > 0, "requestId는 공백일 수 없습니다.");
 export const ChannelIdSchema = NonBlankStringSchema;
+export const ThreadIdSchema = NonBlankStringSchema;
 export const ChannelStreamIdSchema = z.string().refine((streamId) => {
   const prefix = "channel:";
 
@@ -98,4 +100,4 @@ export function validatePageMessages(
   }
 }
 
-export type { ChannelId };
+export type { ChannelId, ThreadId };

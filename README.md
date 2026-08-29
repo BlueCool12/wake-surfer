@@ -143,6 +143,16 @@ RTC 포트(`MEDIA_GATEWAY_RTC_PORT`, 기본 44444)는 시그널링 포트와 달
 ## 검증
 
 ```bash
+pnpm build:realtime-chat
 pnpm lint
 pnpm format:check
 ```
+
+## 라이선스
+
+Copyright (C) 2026 changha lee, BlueCool12, chan0324
+
+이 프로젝트는 [GNU Affero General Public License v3.0](LICENSE)으로 배포됩니다.
+
+AGPL은 수정본을 **네트워크 서비스로 제공하는 경우에도** 소스 공개 의무가 발생합니다. 이 코드를
+기반으로 서비스를 운영하려면 수정된 전체 소스를 동일 라이선스로 공개해야 합니다.

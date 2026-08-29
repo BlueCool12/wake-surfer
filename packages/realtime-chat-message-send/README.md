@@ -27,6 +27,7 @@ root message를 기준으로 package가 thread stream 생성 가능 여부를 �
   반환한다.
 - 같은 sender의 같은 `idempotencyKey`로 같은 canonical request fingerprint를 재시도하면
   `send_message_receipts`가 가리키는 기존 메시지를 `persistence: "existing"`인 `accepted`로 반환한다.
+- 해당 기존 메시지가 이미 삭제됐다면 원문을 복원하지 않고 `message_deleted`로 거절한다.
 - 같은 sender와 `idempotencyKey`를 다른 target 또는 text에 재사용하면
   `idempotency_conflict`로 거절한다.
 - 새 메시지는 resolve된 stream의 head를 원자적으로 증가시키고 JSONB content, 불변 receipt와 함께 같은

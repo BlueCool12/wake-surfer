@@ -1,5 +1,3 @@
-import type { OlderStreamMessagesHttpRequest } from "@wake-surfer/realtime-chat-stream-messages-contracts";
-
 import {
   createStreamMessagesCursorStorage,
   toStoredRecoveryState,
@@ -9,6 +7,7 @@ import {
 import { StreamMessageProtocolError, StreamMessagesTransportError } from "./errors.js";
 import { StreamMessagesRecoveryModel } from "./recovery-model.js";
 import { StreamMessagesTimelineModel } from "./timeline-model.js";
+import { copyStreamMessagesClientTarget, type StreamMessagesClientTarget } from "./target.js";
 
 import type { StreamMessagesTransport } from "./transport.js";
 
@@ -18,7 +17,7 @@ export const MAX_RECOVERY_BATCH_UTF8_BYTES = 524_288;
 
 export type StreamMessagesSessionModelOptions = {
   actorId: string;
-  channelId: string;
+  target: StreamMessagesClientTarget;
   storage: KeyValueStorage;
   delay?: (milliseconds: number, signal: AbortSignal) => Promise<void>;
   yieldControl?: () => Promise<void>;
@@ -28,6 +27,7 @@ export class StreamMessagesSessionModel {
   readonly cursorStorage: StreamMessagesCursorStorage;
   readonly recovery = new StreamMessagesRecoveryModel();
   readonly timeline: StreamMessagesTimelineModel;
+  readonly target: StreamMessagesClientTarget;
 
   readonly #delay: (milliseconds: number, signal: AbortSignal) => Promise<void>;
   readonly #yieldControl: () => Promise<void>;
@@ -36,8 +36,13 @@ export class StreamMessagesSessionModel {
   #olderAbortController: AbortController | undefined;
 
   constructor(readonly options: StreamMessagesSessionModelOptions) {
-    this.timeline = new StreamMessagesTimelineModel(options.channelId);
-    this.cursorStorage = createStreamMessagesCursorStorage(options);
+    this.target = copyStreamMessagesClientTarget(options.target);
+    this.timeline = new StreamMessagesTimelineModel(this.target);
+    this.cursorStorage = createStreamMessagesCursorStorage({
+      actorId: options.actorId,
+      storage: options.storage,
+      target: this.target,
+    });
     this.#delay = options.delay ?? delayWithAbort;
     this.#yieldControl = options.yieldControl ?? yieldToEventLoop;
 
@@ -79,8 +84,8 @@ export class StreamMessagesSessionModel {
 
     const abortController = new AbortController();
     this.#olderAbortController = abortController;
-    const request: OlderStreamMessagesHttpRequest = {
-      channelId: this.options.channelId,
+    const request = {
+      ...getTargetRequestFields(this.target),
       beforeSequence,
       limit,
     };
@@ -114,10 +119,7 @@ export class StreamMessagesSessionModel {
     try {
       if (this.timeline.deliverySyncCursor === null) {
         this.recovery.setPhase("loading_latest");
-        const latest = await transport.loadLatest(
-          { channelId: this.options.channelId },
-          { signal },
-        );
+        const latest = await transport.loadLatest(getTargetRequestFields(this.target), { signal });
         assertNotAborted(signal);
         assertRawByteLength(latest.rawUtf8ByteLength);
         this.timeline.applyLatest(latest.response);
@@ -173,7 +175,7 @@ export class StreamMessagesSessionModel {
       try {
         page = await transport.syncAfter(
           {
-            channelId: this.options.channelId,
+            ...getTargetRequestFields(this.target),
             afterSequence,
             ...(this.recovery.throughSequence === null
               ? {}
@@ -275,6 +277,14 @@ export class StreamMessagesSessionModel {
           : toStoredRecoveryState(this.recovery.phase),
     });
   }
+}
+
+function getTargetRequestFields(
+  target: StreamMessagesClientTarget,
+): { channelId: string } | { threadId: string } {
+  return target.type === "channel"
+    ? { channelId: target.channelId }
+    : { threadId: target.threadId };
 }
 
 function assertRawByteLength(value: number): void {

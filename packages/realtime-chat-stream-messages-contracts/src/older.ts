@@ -8,6 +8,7 @@ import {
   MAX_STREAM_MESSAGES_PAGE_LIMIT,
   MessageStreamIdSchema,
   PageLimitSchema,
+  ThreadIdSchema,
   validatePageMessages,
 } from "./common.js";
 
@@ -18,6 +19,16 @@ export const OlderStreamMessagesHttpRequestSchema = z.strictObject({
 });
 
 export type OlderStreamMessagesHttpRequest = z.infer<typeof OlderStreamMessagesHttpRequestSchema>;
+
+export const OlderThreadStreamMessagesHttpRequestSchema = z.strictObject({
+  threadId: ThreadIdSchema,
+  beforeSequence: BeforeSequenceSchema,
+  limit: PageLimitSchema.default(DEFAULT_STREAM_MESSAGES_PAGE_LIMIT),
+});
+
+export type OlderThreadStreamMessagesHttpRequest = z.infer<
+  typeof OlderThreadStreamMessagesHttpRequestSchema
+>;
 
 export const OlderStreamMessagesResponseSchema = z
   .strictObject({

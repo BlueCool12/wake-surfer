@@ -11,9 +11,10 @@ export {
   MessageStreamIdSchema,
   PageLimitSchema,
   RequestIdSchema,
+  ThreadIdSchema,
   ThroughSequenceSchema,
 } from "./common.js";
-export type { ChannelId, RequestId } from "./common.js";
+export type { ChannelId, RequestId, ThreadId } from "./common.js";
 export * from "./errors.js";
 export * from "./latest.js";
 export * from "./older.js";

@@ -26,7 +26,8 @@ stream은 `stream_unavailable`, 현재 stream head와 맞지 않는 cursor는 `i
 - cursor, fixed-watermark와 count limit 규칙을 적용한다.
 - PostgreSQL을 일관된 read-only snapshot으로 조회한다.
 - 조회 구간의 sequence 연속성과 저장 row의 무결성을 확인한다.
-- target은 `message_streams`에서, text는 canonical `messages.content` JSONB parser를 통해 읽는다.
+- target은 `message_streams`에서 읽고, active text와 `content = null`, `deleted_at != null` tombstone을
+  canonical 조회 모델로 변환한다.
 - transport contract와 독립적인 `StreamMessage` 조회 모델을 반환한다.
 - `./table-contract`에서 독립 읽기 타입 `StreamMessagesDatabase`를 제공한다.
 

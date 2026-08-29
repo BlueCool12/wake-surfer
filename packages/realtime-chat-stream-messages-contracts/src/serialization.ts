@@ -103,18 +103,30 @@ function measureSerializedEnvelope(utf8ByteLength: number): FinalEnvelopeMeasure
 }
 
 function toCanonicalPublicMessage(message: PublicMessage): PublicMessage {
-  const canonical: PublicMessage = {
+  const identity = {
     messageId: message.messageId,
     streamId: message.streamId,
     sequence: message.sequence,
     senderActorId: message.senderActorId,
     target: toCanonicalMessageTarget(message.target),
-    content: {
-      type: "text",
-      text: message.content.text,
-    },
-    createdAt: message.createdAt,
   };
+  const canonical: PublicMessage =
+    message.content === null
+      ? {
+          ...identity,
+          content: null,
+          createdAt: message.createdAt,
+          deletedAt: message.deletedAt,
+        }
+      : {
+          ...identity,
+          content: {
+            type: "text",
+            text: message.content.text,
+          },
+          createdAt: message.createdAt,
+          ...(message.editedAt === undefined ? {} : { editedAt: message.editedAt }),
+        };
 
   return message.sentAtClient === undefined
     ? canonical

@@ -2,6 +2,7 @@
   "name": "wake-surfer",
   "version": "0.0.0",
   "private": true,
+  "license": "AGPL-3.0-only",
   "description": "Video conferencing and realtime collaboration platform.",
   "packageManager": "pnpm@11.7.0",
   "scripts": {

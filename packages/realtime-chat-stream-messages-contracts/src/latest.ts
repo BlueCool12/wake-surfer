@@ -6,6 +6,7 @@ import {
   ChannelIdSchema,
   MAX_LATEST_STREAM_MESSAGES,
   MessageStreamIdSchema,
+  ThreadIdSchema,
   ThroughSequenceSchema,
   validatePageMessages,
 } from "./common.js";
@@ -15,6 +16,14 @@ export const LatestStreamMessagesHttpRequestSchema = z.strictObject({
 });
 
 export type LatestStreamMessagesHttpRequest = z.infer<typeof LatestStreamMessagesHttpRequestSchema>;
+
+export const LatestThreadStreamMessagesHttpRequestSchema = z.strictObject({
+  threadId: ThreadIdSchema,
+});
+
+export type LatestThreadStreamMessagesHttpRequest = z.infer<
+  typeof LatestThreadStreamMessagesHttpRequestSchema
+>;
 
 export const LatestStreamMessagesResponseSchema = z
   .strictObject({

@@ -2,13 +2,14 @@ import {
   StreamMessagesSessionModel,
   type StreamMessagesSessionModelOptions,
 } from "./session-model.js";
+import { getStreamMessagesClientTargetKey, type StreamMessagesClientTarget } from "./target.js";
 
 const sessions = new Map<string, StreamMessagesSessionModel>();
 
 export function getStreamMessagesSession(
   options: StreamMessagesSessionModelOptions,
 ): StreamMessagesSessionModel {
-  const key = createSessionKey(options.actorId, options.channelId);
+  const key = createSessionKey(options.actorId, options.target);
   let session = sessions.get(key);
 
   if (session === undefined) {
@@ -21,10 +22,10 @@ export function getStreamMessagesSession(
 
 export function disposeStreamMessagesSession(input: {
   actorId: string;
-  channelId: string;
+  target: StreamMessagesClientTarget;
   clearCursor: boolean;
 }): void {
-  const key = createSessionKey(input.actorId, input.channelId);
+  const key = createSessionKey(input.actorId, input.target);
   const session = sessions.get(key);
   session?.dispose({ clearCursor: input.clearCursor });
   sessions.delete(key);
@@ -41,6 +42,6 @@ export function disposeActorStreamMessagesSessions(actorId: string): void {
   }
 }
 
-function createSessionKey(actorId: string, channelId: string): string {
-  return `${encodeURIComponent(actorId)}:${encodeURIComponent(channelId)}`;
+function createSessionKey(actorId: string, target: StreamMessagesClientTarget): string {
+  return `${encodeURIComponent(actorId)}:${encodeURIComponent(getStreamMessagesClientTargetKey(target))}`;
 }

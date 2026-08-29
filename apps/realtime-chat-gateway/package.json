@@ -1,18 +1,19 @@
 {
   "name": "@wake-surfer/realtime-chat-gateway",
   "private": true,
+  "license": "AGPL-3.0-only",
   "version": "0.0.0",
   "type": "module",
   "scripts": {
     "build": "pnpm run build:deps && tsc -p tsconfig.json",
     "build:bundle": "pnpm run build && esbuild src/main.ts --bundle --platform=node --format=esm --target=node24 --banner:js=\"import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);\" --outfile=dist/main.mjs",
-    "build:deps": "pnpm --filter @wake-surfer/realtime-chat-gateway-ticket-contracts build && pnpm --filter @wake-surfer/realtime-chat-message-send-contracts build && pnpm --filter @wake-surfer/realtime-chat-stream-messages-gateway build",
+    "build:deps": "pnpm --filter @wake-surfer/realtime-chat-gateway-ticket-contracts build && pnpm --filter @wake-surfer/realtime-chat-message-mutation-contracts build && pnpm --filter @wake-surfer/realtime-chat-message-send-contracts build && pnpm --filter @wake-surfer/realtime-chat-stream-messages-gateway build",
     "start": "node dist/main.js",
-    "test": "pnpm run build:deps && vitest run",
-    "typecheck": "pnpm run build:deps && tsc -p tsconfig.test.json"
+    "typecheck": "pnpm run build:deps && tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
     "@wake-surfer/realtime-chat-gateway-ticket-contracts": "workspace:*",
+    "@wake-surfer/realtime-chat-message-mutation-contracts": "workspace:*",
     "@wake-surfer/realtime-chat-message-send-contracts": "workspace:*",
     "@wake-surfer/realtime-chat-stream-messages-gateway": "workspace:*",
     "pino": "^10.3.1",
@@ -22,7 +23,6 @@
     "@types/node": "^24.13.2",
     "@types/ws": "^8.18.1",
     "esbuild": "0.28.0",
-    "typescript": "~6.0.2",
-    "vitest": "^4.1.6"
+    "typescript": "~6.0.2"
   }
 }

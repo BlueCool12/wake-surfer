@@ -76,10 +76,11 @@ export type RegisterGatewayStreamMessagesRelayOptions = {
 
 type InFlightRequest = {
   abortController: AbortController;
-  channelId: string;
   connectionGeneration: string;
   requestId: string;
   sessionId: string;
+  targetId: string;
+  targetType: "channel" | "thread";
 };
 
 export function registerGatewayStreamMessagesRelay(
@@ -168,7 +169,8 @@ async function handleStreamSync(
   }
 
   const event = parsedEvent.data;
-  const inFlightKey = createInFlightKey(session.sessionId, event.channelId);
+  const target = getSyncTarget(event);
+  const inFlightKey = createInFlightKey(session.sessionId, target.type, target.id);
 
   if (inFlight.has(inFlightKey)) {
     await sendRejected(options.runtime, session, event.requestId, "rate_limited", {
@@ -204,28 +206,30 @@ async function handleStreamSync(
 
   const request: InFlightRequest = {
     abortController: new AbortController(),
-    channelId: event.channelId,
     connectionGeneration: session.connectionGeneration,
     requestId: event.requestId,
     sessionId: session.sessionId,
+    targetId: target.id,
+    targetType: target.type,
   };
   inFlight.set(inFlightKey, request);
   const startedAt = performance.now();
 
   try {
-    const response = await options.apiClient.syncAfter(
-      {
-        channelId: event.channelId,
-        afterSequence: event.afterSequence,
-        ...(event.throughSequence === undefined ? {} : { throughSequence: event.throughSequence }),
-        limit: event.limit,
-      },
-      {
-        actorId: session.actorId,
-        requestId: event.requestId,
-        signal: request.abortController.signal,
-      },
-    );
+    const apiContext = {
+      actorId: session.actorId,
+      requestId: event.requestId,
+      signal: request.abortController.signal,
+    };
+    const cursor = {
+      afterSequence: event.afterSequence,
+      ...(event.throughSequence === undefined ? {} : { throughSequence: event.throughSequence }),
+      limit: event.limit,
+    };
+    const response =
+      target.type === "channel"
+        ? await options.apiClient.syncAfter({ channelId: target.id, ...cursor }, apiContext)
+        : await syncAfterThread(options.apiClient, target.id, cursor, apiContext);
 
     if (!isCurrentRequest(options, inFlight, inFlightKey, request)) {
       return;
@@ -244,7 +248,6 @@ async function handleStreamSync(
     );
     options.logger.info(
       {
-        channelId: event.channelId,
         durationMs: elapsedMilliseconds(startedAt),
         hasMore: response.hasMoreAfter,
         messageCount: response.messages.length,
@@ -252,6 +255,8 @@ async function handleStreamSync(
         requestId: event.requestId,
         serializedBytes: new TextEncoder().encode(serialized).byteLength,
         sessionId: session.sessionId,
+        targetId: target.id,
+        targetType: target.type,
       },
       "Gateway Stream Messages relay completed",
     );
@@ -272,21 +277,43 @@ async function handleStreamSync(
   }
 }
 
+async function syncAfterThread(
+  apiClient: GatewayStreamMessagesApiClient,
+  threadId: string,
+  cursor: {
+    afterSequence: number;
+    throughSequence?: number;
+    limit: number;
+  },
+  context: { actorId: string; requestId: string; signal: AbortSignal },
+) {
+  if (apiClient.syncAfterThread === undefined) {
+    throw new GatewayStreamMessagesApiError("stream_messages_unavailable", {
+      retryable: true,
+    });
+  }
+
+  return apiClient.syncAfterThread({ threadId, ...cursor }, context);
+}
+
 async function mapAndSendError(
   options: RegisterGatewayStreamMessagesRelayOptions,
   session: GatewayStreamMessagesSession,
   event: ChatStreamSyncEvent,
   error: unknown,
 ): Promise<void> {
+  const target = getSyncTarget(event);
+
   if (error instanceof GatewayStreamMessagesApiError) {
     if (isDomainRejection(error.code)) {
       options.logger.warn(
         {
-          channelId: event.channelId,
           code: error.code,
           outcome: "domain_rejection",
           requestId: event.requestId,
           sessionId: session.sessionId,
+          targetId: target.id,
+          targetType: target.type,
         },
         "Gateway Stream Messages request rejected",
       );
@@ -305,10 +332,11 @@ async function mapAndSendError(
 
   options.logger.warn(
     {
-      channelId: event.channelId,
       code: error instanceof GatewayStreamMessagesApiError ? error.code : "unexpected_failure",
       requestId: event.requestId,
       sessionId: session.sessionId,
+      targetId: target.id,
+      targetType: target.type,
     },
     "Gateway Stream Messages API request failed",
   );
@@ -373,8 +401,21 @@ function abortSessionRequests(
   }
 }
 
-function createInFlightKey(sessionId: string, channelId: string): string {
-  return JSON.stringify([sessionId, channelId]);
+function createInFlightKey(
+  sessionId: string,
+  targetType: "channel" | "thread",
+  targetId: string,
+): string {
+  return JSON.stringify([sessionId, targetType, targetId]);
+}
+
+function getSyncTarget(event: ChatStreamSyncEvent): {
+  type: "channel" | "thread";
+  id: string;
+} {
+  return "channelId" in event
+    ? { type: "channel", id: event.channelId }
+    : { type: "thread", id: event.threadId };
 }
 
 function parseJson(value: string): unknown {

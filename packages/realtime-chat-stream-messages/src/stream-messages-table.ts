@@ -5,6 +5,7 @@ import type { PersistedTextMessageContent } from "./persisted-message-content";
 type DatabaseGeneratedIdColumn = ColumnType<string, never, never>;
 type GeneratedTimestampColumn = ColumnType<Date, string | Date | undefined, never>;
 type PersistedMessageContentColumn = ColumnType<unknown, PersistedTextMessageContent, never>;
+type NullableTimestampColumn = ColumnType<Date | null, never, never>;
 
 export type StreamMessagesDatabase = {
   message_streams: {
@@ -21,5 +22,7 @@ export type StreamMessagesDatabase = {
     sender_actor_id: string;
     content: PersistedMessageContentColumn;
     created_at: GeneratedTimestampColumn;
+    deleted_at: NullableTimestampColumn;
+    edited_at: NullableTimestampColumn;
   };
 };

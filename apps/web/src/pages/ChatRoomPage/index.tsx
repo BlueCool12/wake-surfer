@@ -4,15 +4,16 @@ import { Headset, Menu, PanelRight, Send } from "lucide-react";
 
 import Loading from "../../components/Loading";
 import ThemeToggle from "../../components/ThemeToggle";
-import { useChatRoom, type ChatMessageView } from "../../features/chat/useChatRoom";
+import { useChatRoom } from "../../features/chat/useChatRoom";
 import { useVoiceCall } from "../../features/voice/useVoiceCall";
 import useVisualViewportHeight from "../../hooks/useVisualViewportHeight";
+import ThreadPanel from "./ConnectedThreadPanel";
 import MentionPicker from "./MentionPicker";
 import { VoiceCallBar } from "./VoiceCallBar";
 import MessageBubble from "./MessageBubble";
 import type { MessageReactionsValue } from "./MessageReactions";
 import RoomListSidebar from "./RoomListSidebar";
-import ThreadPanel, { type RoomMember, type ThreadPanelTab, type ThreadReply } from "./ThreadPanel";
+import type { RoomMember, ThreadPanelTab } from "./ThreadPanel";
 import { createChatComposerSubmitController } from "./chatComposerKeyPolicy";
 import styles from "./ChatRoomPage.module.css";
 
@@ -42,6 +43,9 @@ function ChatRoomPage() {
     olderFailed,
     hasMoreBefore,
     recoveryPhase,
+    deleteMessage,
+    discardMessage,
+    editMessage,
     loadOlder,
     retryRecovery,
     sendMessage,
@@ -68,34 +72,17 @@ function ChatRoomPage() {
         );
   const isMentionOpen = mentionQuery !== undefined && mentionMatches.length > 0;
 
-  // 답글/스레드/수정/삭제는 백엔드에 개념이 없어(chat-backend-contract 참고) 이 화면 세션 안에서만 유지되는 로컬 상태다.
-  const [threadsByMessageKey, setThreadsByMessageKey] = useState<Record<string, ThreadReply[]>>({});
   const [selectedThreadKey, setSelectedThreadKey] = useState<string | undefined>(undefined);
   const [panelTab, setPanelTab] = useState<ThreadPanelTab>("thread");
   const [isPanelCollapsed, setIsPanelCollapsed] = useState(false);
   // 좁은 화면 전용 상태. 넓은 화면에서는 CSS 가 이 상태를 무시한다.
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [isPanelOverlayOpen, setIsPanelOverlayOpen] = useState(false);
-  const [messageEdits, setMessageEdits] = useState<Record<string, string>>({});
-  const [deletedMessageKeys, setDeletedMessageKeys] = useState<Record<string, true>>({});
   const [reactionsByMessageKey, setReactionsByMessageKey] = useState<
     Record<string, MessageReactionsValue>
   >({});
 
-  const resolveMessage = (message: ChatMessageView): ChatMessageView => {
-    const editedText = messageEdits[message.key];
-    return editedText === undefined ? message : { ...message, text: editedText };
-  };
-
-  const rawThreadParent = messages.find((message) => message.key === selectedThreadKey);
-  const selectedThreadParent =
-    rawThreadParent === undefined ? undefined : resolveMessage(rawThreadParent);
-  const isSelectedThreadParentDeleted =
-    selectedThreadKey !== undefined && Boolean(deletedMessageKeys[selectedThreadKey]);
-  const isSelectedThreadParentEdited =
-    selectedThreadKey !== undefined && messageEdits[selectedThreadKey] !== undefined;
-  const selectedThreadReplies =
-    selectedThreadKey !== undefined ? (threadsByMessageKey[selectedThreadKey] ?? []) : [];
+  const selectedThreadParent = messages.find((message) => message.key === selectedThreadKey);
 
   const handleOpenThread = (messageKey: string) => {
     setSelectedThreadKey(messageKey);
@@ -117,28 +104,6 @@ function ChatRoomPage() {
   const closeOverlays = () => {
     setIsDrawerOpen(false);
     closeThreadPanel();
-  };
-
-  const handleAddReply = (text: string) => {
-    if (selectedThreadKey === undefined) return;
-
-    const reply: ThreadReply = {
-      id: crypto.randomUUID(),
-      text,
-      createdAt: new Date().toISOString(),
-    };
-    setThreadsByMessageKey((prev) => ({
-      ...prev,
-      [selectedThreadKey]: [...(prev[selectedThreadKey] ?? []), reply],
-    }));
-  };
-
-  const handleEditMessage = (messageKey: string, text: string) => {
-    setMessageEdits((prev) => ({ ...prev, [messageKey]: text }));
-  };
-
-  const handleDeleteMessage = (messageKey: string) => {
-    setDeletedMessageKeys((prev) => ({ ...prev, [messageKey]: true }));
   };
 
   const handleToggleReaction = (messageKey: string, emoji: string) => {
@@ -366,18 +331,13 @@ function ChatRoomPage() {
                   messages.map((message) => (
                     <MessageBubble
                       key={message.key}
-                      message={resolveMessage(message)}
+                      message={message}
                       onRetry={
                         message.status === "failed" ? () => retryMessage(message) : undefined
                       }
                       onDelete={
-                        message.status === "failed"
-                          ? () => handleDeleteMessage(message.key)
-                          : undefined
+                        message.status === "failed" ? () => discardMessage(message) : undefined
                       }
-                      isDeleted={Boolean(deletedMessageKeys[message.key])}
-                      isEdited={messageEdits[message.key] !== undefined}
-                      replyCount={threadsByMessageKey[message.key]?.length ?? 0}
                       isThreadActive={message.key === selectedThreadKey}
                       onOpenThread={() => handleOpenThread(message.key)}
                       reactions={reactionsByMessageKey[message.key] ?? {}}
@@ -437,16 +397,12 @@ function ChatRoomPage() {
           activeTab={panelTab}
           onTabChange={setPanelTab}
           parentMessage={selectedThreadParent}
-          isParentDeleted={isSelectedThreadParentDeleted}
-          isParentEdited={isSelectedThreadParentEdited}
           onEditParent={(text) => {
-            if (selectedThreadKey !== undefined) handleEditMessage(selectedThreadKey, text);
+            if (selectedThreadParent !== undefined) editMessage(selectedThreadParent, text);
           }}
           onDeleteParent={() => {
-            if (selectedThreadKey !== undefined) handleDeleteMessage(selectedThreadKey);
+            if (selectedThreadParent !== undefined) deleteMessage(selectedThreadParent);
           }}
-          replies={selectedThreadReplies}
-          onAddReply={handleAddReply}
           members={ROOM_MEMBERS}
           isCollapsed={isPanelCollapsed}
           onCollapsedChange={setIsPanelCollapsed}

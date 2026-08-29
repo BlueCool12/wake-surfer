@@ -9,11 +9,12 @@ import {
   MessageStreamIdSchema,
   PageLimitSchema,
   RequestIdSchema,
+  ThreadIdSchema,
   ThroughSequenceSchema,
   validatePageMessages,
 } from "./common.js";
 
-const SyncAfterCursorSchema = z
+const ChannelSyncAfterCursorSchema = z
   .strictObject({
     channelId: ChannelIdSchema,
     afterSequence: AfterSequenceSchema,
@@ -30,16 +31,43 @@ const SyncAfterCursorSchema = z
     }
   });
 
-export const SyncAfterStreamMessagesRequestSchema = SyncAfterCursorSchema;
+const ThreadSyncAfterCursorSchema = z
+  .strictObject({
+    threadId: ThreadIdSchema,
+    afterSequence: AfterSequenceSchema,
+    throughSequence: ThroughSequenceSchema.optional(),
+    limit: PageLimitSchema.default(DEFAULT_STREAM_MESSAGES_PAGE_LIMIT),
+  })
+  .superRefine((request, context) => {
+    if (request.throughSequence !== undefined && request.afterSequence > request.throughSequence) {
+      context.addIssue({
+        code: "custom",
+        message: "afterSequence는 throughSequence보다 클 수 없습니다.",
+        path: ["afterSequence"],
+      });
+    }
+  });
+
+export const SyncAfterStreamMessagesRequestSchema = z.union([
+  ChannelSyncAfterCursorSchema,
+  ThreadSyncAfterCursorSchema,
+]);
 
 export type SyncAfterStreamMessagesRequest = z.infer<typeof SyncAfterStreamMessagesRequestSchema>;
 
-export const InternalSyncAfterStreamMessagesHttpRequestSchema =
-  SyncAfterStreamMessagesRequestSchema;
+export const InternalSyncAfterStreamMessagesHttpRequestSchema = ChannelSyncAfterCursorSchema;
 
-export type InternalSyncAfterStreamMessagesHttpRequest = SyncAfterStreamMessagesRequest;
+export type InternalSyncAfterStreamMessagesHttpRequest = z.infer<
+  typeof InternalSyncAfterStreamMessagesHttpRequestSchema
+>;
 
-export const ChatStreamSyncEventSchema = z
+export const InternalSyncAfterThreadMessagesHttpRequestSchema = ThreadSyncAfterCursorSchema;
+
+export type InternalSyncAfterThreadMessagesHttpRequest = z.infer<
+  typeof InternalSyncAfterThreadMessagesHttpRequestSchema
+>;
+
+const ChannelChatStreamSyncEventSchema = z
   .strictObject({
     requestId: RequestIdSchema,
     channelId: ChannelIdSchema,
@@ -56,6 +84,29 @@ export const ChatStreamSyncEventSchema = z
       });
     }
   });
+
+const ThreadChatStreamSyncEventSchema = z
+  .strictObject({
+    requestId: RequestIdSchema,
+    threadId: ThreadIdSchema,
+    afterSequence: AfterSequenceSchema,
+    throughSequence: ThroughSequenceSchema.optional(),
+    limit: PageLimitSchema.default(DEFAULT_STREAM_MESSAGES_PAGE_LIMIT),
+  })
+  .superRefine((event, context) => {
+    if (event.throughSequence !== undefined && event.afterSequence > event.throughSequence) {
+      context.addIssue({
+        code: "custom",
+        message: "afterSequence는 throughSequence보다 클 수 없습니다.",
+        path: ["afterSequence"],
+      });
+    }
+  });
+
+export const ChatStreamSyncEventSchema = z.union([
+  ChannelChatStreamSyncEventSchema,
+  ThreadChatStreamSyncEventSchema,
+]);
 
 export type ChatStreamSyncEvent = z.infer<typeof ChatStreamSyncEventSchema>;
 

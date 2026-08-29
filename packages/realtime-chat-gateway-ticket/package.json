@@ -2,6 +2,7 @@
   "name": "@wake-surfer/realtime-chat-gateway-ticket",
   "version": "0.0.0",
   "private": true,
+  "license": "AGPL-3.0-only",
   "type": "commonjs",
   "main": "./dist/index.js",
   "module": "./dist/index.js",
@@ -21,14 +22,10 @@
   ],
   "scripts": {
     "build": "pnpm --filter @wake-surfer/realtime-chat-gateway-ticket-contracts build && tsc -p tsconfig.json",
-    "clean": "tsc -b tsconfig.json --clean",
-    "test": "vitest run"
+    "clean": "tsc -b tsconfig.json --clean"
   },
   "dependencies": {
     "@wake-surfer/realtime-chat-gateway-ticket-contracts": "workspace:*",
     "kysely": "0.28.8"
-  },
-  "devDependencies": {
-    "vitest": "4.1.6"
   }
 }
