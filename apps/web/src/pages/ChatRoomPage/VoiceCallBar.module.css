@@ -1,0 +1,91 @@
+/*
+ * 화면 위를 떠다니는 알약. 채팅 레이아웃을 밀어내지 않고, 드래그로 어디로든 옮길 수 있다.
+ *
+ * `fixed`라 좌표가 뷰포트 기준이 되고, 그래서 채팅 영역 밖(사이드바·스레드 패널 위)으로도 나간다.
+ * z-index는 모바일 서랍/패널(30)보다 위다. 통화 컨트롤은 무엇이 열려 있든 닿을 수 있어야 한다.
+ *
+ * 시작 위치는 JS가 메시지 영역 우측 하단으로 계산해 넣는다. 아래 값은 그 계산이 불가능할 때의
+ * 안전망일 뿐이다.
+ */
+.bar {
+  position: fixed;
+  right: var(--space-6);
+  bottom: var(--space-6);
+  z-index: 40;
+
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  max-width: calc(100% - var(--space-6));
+  box-sizing: border-box;
+  padding: var(--space-1) var(--space-1) var(--space-1) var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-full);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-md);
+
+  /* 터치로 끌 때 화면이 함께 스크롤되지 않도록. */
+  touch-action: none;
+  cursor: grab;
+  user-select: none;
+}
+
+.dragging {
+  cursor: grabbing;
+  /* 끌고 있는 동안에는 더 떠 보이게. */
+  box-shadow: var(--shadow-lg);
+}
+
+/* 버튼은 끌기 대상이 아니라 눌러야 하는 대상이다. */
+.bar button {
+  cursor: pointer;
+}
+
+.label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+}
+
+.action {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: var(--space-6);
+  height: var(--space-6);
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-full);
+  background: none;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+}
+
+.action:hover {
+  background: var(--color-overlay-hover);
+  color: var(--color-text);
+}
+
+.action[aria-pressed="true"] {
+  color: var(--color-text);
+}
+
+.leave:hover {
+  color: var(--color-danger);
+}
+
+.audio {
+  display: none;
+}
+
+/* 손가락으로 누르기엔 24px이 작다. composer의 전송 버튼과 같은 방식으로 키운다. */
+@media (pointer: coarse) {
+  .action {
+    width: var(--space-9);
+    height: var(--space-9);
+  }
+}

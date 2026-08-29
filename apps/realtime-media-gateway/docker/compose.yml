@@ -1,0 +1,43 @@
+services:
+  realtime-media-gateway:
+    image: wake-surfer/realtime-media-gateway:local
+    pull_policy: build
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    init: true
+    restart: unless-stopped
+    env_file:
+      - ./runtime.dev.env
+    environment:
+      # 브라우저에게 "이 주소로 미디어를 주고받자"고 알려주는 ICE 후보 주소. 같은 호스트에서만
+      # 접속한다면 기본값(127.0.0.1)으로 충분하지만, 다른 기기에서 접속한다면 이 서버가 실제로
+      # 도달 가능한 IP·도메인으로 반드시 덮어써야 한다 — 안 그러면 서버가 브라우저에게 "나 자신"을
+      # 주소로 알려주는 꼴이라 시그널링은 성공해도 오디오가 조용히 안 들린다.
+      MEDIASOUP_ANNOUNCED_ADDRESS: "${MEDIASOUP_ANNOUNCED_ADDRESS:-127.0.0.1}"
+    ports:
+      - "127.0.0.1:${MEDIA_GATEWAY_PORT:-4000}:4000"
+      # RTC 포트는 다른 서비스와 달리 리버스 프록시를 못 거친다 — WebRTC 미디어는 브라우저가
+      # 이 포트로 직접 붙어야 해서, 다른 앱들의 127.0.0.1 전용 규칙의 의도적인 예외다.
+      - "${MEDIA_GATEWAY_RTC_PORT:-44444}:44444/udp"
+      - "${MEDIA_GATEWAY_RTC_PORT:-44444}:44444/tcp"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:4000/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - default
+      - media-gateway-host-access
+    stop_grace_period: 10s
+
+networks:
+  media-gateway-host-access:
+    driver: bridge

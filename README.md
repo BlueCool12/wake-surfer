@@ -35,12 +35,14 @@ PostgreSQL·Redis와 다른 앱 컨테이너를 다시 만들지 않습니다.
 ```bash
 npm run deploy -- realtime-chat-api
 npm run deploy -- realtime-chat-gateway
+npm run deploy -- realtime-media-gateway
 npm run deploy -- web
 ```
 
 배포 스크립트는 API·Gateway의 esbuild 실행 번들과 Web의 Vite 정적 번들을 호스트에서 먼저 만듭니다.
 Docker build context는 각 앱 모듈로 제한하며 `Dockerfile.dockerignore`를 통해 `dist`와 필요한
-runtime 설정만 이미지 입력으로 전달합니다.
+runtime 설정만 이미지 입력으로 전달합니다. `realtime-media-gateway`만 예외로, mediasoup의 네이티브
+`mediasoup-worker` 바이너리를 얻기 위해 Dockerfile 안에서 별도 빌드 스테이지를 한 번 더 거칩니다.
 
 서비스 상태와 로그는 루트 Compose에서 서비스 이름으로 확인합니다.
 
@@ -48,8 +50,12 @@ runtime 설정만 이미지 입력으로 전달합니다.
 docker compose ps
 docker compose logs -f realtime-chat-api
 docker compose logs -f realtime-chat-gateway
+docker compose logs -f realtime-media-gateway
 docker compose logs -f web
 ```
+
+음성 통화는 위와 같은 방 URL에서 헤드셋 아이콘으로 참가합니다. `alice`·`bob` 두 탭 모두 참가하면
+양방향 오디오가 붙습니다. 인증·재연결 내성·녹음은 아직 없습니다(로컬 개발 전제와 동일한 수준).
 
 host Node·Vite 개발 서버가 필요한 경우에만 별도 명령을 사용합니다.
 
@@ -118,6 +124,21 @@ pnpm docker:up
 변경할 수 있습니다. 브라우저가 사용하는 origin과 Gateway URL이 달라지면
 `REALTIME_CHAT_PUBLIC_WEB_ORIGIN`, `REALTIME_CHAT_PUBLIC_GATEWAY_URL`, 빌드 시
 `VITE_API_BASE_URL`도 함께 맞춰야 합니다.
+
+같은 호스트가 아니라 다른 서버에 배포하고 여러 기기에서 접속한다면(같은 컴퓨터의 탭 두 개가
+아니라, 서로 다른 기기가 서버 IP·도메인으로 접속하는 경우), `MEDIASOUP_ANNOUNCED_ADDRESS`를
+그 서버가 실제로 도달 가능한 IP나 도메인으로 반드시 지정해야 합니다. 기본값 127.0.0.1은
+서버 자기 자신만 가리켜서, 시그널링(참가·상대 목록)은 성공한 것처럼 보여도 실제 오디오는
+조용히 안 들립니다.
+
+```bash
+MEDIASOUP_ANNOUNCED_ADDRESS=203.0.113.10 npm run deploy -- realtime-media-gateway
+VITE_MEDIA_GATEWAY_URL=ws://203.0.113.10:4000 npm run deploy -- web
+```
+
+RTC 포트(`MEDIA_GATEWAY_RTC_PORT`, 기본 44444)는 시그널링 포트와 달리 리버스 프록시를 거칠 수
+없습니다 — 브라우저가 이 포트로 직접 UDP·TCP 연결을 맺어야 하므로, 방화벽·보안 그룹에서 이
+포트를 직접 열어둬야 합니다.
 
 ## 검증
 

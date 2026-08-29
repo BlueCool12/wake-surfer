@@ -7,12 +7,14 @@
   "scripts": {
     "dev": "vite",
     "build": "pnpm run build:deps && tsc -b && vite build",
-    "build:deps": "pnpm --filter @wake-surfer/realtime-chat-stream-messages-client build",
+    "build:deps": "pnpm --filter @wake-surfer/realtime-chat-stream-messages-client build && pnpm --filter @wake-surfer/realtime-media-contracts build",
     "preview": "vite preview"
   },
   "dependencies": {
     "@wake-surfer/realtime-chat-stream-messages-client": "workspace:*",
+    "@wake-surfer/realtime-media-contracts": "workspace:*",
     "lucide-react": "^1.23.0",
+    "mediasoup-client": "3.15.2",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
     "react-router-dom": "^7.18.1"

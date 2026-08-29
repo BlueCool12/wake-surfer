@@ -44,15 +44,12 @@
   grid-column: 1 / -1;
   height: 3rem;
   box-sizing: border-box;
-  padding: 0 var(--space-4);
+  padding: 0 var(--space-3);
   border-bottom: 1px solid var(--color-border);
   background: var(--color-surface);
 }
 
-.themeToggle {
-  margin-left: auto;
-}
-
+/* 방 목록·스레드 패널을 여는 모바일 전용 버튼. 터치 타겟이라 헤더의 다른 버튼보다 크다. */
 .iconButton {
   display: none;
   align-items: center;
@@ -68,9 +65,54 @@
   cursor: pointer;
 }
 
-.iconButton:hover {
+/*
+ * 통화·테마 버튼은 스레드 패널 탭과 같은 크기로 맞춘다.
+ * 패딩 space-2 + 아이콘 16px = 32px이며, 고정 크기 대신 같은 방식으로 계산해 함께 움직이게 한다.
+ *
+ * .themeToggle에만 `.header`를 앞에 붙인 이유는 ThemeToggle 컴포넌트가 자체 padding을 가진
+ * 클래스를 함께 달기 때문이다. 특이도가 같으면 스타일시트 순서에 따라 승자가 바뀌어 불안정하다.
+ */
+.callButton,
+.header .themeToggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  padding: var(--space-2);
+  border: none;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+}
+
+.iconButton:hover,
+.callButton:hover:not(:disabled),
+.header .themeToggle:hover {
   background: var(--color-overlay-hover);
   color: var(--color-text);
+}
+
+/*
+ * 오른쪽 묶음을 미는 건 첫 항목 하나뿐이다.
+ *
+ * 둘 이상에 `margin-left: auto`를 주면 flexbox가 남은 공간을 나눠 배분해 버튼 사이가 벌어진다.
+ */
+.callButton {
+  margin-left: auto;
+}
+
+.callButton:disabled {
+  cursor: default;
+}
+
+/* 연결 중일 때만 흐리게. 통화 중에는 "참가해 있다"는 표시라 또렷해야 한다. */
+.callButton:disabled:not([aria-pressed="true"]) {
+  opacity: 0.5;
+}
+
+.callButton[aria-pressed="true"] {
+  color: var(--color-accent);
 }
 
 .channelHash {

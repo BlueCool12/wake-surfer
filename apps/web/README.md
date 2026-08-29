@@ -16,7 +16,8 @@ docker compose logs -f web
 ```
 
 기본 접속 주소는 `http://localhost:5173`이다. API 공개 주소를 바꾸려면 배포 명령을 실행하기 전에
-`VITE_API_BASE_URL`을 지정해 로컬 Vite 빌드에 전달해야 한다.
+`VITE_API_BASE_URL`을 지정해 로컬 Vite 빌드에 전달해야 한다. 음성 통화용 미디어 게이트웨이
+주소도 같은 방식으로 `VITE_MEDIA_GATEWAY_URL`을 지정한다(기본값 `ws://localhost:4000`).
 
 ## Realtime Chat
 
