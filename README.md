@@ -125,6 +125,21 @@ pnpm docker:up
 `REALTIME_CHAT_PUBLIC_WEB_ORIGIN`, `REALTIME_CHAT_PUBLIC_GATEWAY_URL`, 빌드 시
 `VITE_API_BASE_URL`도 함께 맞춰야 합니다.
 
+같은 호스트가 아니라 다른 서버에 배포하고 여러 기기에서 접속한다면(같은 컴퓨터의 탭 두 개가
+아니라, 서로 다른 기기가 서버 IP·도메인으로 접속하는 경우), `MEDIASOUP_ANNOUNCED_ADDRESS`를
+그 서버가 실제로 도달 가능한 IP나 도메인으로 반드시 지정해야 합니다. 기본값 127.0.0.1은
+서버 자기 자신만 가리켜서, 시그널링(참가·상대 목록)은 성공한 것처럼 보여도 실제 오디오는
+조용히 안 들립니다.
+
+```bash
+MEDIASOUP_ANNOUNCED_ADDRESS=203.0.113.10 npm run deploy -- realtime-media-gateway
+VITE_MEDIA_GATEWAY_URL=ws://203.0.113.10:4000 npm run deploy -- web
+```
+
+RTC 포트(`MEDIA_GATEWAY_RTC_PORT`, 기본 44444)는 시그널링 포트와 달리 리버스 프록시를 거칠 수
+없습니다 — 브라우저가 이 포트로 직접 UDP·TCP 연결을 맺어야 하므로, 방화벽·보안 그룹에서 이
+포트를 직접 열어둬야 합니다.
+
 ## 검증
 
 ```bash
