@@ -1,18 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
-import { Headset, Menu, PanelRight, Send } from "lucide-react";
 
-import Loading from "../../components/Loading";
-import ThemeToggle from "../../components/ThemeToggle";
 import { useChatChannel } from "../../features/chat/useChatChannel";
 import { useVoiceCall } from "../../features/voice/useVoiceCall";
 import useVisualViewportHeight from "../../hooks/useVisualViewportHeight";
-import ThreadPanel from "./ConnectedThreadPanel";
-import MentionPicker from "./MentionPicker";
-import { VoiceCallBar } from "./VoiceCallBar";
-import MessageBubble from "./MessageBubble";
 import type { MessageReactionsValue } from "./MessageReactions";
-import ChannelListSidebar from "./ChannelListSidebar";
+import ChannelListContent from "./ChannelListSidebar";
+import { ChannelConversationView, PanelBackdrop } from "./ChannelConversationView";
 import type { ChannelMember, ThreadPanelTab } from "./ThreadPanel";
 import { createChatComposerSubmitController } from "./chatComposerKeyPolicy";
 import styles from "./ChatChannelPage.module.css";
@@ -35,25 +29,48 @@ const CHANNEL_MEMBERS: ChannelMember[] = [
 ];
 
 function ChatChannelPage() {
-  // 주소에서 채널을 읽고, 해당 채널의 대화 영역과 방 목록을 배치한다.
+  // 주소에서 채널을 읽고, 해당 채널의 대화 영역과 채널 목록을 배치한다.
   const { channelId = "test" } = useParams();
   useVisualViewportHeight();
-  // 상태: 페이지에 속한 방 목록 서랍의 열림 여부. 같은 페이지가 유지되는 동안 기억한다.
-  // 좁은 화면에서만 표시되며, 대화 영역의 열기 버튼·배경 클릭·Escape로도 갱신한다.
-  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+  // 상태: 페이지에 속한 모바일 채널 목록의 열림 여부. 같은 페이지가 유지되는 동안 기억한다.
+  // 대화 영역은 열기를 요청하고, 채널 목록은 닫기를 요청한다. 상태 변경은 이 페이지가 담당한다.
+  const [isChannelListOpen, setIsChannelListOpen] = useState(false);
 
   return (
     <div className={styles.shell}>
       <ChannelListSidebar
         channelId={channelId}
-        className={isDrawerOpen ? `${styles.drawer} ${styles.drawerOpen}` : styles.drawer}
+        isOpen={isChannelListOpen}
+        onClose={() => setIsChannelListOpen(false)}
       />
       <ChannelConversation
         channelId={channelId}
-        isDrawerOpen={isDrawerOpen}
-        onDrawerOpenChange={setIsDrawerOpen}
+        onOpenChannelList={() => setIsChannelListOpen(true)}
       />
     </div>
+  );
+}
+
+// 채널 목록의 표시와 배경을 함께 담당한다. isOpen은 좁은 화면에서의 열림 요청이다.
+// 화면 폭 기준은 기존 CSS 한 곳에 둔다. 추후 공통 화면 정보가 필요하면 이 컴포넌트에서 읽는다.
+function ChannelListSidebar({
+  channelId,
+  isOpen,
+  onClose,
+}: {
+  channelId: string;
+  isOpen: boolean;
+  onClose: () => void;
+}) {
+  return (
+    <>
+      {isOpen ? <PanelBackdrop onClose={onClose} closeLabel="채널 목록 닫기" /> : null}
+      {/* 목록은 계속 유지하고 CSS로 표시한다. 넓은 화면에서는 isOpen과 관계없이 보인다. */}
+      <ChannelListContent
+        channelId={channelId}
+        className={isOpen ? `${styles.drawer} ${styles.drawerOpen}` : styles.drawer}
+      />
+    </>
   );
 }
 
@@ -61,12 +78,10 @@ function ChatChannelPage() {
 // 채널의 헤더·통화·메시지·입력·스레드를 묶고, 선택한 메시지는 이 경계 안에서만 연결한다.
 function ChannelConversation({
   channelId,
-  isDrawerOpen,
-  onDrawerOpenChange,
+  onOpenChannelList,
 }: {
   channelId: string;
-  isDrawerOpen: boolean;
-  onDrawerOpenChange: (isOpen: boolean) => void;
+  onOpenChannelList: () => void;
 }) {
   // 함수 호출마다 지역 변수는 다시 선언된다. 아래 훅은 호출 사이에 필요한 기억을 리액트에 맡긴다.
   // useState: 같은 컴포넌트가 트리에 유지되는 동안 상태를 보관하며, setter로 값을 바꾸면 다시 렌더링한다.
@@ -138,7 +153,7 @@ function ChannelConversation({
   const [panelTab, setPanelTab] = useState<ThreadPanelTab>("thread");
   // 상태: 패널 접힘 여부. 처음에는 펼쳐져 있으며, 패널이나 스레드를 열면 접힘을 해제한다.
   const [isPanelCollapsed, setIsPanelCollapsed] = useState(false);
-  // 상태: 모바일 패널의 열림 여부. false로 시작하며, 패널 열기·닫기·배경 클릭·Escape로 갱신한다.
+  // 상태: 모바일 패널의 열림 여부. false로 시작하며, 패널 열기·닫기·배경 클릭으로 갱신한다.
   const [isPanelOverlayOpen, setIsPanelOverlayOpen] = useState(false);
   // 상태: 메시지별 리액션 수와 내 반응 여부. 빈 객체로 시작하며, 클릭으로만 갱신하는 대화 영역 내부 상태다.
   // 서버에 저장하지 않으며, 컴포넌트가 제거되면 사라진다. 채널 변경만으로는 비워지지 않는다.
@@ -164,11 +179,6 @@ function ChannelConversation({
   const closeThreadPanel = () => {
     setIsPanelOverlayOpen(false);
     setSelectedThreadKey(undefined);
-  };
-
-  const closeOverlays = () => {
-    onDrawerOpenChange(false);
-    closeThreadPanel();
   };
 
   const handleToggleReaction = (messageKey: string, emoji: string) => {
@@ -198,20 +208,6 @@ function ChannelConversation({
     el.style.height = `${el.scrollHeight}px`;
     setIsDraftMultiline(el.scrollHeight > singleLineHeightRef.current);
   }, [draft]);
-
-  useEffect(() => {
-    if (!isDrawerOpen && !isPanelOverlayOpen) return;
-
-    const handleEscape = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return;
-      onDrawerOpenChange(false);
-      setIsPanelOverlayOpen(false);
-      setSelectedThreadKey(undefined);
-    };
-
-    document.addEventListener("keydown", handleEscape);
-    return () => document.removeEventListener("keydown", handleEscape);
-  }, [isDrawerOpen, isPanelOverlayOpen, onDrawerOpenChange]);
 
   const handleScroll = () => {
     const el = scrollRef.current;
@@ -297,178 +293,72 @@ function ChannelConversation({
     handleSend(event.currentTarget.value);
   };
 
+  // 이번 단계에서는 기존 로직을 유지하고, 화면이 필요로 하는 값과 동작을 명시한다.
+  // 아래 경계가 입력·목록·패널 로직을 각각 분리할 때의 출발점이다.
   return (
-    <>
-      {isDrawerOpen || isPanelOverlayOpen ? (
-        <button
-          type="button"
-          className={styles.scrim}
-          onClick={closeOverlays}
-          aria-label="닫기"
-          tabIndex={-1}
-        />
-      ) : null}
-
-      <div
-        className={
-          isPanelCollapsed ? `${styles.mainArea} ${styles.mainAreaPanelCollapsed}` : styles.mainArea
-        }
-      >
-        <header className={styles.header}>
-          <button
-            type="button"
-            className={styles.iconButton}
-            onClick={() => onDrawerOpenChange(true)}
-            aria-label="방 목록 열기"
-          >
-            <Menu size={18} aria-hidden="true" />
-          </button>
-          <span className={styles.channelHash}>#</span>
-          <h1 className={styles.channelName}>{channelId}</h1>
-          {/* 참가 전용이다. 음소거·나가기는 통화 중에만 나타나는 아래 바가 전담한다. */}
-          <button
-            type="button"
-            className={styles.callButton}
-            onClick={voice.join}
-            disabled={voice.status === "joining" || voice.status === "connected"}
-            aria-pressed={voice.status === "connected"}
-            aria-label={voice.status === "connected" ? "음성 통화 참가 중" : "음성 통화 참가"}
-          >
-            <Headset size={16} aria-hidden="true" />
-          </button>
-          <ThemeToggle className={styles.themeToggle} />
-          <button
-            type="button"
-            className={styles.iconButton}
-            onClick={handleOpenPanel}
-            aria-label="스레드 패널 열기"
-          >
-            <PanelRight size={18} aria-hidden="true" />
-          </button>
-        </header>
-
-        {/* 화면 위를 떠다니므로 레이아웃상 위치는 의미가 없다. 헤더 다음에 두어 읽기 쉽게만 한다. */}
-        <VoiceCallBar
-          status={voice.status}
-          participants={voice.participants}
-          isMuted={voice.isMuted}
-          error={voice.error}
-          leave={voice.leave}
-          toggleMute={voice.toggleMute}
-          anchorRef={scrollRef}
-        />
-
-        <div className={styles.page}>
-          <div className={styles.messages} ref={scrollRef} onScroll={handleScroll}>
-            {isLoading ? (
-              <Loading />
-            ) : (
-              <>
-                {hasMoreBefore ? (
-                  <button type="button" className={styles.loadOlder} onClick={loadOlder}>
-                    {isLoadingOlder
-                      ? "이전 메시지 불러오는 중…"
-                      : olderFailed
-                        ? "이전 메시지 다시 불러오기"
-                        : "이전 메시지 불러오기"}
-                  </button>
-                ) : null}
-                {recoveryPhase === "recovery_pending" ? (
-                  <p className={styles.recoveryNotice}>누락된 메시지를 이어서 복구하고 있어요.</p>
-                ) : recoveryPhase === "retryable_failure" ? (
-                  <button type="button" className={styles.recoveryNotice} onClick={retryRecovery}>
-                    연결이 잠시 끊겼어요. 복구 시도하기
-                  </button>
-                ) : recoveryPhase === "stream_unavailable" ||
-                  recoveryPhase === "invalid_cursor" ||
-                  recoveryPhase === "authentication_failure" ||
-                  recoveryPhase === "protocol_failure" ? (
-                  <p className={styles.recoveryError}>메시지 기록을 안전하게 불러오지 못했어요.</p>
-                ) : null}
-                {messages.length === 0 ? (
-                  <p className={styles.placeholder}>아직 잔잔해요. 첫 파도를 일으켜보세요 🌊</p>
-                ) : (
-                  messages.map((message) => (
-                    <MessageBubble
-                      key={message.key}
-                      message={message}
-                      onRetry={
-                        message.status === "failed" ? () => retryMessage(message) : undefined
-                      }
-                      onDelete={
-                        message.status === "failed" ? () => discardMessage(message) : undefined
-                      }
-                      isThreadActive={message.key === selectedThreadKey}
-                      onOpenThread={() => handleOpenThread(message.key)}
-                      reactions={reactionsByMessageKey[message.key] ?? {}}
-                      onToggleReaction={(emoji) => handleToggleReaction(message.key, emoji)}
-                      unreadCount={Math.max(CHANNEL_MEMBERS.length - 1, 0)}
-                    />
-                  ))
-                )}
-              </>
-            )}
-          </div>
-
-          <div className={styles.composer}>
-            {isMentionOpen ? (
-              <MentionPicker
-                members={mentionMatches}
-                activeIndex={mentionActiveIndex}
-                onSelect={handleSelectMention}
-              />
-            ) : null}
-            <div
-              className={
-                isDraftMultiline
-                  ? `${styles.inputWrap} ${styles.inputWrapMultiline}`
-                  : styles.inputWrap
-              }
-            >
-              <textarea
-                ref={textareaRef}
-                className={styles.input}
-                value={draft}
-                onChange={handleDraftChange}
-                onKeyDown={handleKeyDown}
-                onKeyUp={handleKeyUp}
-                onCompositionStart={() => submitControllerRef.current.compositionStarted()}
-                onCompositionEnd={() => submitControllerRef.current.compositionEnded()}
-                onBlur={() => submitControllerRef.current.cancelPendingSubmit()}
-                placeholder={`#${channelId}에 메시지 보내기`}
-                rows={1}
-              />
-              <button
-                type="button"
-                className={styles.sendButton}
-                onClick={() => handleSend(draft)}
-                disabled={draft.trim() === ""}
-                aria-label="전송"
-              >
-                <Send size={18} aria-hidden="true" />
-              </button>
-            </div>
-          </div>
-        </div>
-
-        <ThreadPanel
-          className={isPanelOverlayOpen ? `${styles.panel} ${styles.panelOpen}` : styles.panel}
-          onClose={closeThreadPanel}
-          activeTab={panelTab}
-          onTabChange={setPanelTab}
-          parentMessage={selectedThreadParent}
-          onEditParent={(text) => {
-            if (selectedThreadParent !== undefined) editMessage(selectedThreadParent, text);
-          }}
-          onDeleteParent={() => {
-            if (selectedThreadParent !== undefined) deleteMessage(selectedThreadParent);
-          }}
-          members={CHANNEL_MEMBERS}
-          isCollapsed={isPanelCollapsed}
-          onCollapsedChange={setIsPanelCollapsed}
-        />
-      </div>
-    </>
+    <ChannelConversationView
+      channelId={channelId}
+      onOpenChannelList={onOpenChannelList}
+      onOpenPanel={handleOpenPanel}
+      voice={{ ...voice, anchorRef: scrollRef }}
+      messageList={{
+        isLoading,
+        isLoadingOlder,
+        olderFailed,
+        hasMoreBefore,
+        recoveryPhase,
+        scrollRef,
+        onScroll: handleScroll,
+        loadOlder,
+        retryRecovery,
+        items: messages.map((message) => ({
+          message,
+          onRetry: message.status === "failed" ? () => retryMessage(message) : undefined,
+          onDelete: message.status === "failed" ? () => discardMessage(message) : undefined,
+          isThreadActive: message.key === selectedThreadKey,
+          onOpenThread: () => handleOpenThread(message.key),
+          reactions: reactionsByMessageKey[message.key] ?? {},
+          onToggleReaction: (emoji) => handleToggleReaction(message.key, emoji),
+          unreadCount: Math.max(CHANNEL_MEMBERS.length - 1, 0),
+        })),
+      }}
+      composer={{
+        draft,
+        isDraftMultiline,
+        canSend: draft.trim() !== "",
+        textareaRef,
+        mentionPicker: isMentionOpen
+          ? {
+              members: mentionMatches,
+              activeIndex: mentionActiveIndex,
+              onSelect: handleSelectMention,
+            }
+          : undefined,
+        onChange: handleDraftChange,
+        onKeyDown: handleKeyDown,
+        onKeyUp: handleKeyUp,
+        onCompositionStart: () => submitControllerRef.current.compositionStarted(),
+        onCompositionEnd: () => submitControllerRef.current.compositionEnded(),
+        onBlur: () => submitControllerRef.current.cancelPendingSubmit(),
+        onSend: () => handleSend(draft),
+      }}
+      isPanelOverlayOpen={isPanelOverlayOpen}
+      thread={{
+        onClose: closeThreadPanel,
+        activeTab: panelTab,
+        onTabChange: setPanelTab,
+        parentMessage: selectedThreadParent,
+        onEditParent: (text) => {
+          if (selectedThreadParent !== undefined) editMessage(selectedThreadParent, text);
+        },
+        onDeleteParent: () => {
+          if (selectedThreadParent !== undefined) deleteMessage(selectedThreadParent);
+        },
+        members: CHANNEL_MEMBERS,
+        isCollapsed: isPanelCollapsed,
+        onCollapsedChange: setIsPanelCollapsed,
+      }}
+    />
   );
 }
 
