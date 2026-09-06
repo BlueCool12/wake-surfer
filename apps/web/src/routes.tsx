@@ -6,5 +6,5 @@ export const router = createBrowserRouter([
   { path: "/login", element: <LoginPage /> },
   // 임시: 방 목록 API가 생기기 전까지 샘플 채널로 보낸다.
   { path: "/rooms", element: <Navigate to="/rooms/test" replace /> },
-  { path: "/rooms/:channelId", lazy: () => import("./pages/ChatRoomPage") },
+  { path: "/rooms/:channelId", lazy: () => import("./pages/ChatChannelPage") },
 ]);

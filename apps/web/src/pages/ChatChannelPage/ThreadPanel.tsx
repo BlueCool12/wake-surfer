@@ -11,7 +11,7 @@ import {
 } from "lucide-react";
 
 import { formatTime } from "../../utils/date";
-import type { ChatMessageView } from "../../features/chat/useChatRoom";
+import type { ChatMessageView } from "../../features/chat/useChatChannel";
 import styles from "./ThreadPanel.module.css";
 
 export type ThreadReply = {
@@ -20,7 +20,7 @@ export type ThreadReply = {
   createdAt: string;
 };
 
-export type RoomMember = {
+export type ChannelMember = {
   id: string;
   name: string;
   isOnline: boolean;
@@ -42,7 +42,7 @@ type ThreadPanelProps = {
   onDeleteParent: () => void;
   replies: ThreadReply[];
   onAddReply: (text: string) => void;
-  members: RoomMember[];
+  members: ChannelMember[];
   isCollapsed: boolean;
   onCollapsedChange: (collapsed: boolean) => void;
 };

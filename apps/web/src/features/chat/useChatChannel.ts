@@ -32,7 +32,7 @@ export type ChatMessageView = {
   isEdited: boolean;
 };
 
-export type UseChatRoomResult = {
+export type UseChatChannelResult = {
   messages: ChatMessageView[];
   isLoading: boolean;
   isLoadingOlder: boolean;
@@ -48,21 +48,21 @@ export type UseChatRoomResult = {
   retryMessage: (message: ChatMessageView) => void;
 };
 
-export function useChatRoom(
+export function useChatChannel(
   channelId: string,
   actorId = getConfiguredChatActorId(),
-): UseChatRoomResult {
+): UseChatChannelResult {
   return useChatTarget({ type: "channel", channelId }, actorId);
 }
 
 export function useChatThread(
   threadId: string,
   actorId = getConfiguredChatActorId(),
-): UseChatRoomResult {
+): UseChatChannelResult {
   return useChatTarget({ type: "thread", threadId }, actorId);
 }
 
-function useChatTarget(target: StreamMessagesClientTarget, actorId: string): UseChatRoomResult {
+function useChatTarget(target: StreamMessagesClientTarget, actorId: string): UseChatChannelResult {
   const targetType = target.type;
   const targetId = target.type === "channel" ? target.channelId : target.threadId;
   const session = useMemo(() => {

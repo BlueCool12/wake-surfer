@@ -2,7 +2,7 @@ import { useState } from "react";
 import { MessagesSquare, RotateCw, X } from "lucide-react";
 
 import useIsCoarsePointer from "../../hooks/useIsCoarsePointer";
-import type { ChatMessageView } from "../../features/chat/useChatRoom";
+import type { ChatMessageView } from "../../features/chat/useChatChannel";
 import { formatTime } from "../../utils/date";
 import MessageReactions, { type MessageReactionsValue } from "./MessageReactions";
 import styles from "./MessageBubble.module.css";

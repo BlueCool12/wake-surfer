@@ -1,6 +1,6 @@
 import type { ComponentProps } from "react";
 
-import { useChatThread } from "../../features/chat/useChatRoom";
+import { useChatThread } from "../../features/chat/useChatChannel";
 import ThreadPanel, { type ThreadReply } from "./ThreadPanel";
 
 type ConnectedThreadPanelProps = Omit<
