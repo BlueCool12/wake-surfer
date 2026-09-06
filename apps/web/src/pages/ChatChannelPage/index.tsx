@@ -7,6 +7,7 @@ import useVisualViewportHeight from "../../hooks/useVisualViewportHeight";
 import type { MessageReactionsValue } from "./MessageReactions";
 import ChannelListContent from "./ChannelListSidebar";
 import { ChannelConversationView, PanelBackdrop } from "./ChannelConversationView";
+import { MessageListView } from "./MessageListView";
 import type { ChannelMember, ThreadPanelTab } from "./ThreadPanel";
 import { createChatComposerSubmitController } from "./chatComposerKeyPolicy";
 import styles from "./ChatChannelPage.module.css";
@@ -301,27 +302,29 @@ function ChannelConversation({
       onOpenChannelList={onOpenChannelList}
       onOpenPanel={handleOpenPanel}
       voice={{ ...voice, anchorRef: scrollRef }}
-      messageList={{
-        isLoading,
-        isLoadingOlder,
-        olderFailed,
-        hasMoreBefore,
-        recoveryPhase,
-        scrollRef,
-        onScroll: handleScroll,
-        loadOlder,
-        retryRecovery,
-        items: messages.map((message) => ({
-          message,
-          onRetry: message.status === "failed" ? () => retryMessage(message) : undefined,
-          onDelete: message.status === "failed" ? () => discardMessage(message) : undefined,
-          isThreadActive: message.key === selectedThreadKey,
-          onOpenThread: () => handleOpenThread(message.key),
-          reactions: reactionsByMessageKey[message.key] ?? {},
-          onToggleReaction: (emoji) => handleToggleReaction(message.key, emoji),
-          unreadCount: Math.max(CHANNEL_MEMBERS.length - 1, 0),
-        })),
-      }}
+      messageArea={
+        <MessageListView
+          isLoading={isLoading}
+          isLoadingOlder={isLoadingOlder}
+          olderFailed={olderFailed}
+          hasMoreBefore={hasMoreBefore}
+          recoveryPhase={recoveryPhase}
+          scrollRef={scrollRef}
+          onScroll={handleScroll}
+          loadOlder={loadOlder}
+          retryRecovery={retryRecovery}
+          items={messages.map((message) => ({
+            message,
+            onRetry: message.status === "failed" ? () => retryMessage(message) : undefined,
+            onDelete: message.status === "failed" ? () => discardMessage(message) : undefined,
+            isThreadActive: message.key === selectedThreadKey,
+            onOpenThread: () => handleOpenThread(message.key),
+            reactions: reactionsByMessageKey[message.key] ?? {},
+            onToggleReaction: (emoji) => handleToggleReaction(message.key, emoji),
+            unreadCount: Math.max(CHANNEL_MEMBERS.length - 1, 0),
+          }))}
+        />
+      }
       composer={{
         draft,
         isDraftMultiline,

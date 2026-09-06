@@ -1,12 +1,10 @@
-import type { ComponentProps, RefObject } from "react";
+import type { ComponentProps, ReactNode, RefObject } from "react";
 import { Headset, Menu, PanelRight, Send } from "lucide-react";
 
-import Loading from "../../components/Loading";
 import ThemeToggle from "../../components/ThemeToggle";
 import ThreadPanel from "./ConnectedThreadPanel";
 import MentionPicker from "./MentionPicker";
 import { VoiceCallBar } from "./VoiceCallBar";
-import MessageBubble from "./MessageBubble";
 import styles from "./ChatChannelPage.module.css";
 
 // 패널 바깥을 덮는 배경이다. 필요한 영역이 조건부로 표시하고, 클릭하면 닫기를 요청한다.
@@ -28,24 +26,20 @@ export function PanelBackdrop({
   );
 }
 
-// 뷰가 받아야 하는 값과 이벤트를 목록·입력·통화·스레드별로 드러낸다.
+// 합의한 후속 방향: 현재 입력 전체가 최종 설계는 아니다.
+// - channelId는 서버 리소스 식별자다. 순수 뷰에는 식별자 대신 표시에 필요한 데이터를 전달한다.
+// - 채널 목록 열기 버튼은 대화 뷰 밖의 별도 컴포넌트로 분리한다.
+// - 헤더의 스레드 열기 버튼을 제거한다. 메시지에서 열고 스레드 패널에서 닫는다.
+// - 음성 통화는 독립 기능으로 분리하며, 이번 작업에서는 내부 구현을 변경하지 않는다.
+// - 대화 레이아웃에는 기능별 UI를 전달한다. 로딩 등 표시 상태는 해당 기능 내부에서 다룬다.
+//   이번 단계에서는 messageArea에 적용하고, 나머지 영역은 후속 작업으로 남긴다.
+// - 상태를 열거형으로 통합하는 작업은 미룬다.
 type ChannelConversationViewProps = {
   channelId: string;
   onOpenChannelList: () => void;
   onOpenPanel: () => void;
   voice: ComponentProps<typeof VoiceCallBar> & { join: () => void };
-  messageList: {
-    isLoading: boolean;
-    isLoadingOlder: boolean;
-    olderFailed: boolean;
-    hasMoreBefore: boolean;
-    recoveryPhase: string;
-    scrollRef: RefObject<HTMLDivElement | null>;
-    onScroll: () => void;
-    loadOlder: () => void;
-    retryRecovery: () => void;
-    items: ComponentProps<typeof MessageBubble>[];
-  };
+  messageArea: ReactNode;
   composer: {
     draft: string;
     isDraftMultiline: boolean;
@@ -71,21 +65,11 @@ export function ChannelConversationView({
   onOpenChannelList,
   onOpenPanel,
   voice,
-  messageList,
+  messageArea,
   composer,
   isPanelOverlayOpen,
   thread,
 }: ChannelConversationViewProps) {
-  const {
-    isLoading,
-    isLoadingOlder,
-    olderFailed,
-    hasMoreBefore,
-    recoveryPhase,
-    loadOlder,
-    retryRecovery,
-  } = messageList;
-
   return (
     <div
       className={
@@ -137,44 +121,7 @@ export function ChannelConversationView({
       />
 
       <div className={styles.page}>
-        <div
-          className={styles.messages}
-          ref={messageList.scrollRef}
-          onScroll={messageList.onScroll}
-        >
-          {isLoading ? (
-            <Loading />
-          ) : (
-            <>
-              {hasMoreBefore ? (
-                <button type="button" className={styles.loadOlder} onClick={loadOlder}>
-                  {isLoadingOlder
-                    ? "이전 메시지 불러오는 중…"
-                    : olderFailed
-                      ? "이전 메시지 다시 불러오기"
-                      : "이전 메시지 불러오기"}
-                </button>
-              ) : null}
-              {recoveryPhase === "recovery_pending" ? (
-                <p className={styles.recoveryNotice}>누락된 메시지를 이어서 복구하고 있어요.</p>
-              ) : recoveryPhase === "retryable_failure" ? (
-                <button type="button" className={styles.recoveryNotice} onClick={retryRecovery}>
-                  연결이 잠시 끊겼어요. 복구 시도하기
-                </button>
-              ) : recoveryPhase === "stream_unavailable" ||
-                recoveryPhase === "invalid_cursor" ||
-                recoveryPhase === "authentication_failure" ||
-                recoveryPhase === "protocol_failure" ? (
-                <p className={styles.recoveryError}>메시지 기록을 안전하게 불러오지 못했어요.</p>
-              ) : null}
-              {messageList.items.length === 0 ? (
-                <p className={styles.placeholder}>아직 잔잔해요. 첫 파도를 일으켜보세요 🌊</p>
-              ) : (
-                messageList.items.map((item) => <MessageBubble key={item.message.key} {...item} />)
-              )}
-            </>
-          )}
-        </div>
+        {messageArea}
 
         <div className={styles.composer}>
           {composer.mentionPicker !== undefined ? (
