@@ -10,9 +10,9 @@ import {
   X,
 } from "lucide-react";
 
-import { formatTime } from "../../utils/date";
-import type { ChatMessageView } from "../../features/chat/useChatChannel";
-import styles from "./ThreadPanel.module.css";
+import { formatTime } from "../../../utils/date";
+import type { ChatMessageView } from "../../../features/chat/useChatChannel";
+import styles from "./ThreadPanelView.module.css";
 
 export type ThreadReply = {
   id: string;
@@ -28,7 +28,7 @@ export type ChannelMember = {
 
 export type ThreadPanelTab = "thread" | "members" | "memo";
 
-type ThreadPanelProps = {
+type ThreadPanelViewProps = {
   /** 부모가 정하는 배치용 클래스(좁은 화면에서는 전체 화면 오버레이). */
   className?: string | undefined;
   /** 오버레이를 닫을 때 호출. 넓은 화면에서는 닫기 버튼이 숨겨진다. */
@@ -38,8 +38,8 @@ type ThreadPanelProps = {
   parentMessage: ChatMessageView | undefined;
   isParentDeleted: boolean;
   isParentEdited: boolean;
-  onEditParent: (text: string) => void;
-  onDeleteParent: () => void;
+  onEditParent: ((text: string) => void) | undefined;
+  onDeleteParent: (() => void) | undefined;
   replies: ThreadReply[];
   onAddReply: (text: string) => void;
   members: ChannelMember[];
@@ -47,8 +47,8 @@ type ThreadPanelProps = {
   onCollapsedChange: (collapsed: boolean) => void;
 };
 
-/** 채팅방 오른쪽에 고정되는 스레드/멤버/메모 패널. 백엔드에 스레드 개념이 없어 답글은 이 화면 안에서만 유지된다. */
-function ThreadPanel({
+/** 스레드·멤버·메모를 표시한다. 편집과 입력 조작은 내부에서 처리하고, 가능한 동작은 연결부가 제공한다. */
+function ThreadPanelView({
   className,
   onClose,
   activeTab,
@@ -63,7 +63,7 @@ function ThreadPanel({
   members,
   isCollapsed,
   onCollapsedChange,
-}: ThreadPanelProps) {
+}: ThreadPanelViewProps) {
   const [draft, setDraft] = useState("");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [isEditingParent, setIsEditingParent] = useState(false);
@@ -94,12 +94,6 @@ function ThreadPanel({
     }
   };
 
-  const canModifyParent =
-    parentMessage !== undefined &&
-    parentMessage.isMine &&
-    parentMessage.status === "sent" &&
-    !isParentDeleted;
-
   const handleEditParentStart = () => {
     if (parentMessage === undefined) return;
     setParentDraft(parentMessage.text);
@@ -109,7 +103,7 @@ function ThreadPanel({
   const handleEditParentSave = () => {
     const trimmed = parentDraft.trim();
     if (trimmed.length === 0) return;
-    onEditParent(trimmed);
+    onEditParent?.(trimmed);
     setIsEditingParent(false);
   };
 
@@ -125,7 +119,7 @@ function ThreadPanel({
 
   const handleDeleteParent = () => {
     if (!window.confirm("메시지를 삭제할까요?")) return;
-    onDeleteParent();
+    onDeleteParent?.();
   };
 
   const panelClass = className === undefined ? styles.panel : `${styles.panel} ${className}`;
@@ -301,9 +295,9 @@ function ThreadPanel({
                     ? `수정됨 · ${formatTime(parentMessage.createdAt)}`
                     : formatTime(parentMessage.createdAt)}
                 </span>
-                {canModifyParent ? (
+                {onEditParent !== undefined || onDeleteParent !== undefined ? (
                   <span className={styles.parentActions}>
-                    {isEditingParent ? (
+                    {isEditingParent && onEditParent !== undefined ? (
                       <>
                         <button
                           type="button"
@@ -324,22 +318,26 @@ function ThreadPanel({
                       </>
                     ) : (
                       <>
-                        <button
-                          type="button"
-                          className={styles.editButton}
-                          onClick={handleEditParentStart}
-                          aria-label="메시지 수정"
-                        >
-                          <Pencil size={12} />
-                        </button>
-                        <button
-                          type="button"
-                          className={styles.editButton}
-                          onClick={handleDeleteParent}
-                          aria-label="메시지 삭제"
-                        >
-                          <X size={12} />
-                        </button>
+                        {onEditParent !== undefined ? (
+                          <button
+                            type="button"
+                            className={styles.editButton}
+                            onClick={handleEditParentStart}
+                            aria-label="메시지 수정"
+                          >
+                            <Pencil size={12} />
+                          </button>
+                        ) : null}
+                        {onDeleteParent !== undefined ? (
+                          <button
+                            type="button"
+                            className={styles.editButton}
+                            onClick={handleDeleteParent}
+                            aria-label="메시지 삭제"
+                          >
+                            <X size={12} />
+                          </button>
+                        ) : null}
                       </>
                     )}
                   </span>
@@ -389,4 +387,4 @@ function ThreadPanel({
   );
 }
 
-export default ThreadPanel;
+export default ThreadPanelView;

@@ -26,12 +26,88 @@ export type RealtimeChatMessage = {
   isEdited: boolean;
 };
 
-type OptimisticMessage = {
-  idempotencyKey: string;
-  text: string;
-  createdAt: string;
-  status: "pending" | "failed";
-};
+/** 미확정 전송 메시지의 상태와 재전송·버리기 규칙을 소유한다. 통신과 목록 변경은 세션에 요청한다. */
+class OutgoingChatMessage {
+  readonly idempotencyKey: string;
+  readonly text: string;
+  readonly createdAt: string;
+  readonly #send: () => void;
+  readonly #discard: () => void;
+  readonly #onChange: () => void;
+  #status: "pending" | "failed" = "pending";
+  #started = false;
+  #settled = false;
+
+  constructor(options: {
+    idempotencyKey: string;
+    text: string;
+    createdAt: string;
+    send: () => void;
+    discard: () => void;
+    onChange: () => void;
+  }) {
+    this.idempotencyKey = options.idempotencyKey;
+    this.text = options.text;
+    this.createdAt = options.createdAt;
+    this.#send = options.send;
+    this.#discard = options.discard;
+    this.#onChange = options.onChange;
+  }
+
+  get status(): "pending" | "failed" {
+    return this.#status;
+  }
+
+  canRetry(): boolean {
+    return !this.#settled && this.#status === "failed";
+  }
+
+  canDiscard(): boolean {
+    return !this.#settled && this.#status === "failed";
+  }
+
+  send(): void {
+    if (this.#started || this.#settled) return;
+    this.#started = true;
+    this.#transmit();
+  }
+
+  retry(): void {
+    if (!this.canRetry()) return;
+    this.#transmit();
+  }
+
+  discard(): void {
+    if (!this.canDiscard()) return;
+    this.#settled = true;
+    this.#discard();
+    this.#onChange();
+  }
+
+  // 여러 메시지가 함께 실패할 때 세션이 변경 알림을 한 번으로 묶을 수 있도록 결과를 돌려준다.
+  markFailed(): boolean {
+    if (this.#settled || this.#status !== "pending") return false;
+    this.#status = "failed";
+    return true;
+  }
+
+  // 서버가 수락한 뒤에는 이 미확정 전송 객체로 다시 보내거나 버릴 수 없다.
+  markAccepted(): void {
+    this.#settled = true;
+  }
+
+  #transmit(): void {
+    this.#status = "pending";
+    this.#onChange();
+    try {
+      this.#send();
+    } catch {
+      if (this.markFailed()) {
+        this.#onChange();
+      }
+    }
+  }
+}
 
 export type RealtimeChatTargetSessionOptions = {
   actorId: string;
@@ -44,7 +120,7 @@ export type RealtimeChatTargetSessionOptions = {
 
 export class RealtimeChatTargetSession extends Emitter {
   readonly options: RealtimeChatTargetSessionOptions;
-  readonly #optimistic = new Map<string, OptimisticMessage>();
+  readonly #optimistic = new Map<string, OutgoingChatMessage>();
   readonly #editedMessageIds = new Set<string>();
   readonly #runtime: RealtimeChatTargetRuntime;
   readonly #createIdempotencyKey: () => string;
@@ -156,57 +232,26 @@ export class RealtimeChatTargetSession extends Emitter {
 
   sendMessage(text: string): void {
     const trimmed = text.trim();
-
-    if (trimmed.length === 0) {
-      return;
-    }
+    if (trimmed.length === 0) return;
 
     const idempotencyKey = this.#createIdempotencyKey();
-    const createdAt = this.#now();
-    this.#optimistic.set(idempotencyKey, {
+    const message = new OutgoingChatMessage({
       idempotencyKey,
       text: trimmed,
-      createdAt,
-      status: "pending",
+      createdAt: this.#now(),
+      send: () => this.#runtime.messageTransport.sendMessage({ idempotencyKey, text: trimmed }),
+      discard: () => {
+        this.#optimistic.delete(idempotencyKey);
+      },
+      onChange: this.emitViewChange,
     });
-    this.emit();
-    try {
-      this.#runtime.messageTransport.sendMessage({
-        idempotencyKey,
-        text: trimmed,
-      });
-    } catch {
-      const optimistic = this.#optimistic.get(idempotencyKey);
-
-      if (optimistic !== undefined) {
-        optimistic.status = "failed";
-        this.emit();
-      }
-    }
+    this.#optimistic.set(idempotencyKey, message);
+    message.send();
   }
 
   retryMessage(message: RealtimeChatMessage): void {
-    if (message.idempotencyKey === undefined) {
-      return;
-    }
-
-    const optimistic = this.#optimistic.get(message.idempotencyKey);
-
-    if (optimistic === undefined || optimistic.status !== "failed") {
-      return;
-    }
-
-    optimistic.status = "pending";
-    this.emit();
-    try {
-      this.#runtime.messageTransport.sendMessage({
-        idempotencyKey: optimistic.idempotencyKey,
-        text: optimistic.text,
-      });
-    } catch {
-      optimistic.status = "failed";
-      this.emit();
-    }
+    if (message.idempotencyKey === undefined) return;
+    this.#optimistic.get(message.idempotencyKey)?.retry();
   }
 
   editMessage(message: RealtimeChatMessage, text: string): void {
@@ -242,9 +287,8 @@ export class RealtimeChatTargetSession extends Emitter {
   }
 
   discardMessage(message: RealtimeChatMessage): void {
-    if (message.idempotencyKey !== undefined && this.#optimistic.delete(message.idempotencyKey)) {
-      this.emit();
-    }
+    if (message.idempotencyKey === undefined) return;
+    this.#optimistic.get(message.idempotencyKey)?.discard();
   }
 
   dispose(options: { clearCursor: boolean }): void {
@@ -299,15 +343,13 @@ export class RealtimeChatTargetSession extends Emitter {
         this.streamSession.timeline.applyLive(message);
       }),
       this.#runtime.messageTransport.onMessageAccepted((response) => {
+        this.#optimistic.get(response.idempotencyKey)?.markAccepted();
         this.#optimistic.delete(response.idempotencyKey);
         this.streamSession.timeline.applyAccepted(response.message);
         this.emit();
       }),
       this.#runtime.messageTransport.onMessageRejected((response) => {
-        const optimistic = this.#optimistic.get(response.idempotencyKey);
-
-        if (optimistic !== undefined) {
-          optimistic.status = "failed";
+        if (this.#optimistic.get(response.idempotencyKey)?.markFailed()) {
           this.emit();
         }
       }),
@@ -336,17 +378,10 @@ export class RealtimeChatTargetSession extends Emitter {
 
   readonly #markPendingMessagesFailed = (): void => {
     let changed = false;
-
-    for (const optimistic of this.#optimistic.values()) {
-      if (optimistic.status === "pending") {
-        optimistic.status = "failed";
-        changed = true;
-      }
+    for (const message of this.#optimistic.values()) {
+      if (message.markFailed()) changed = true;
     }
-
-    if (changed) {
-      this.emit();
-    }
+    if (changed) this.emit();
   };
 
   readonly #queueConnectionRecovery = (connectionGeneration: string): void => {
