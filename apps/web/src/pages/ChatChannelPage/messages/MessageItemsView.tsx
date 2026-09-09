@@ -1,12 +1,34 @@
-import type { ComponentProps } from "react";
+import { ChannelMessageRow } from "./ChannelMessageRow";
+import type { RealtimeChatTargetSession } from "@wake-surfer/realtime-chat-stream-messages-client";
+import type { MessageReactionsValue } from "./MessageReactionsView";
 
-import MessageBubbleView from "./MessageBubbleView";
-import styles from "../ChatChannelPage.module.css";
-
-export function MessageItemsView({ items }: { items: ComponentProps<typeof MessageBubbleView>[] }) {
-  if (items.length === 0) {
-    return <p className={styles.placeholder}>아직 잔잔해요. 첫 파도를 일으켜보세요 🌊</p>;
-  }
-
-  return items.map((item) => <MessageBubbleView key={item.message.key} {...item} />);
+export function MessageItemsView({
+  session,
+  keys,
+  selectedKey,
+  reactions,
+  onOpenThread,
+  onToggleReaction,
+  unreadCount,
+}: {
+  session: RealtimeChatTargetSession;
+  keys: readonly string[];
+  selectedKey: string | undefined;
+  reactions: ReadonlyMap<string, MessageReactionsValue>;
+  onOpenThread: (key: string) => void;
+  onToggleReaction: (key: string, emoji: string) => void;
+  unreadCount: number;
+}) {
+  return keys.map((key) => (
+    <ChannelMessageRow
+      key={key}
+      session={session}
+      messageKey={key}
+      isThreadActive={key === selectedKey}
+      reactions={reactions.get(key)}
+      onOpenThread={onOpenThread}
+      onToggleReaction={onToggleReaction}
+      unreadCount={unreadCount}
+    />
+  ));
 }

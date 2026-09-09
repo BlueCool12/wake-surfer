@@ -24,6 +24,7 @@ export type VoiceCallBarViewProps = Pick<
  * 시작 위치 계산이 한 번 실패하고 그 뒤로는 의존성이 그대로라 다시 계산되지 않는다.
  */
 export function VoiceCallBarView(props: VoiceCallBarViewProps) {
+  // 후속: idle+error이면 바가 사라져 종료 오류가 숨겨진다. 종료·오류 계약과 표시 위치를 정해야 한다.
   if (props.status === "idle") {
     return null;
   }

@@ -22,6 +22,7 @@ function ChatChannelPage() {
         onClose={() => setIsChannelListOpen(false)}
       />
       <ChannelConversation
+        key={channelId}
         channelId={channelId}
         onOpenChannelList={() => setIsChannelListOpen(true)}
       />

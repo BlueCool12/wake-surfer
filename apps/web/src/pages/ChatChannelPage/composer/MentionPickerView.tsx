@@ -1,10 +1,10 @@
-import type { ChannelMember } from "../thread/ThreadPanelView";
+import type { MentionMember } from "../channelMember";
 import styles from "./MentionPickerView.module.css";
 
 type MentionPickerViewProps = {
-  members: ChannelMember[];
+  members: readonly MentionMember[];
   activeIndex: number;
-  onSelect: (member: ChannelMember) => void;
+  onSelect: (member: MentionMember) => void;
 };
 
 /** "@"로 멘션할 채팅방 멤버를 고르는 팝업. 입력창 바로 위에 뜬다. */

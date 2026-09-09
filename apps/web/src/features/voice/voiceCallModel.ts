@@ -181,6 +181,7 @@ export function createVoiceCallModel(options: {
     });
   }
 
+  // 후속: await 중 leave로 종료해도 참가가 이어질 수 있다. 참가 시도 식별자·취소와 늦게 얻은 자원 정리가 필요하다.
   async function join(): Promise<void> {
     if (snapshot.status !== "idle" && snapshot.status !== "failed") return;
 

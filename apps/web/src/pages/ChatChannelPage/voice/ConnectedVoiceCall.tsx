@@ -14,6 +14,7 @@ type ConnectedVoiceCallProps = {
 export function ConnectedVoiceCall({ roomId, anchorRef, children }: ConnectedVoiceCallProps) {
   const voice = useVoiceCall(roomId);
 
+  // 후속: 통화 변경마다 대화 JSX가 재구성된다. 단일 모델 생성과 버튼·바의 구독을 분리해야 한다.
   return children({
     joinButton: <VoiceCallJoinButtonView status={voice.status} onJoin={voice.join} />,
     callBar: (

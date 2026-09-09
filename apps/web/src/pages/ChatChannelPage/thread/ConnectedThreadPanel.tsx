@@ -1,84 +1,120 @@
-import { useState } from "react";
-import type { ComponentProps } from "react";
+import { memo, useState } from "react";
+import type { RealtimeChatTargetSession } from "@wake-surfer/realtime-chat-stream-messages-client";
+import {
+  toChatMessageView,
+  useChatMessage,
+  useChatScope,
+  useChatSession,
+  useStartChatSession,
+} from "../../../features/chat/useChatChannel";
+import { ChannelMessageRow } from "../messages/ChannelMessageRow";
+import { ChatHistoryStatus, ChatOlderHistory } from "../messages/ChatHistoryStatus";
+import ThreadPanelView, { type ThreadPanelTab, type ThreadPanelViewProps } from "./ThreadPanelView";
+import { ThreadConversationView } from "./ThreadConversationView";
+import styles from "./ThreadPanelView.module.css";
 
-import { useChatThread } from "../../../features/chat/useChatChannel";
-import type { UseChatChannelResult } from "../../../features/chat/useChatChannel";
-import { getMessageActionAvailability } from "../messageActionPolicy";
-import ThreadPanelView, { type ThreadPanelTab, type ThreadReply } from "./ThreadPanelView";
-
-type ConnectedThreadPanelProps = Omit<
-  ComponentProps<typeof ThreadPanelView>,
-  | "isParentDeleted"
-  | "isParentEdited"
-  | "replies"
-  | "onAddReply"
-  | "onEditParent"
-  | "onDeleteParent"
-  | "activeTab"
-  | "onTabChange"
-> & {
-  onEditMessage: UseChatChannelResult["editMessage"];
-  onDeleteMessage: UseChatChannelResult["deleteMessage"];
-  // 같은 메시지를 다시 열어도 스레드 탭으로 돌아가도록, 선택 키와 열기 요청을 구분한다.
+type Props = Omit<ThreadPanelViewProps, "activeTab" | "onTabChange" | "thread"> & {
+  session: RealtimeChatTargetSession;
+  selectedKey: string | undefined;
   openRequestId: number;
 };
 
-type ThreadConversationProps = Omit<
-  ComponentProps<typeof ThreadPanelView>,
-  "replies" | "onAddReply"
->;
-const EMPTY_REPLIES: ThreadReply[] = [];
-
-// 패널 탭과 부모 메시지의 동작을 연결한다. 답글 조회는 선택된 스레드 안에서 구독한다.
-function ConnectedThreadPanel({
-  onEditMessage,
-  onDeleteMessage,
+export default function ConnectedThreadPanel({
+  session,
+  selectedKey,
   openRequestId,
   ...props
-}: ConnectedThreadPanelProps) {
-  const [tabSelection, setTabSelection] = useState<{ requestId: number; tab: ThreadPanelTab }>({
+}: Props) {
+  const [selection, setSelection] = useState<{ requestId: number; tab: ThreadPanelTab }>({
     requestId: openRequestId,
     tab: "thread",
   });
-  const activeTab = tabSelection.requestId === openRequestId ? tabSelection.tab : "thread";
-  const { parentMessage } = props;
-  const available = getMessageActionAvailability(parentMessage);
-  const panelProps: ThreadConversationProps = {
-    ...props,
-    activeTab,
-    onTabChange: (tab) => setTabSelection({ requestId: openRequestId, tab }),
-    isParentDeleted: parentMessage?.isDeleted ?? false,
-    isParentEdited: parentMessage?.isEdited ?? false,
-    onEditParent:
-      available.canEdit && parentMessage !== undefined
-        ? (text) => onEditMessage(parentMessage, text)
-        : undefined,
-    onDeleteParent:
-      available.canDelete && parentMessage !== undefined
-        ? () => onDeleteMessage(parentMessage)
-        : undefined,
-  };
-  const threadId = parentMessage?.messageId;
+  const activeTab = selection.requestId === openRequestId ? selection.tab : "thread";
+  const visible = !props.isCollapsed && activeTab === "thread";
+  return (
+    <ThreadPanelView
+      {...props}
+      activeTab={activeTab}
+      onTabChange={(tab) => setSelection({ requestId: openRequestId, tab })}
+      thread={
+        <SelectedThread
+          key={selectedKey ?? "unselected"}
+          session={session}
+          selectedKey={selectedKey}
+          visible={visible}
+        />
+      }
+    />
+  );
+}
 
-  if (threadId === undefined) {
-    return <ThreadPanelView {...panelProps} replies={EMPTY_REPLIES} onAddReply={() => undefined} />;
+function SelectedThread({
+  session,
+  selectedKey,
+  visible,
+}: {
+  session: RealtimeChatTargetSession;
+  selectedKey: string | undefined;
+  visible: boolean;
+}) {
+  const parent = useChatMessage(session, selectedKey);
+  if (parent === undefined || parent.messageId === undefined) {
+    return visible ? (
+      <div className={styles.emptyState}>
+        <p>
+          {selectedKey === undefined
+            ? "채팅 메시지를 눌러 스레드를 시작해보세요."
+            : "선택한 메시지를 표시할 수 없습니다."}
+        </p>
+      </div>
+    ) : null;
   }
-
-  return <ConnectedThreadConversation {...panelProps} threadId={threadId} />;
+  return (
+    <ConnectedThreadConversation
+      key={parent.messageId}
+      threadId={parent.messageId}
+      parentMessage={toChatMessageView(parent)}
+      visible={visible}
+      onEditParent={parent.canEdit() ? (text) => parent.edit(text) : undefined}
+      onDeleteParent={parent.canDelete() ? () => parent.delete() : undefined}
+    />
+  );
 }
 
 function ConnectedThreadConversation({
   threadId,
   ...props
-}: ThreadConversationProps & { threadId: string }) {
-  const { messages, sendMessage } = useChatThread(threadId);
-  const replies: ThreadReply[] = messages.map((message) => ({
-    id: message.key,
-    text: message.isDeleted ? "삭제된 메시지입니다" : message.text,
-    createdAt: message.createdAt,
-  }));
-
-  return <ThreadPanelView {...props} replies={replies} onAddReply={sendMessage} />;
+}: Omit<Parameters<typeof ThreadConversationView>[0], "replies" | "onAddReply"> & {
+  threadId: string;
+}) {
+  const session = useChatSession({ type: "thread", threadId });
+  useStartChatSession(session);
+  return (
+    <ThreadConversationView
+      {...props}
+      onAddReply={session.sendMessage}
+      replies={<ThreadReplies session={session} />}
+    />
+  );
 }
 
-export default ConnectedThreadPanel;
+const ThreadReplies = memo(function ThreadReplies({
+  session,
+}: {
+  session: RealtimeChatTargetSession;
+}) {
+  const keys = useChatScope(session.messageKeys);
+  return (
+    <div className={styles.replyList}>
+      <ChatOlderHistory session={session} />
+      <ChatHistoryStatus
+        session={session}
+        empty={keys.length === 0}
+        emptyText="아직 답글이 없어요."
+      />
+      {keys.map((key) => (
+        <ChannelMessageRow key={key} session={session} messageKey={key} />
+      ))}
+    </div>
+  );
+});

@@ -1,3 +1,4 @@
+import { memo } from "react";
 import type { ChatMessageView } from "../../../features/chat/useChatChannel";
 import MessageReactionsView, { type MessageReactionsValue } from "./MessageReactionsView";
 import { MessageBubbleFrameView } from "./MessageBubbleFrameView";
@@ -25,18 +26,16 @@ type MessageBubbleViewProps = {
   unreadCount?: number;
 };
 
-/** 메시지 한 건의 말풍선과 읽음·반응 정보를 배치한다. */
-function MessageBubbleView({
+const EMPTY_REACTIONS: MessageReactionsValue = {};
+const MessageBubbleBodyView = memo(function MessageBubbleBodyView({
   message,
   onRetry,
   onDiscard,
   replyCount = 0,
   isThreadActive = false,
   onOpenThread,
-  reactions = {},
-  onToggleReaction,
   unreadCount = 0,
-}: MessageBubbleViewProps) {
+}: Omit<MessageBubbleViewProps, "reactions" | "onToggleReaction">) {
   const rowClass = message.isMine ? `${styles.row} ${styles.rowMine}` : styles.row;
   const unreadCountNode =
     message.status === "sent" && unreadCount > 0 ? (
@@ -44,55 +43,73 @@ function MessageBubbleView({
     ) : null;
 
   return (
-    <div className={styles.wrapper}>
-      <div className={rowClass}>
-        {message.isMine ? unreadCountNode : null}
+    <div className={rowClass}>
+      {message.isMine ? unreadCountNode : null}
 
-        {message.status === "failed" && !message.isDeleted ? (
-          <MessageSendFailureView
-            key={message.key}
-            message={message}
-            isThreadActive={isThreadActive}
-            onRetry={onRetry}
-            onDiscard={onDiscard}
-          />
-        ) : (
-          <MessageBubbleFrameView
-            message={message}
-            isThreadActive={isThreadActive}
-            onActivate={onOpenThread}
-          >
-            {message.isDeleted ? (
-              <span className={styles.deletedText}>삭제된 메시지입니다</span>
-            ) : (
-              <>
-                <span className={styles.text}>{message.text}</span>
-                <MessageMetadataView message={message} replyCount={replyCount} />
-              </>
-            )}
-          </MessageBubbleFrameView>
-        )}
-
-        {message.isMine ? null : unreadCountNode}
-      </div>
-
-      {onToggleReaction !== undefined ? (
-        <div
-          className={
-            message.isMine
-              ? `${styles.reactionsRow} ${styles.reactionsRowMine}`
-              : styles.reactionsRow
-          }
+      {message.status === "failed" && !message.isDeleted ? (
+        <MessageSendFailureView
+          key={message.key}
+          message={message}
+          isThreadActive={isThreadActive}
+          onRetry={onRetry}
+          onDiscard={onDiscard}
+        />
+      ) : (
+        <MessageBubbleFrameView
+          message={message}
+          isThreadActive={isThreadActive}
+          onActivate={onOpenThread}
         >
-          <MessageReactionsView
-            reactions={reactions}
-            onToggle={onToggleReaction}
-            isMine={message.isMine}
-          />
-        </div>
-      ) : null}
+          {message.isDeleted ? (
+            <span className={styles.deletedText}>삭제된 메시지입니다</span>
+          ) : (
+            <>
+              <span className={styles.text}>{message.text}</span>
+              <MessageMetadataView message={message} replyCount={replyCount} />
+            </>
+          )}
+        </MessageBubbleFrameView>
+      )}
+
+      {message.isMine ? null : unreadCountNode}
+    </div>
+  );
+});
+
+const ReactionAreaView = memo(function ReactionAreaView({
+  isMine,
+  reactions,
+  onToggle,
+}: {
+  isMine: boolean;
+  reactions: MessageReactionsValue;
+  onToggle: (emoji: string) => void;
+}) {
+  return (
+    <div
+      className={isMine ? `${styles.reactionsRow} ${styles.reactionsRowMine}` : styles.reactionsRow}
+    >
+      <MessageReactionsView reactions={reactions} onToggle={onToggle} isMine={isMine} />
+    </div>
+  );
+});
+
+/** 반응 변경은 반응 영역에, 선택 변경은 말풍선 본문에만 전달한다. */
+export default function MessageBubbleView({
+  reactions = EMPTY_REACTIONS,
+  onToggleReaction,
+  ...body
+}: MessageBubbleViewProps) {
+  return (
+    <div className={styles.wrapper}>
+      <MessageBubbleBodyView {...body} />
+      {onToggleReaction === undefined ? null : (
+        <ReactionAreaView
+          isMine={body.message.isMine}
+          reactions={reactions}
+          onToggle={onToggleReaction}
+        />
+      )}
     </div>
   );
 }
-
-export default MessageBubbleView;

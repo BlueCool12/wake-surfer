@@ -16,6 +16,12 @@ import {
   type StreamMessagesClientTarget,
 } from "./target.js";
 
+type ReadonlyMessage<T> = T extends object
+  ? { readonly [Key in keyof T]: ReadonlyMessage<T[Key]> }
+  : T;
+
+export type TimelineMessage = ReadonlyMessage<PublicMessage>;
+
 export interface TimelineReadScope<T> {
   readonly value: T;
   readonly subscribe: (onChange: () => void) => Unsubscribe;
@@ -41,14 +47,14 @@ class TimelineScope<T> extends Emitter implements TimelineReadScope<T> {
 }
 
 export class StreamMessagesTimelineModel extends Emitter {
-  readonly #records = new Map<string, PublicMessage>();
+  readonly #records = new Map<string, TimelineMessage>();
   readonly #visibleIds: string[] = [];
   readonly #visibleIdSet = new Set<string>();
   readonly #acceptedOutsideVisible = new Set<string>();
   readonly #messageIdToSequence = new Map<string, number>();
   readonly #sequenceToMessageId = new Map<number, string>();
   readonly #bufferedBySequence = new Map<number, string>();
-  readonly #messageScopes = new Map<string, TimelineScope<PublicMessage | undefined>>();
+  readonly #messageScopes = new Map<string, TimelineScope<TimelineMessage | undefined>>();
   readonly #messageIds = new TimelineScope<readonly string[]>(() => this.#visibleIds);
 
   deliverySyncCursor: number | null = null;
@@ -70,11 +76,11 @@ export class StreamMessagesTimelineModel extends Emitter {
     return this.#messageIds;
   }
 
-  getMessage(messageId: string): PublicMessage | undefined {
+  getMessage(messageId: string): TimelineMessage | undefined {
     return this.#records.get(messageId);
   }
 
-  message(messageId: string): TimelineReadScope<PublicMessage | undefined> {
+  message(messageId: string): TimelineReadScope<TimelineMessage | undefined> {
     let scope = this.#messageScopes.get(messageId);
     if (scope === undefined) {
       scope = new TimelineScope(() => this.getMessage(messageId));
@@ -83,8 +89,23 @@ export class StreamMessagesTimelineModel extends Emitter {
     return scope;
   }
 
+  observeMessage(messageId: string, onChange: () => void): Unsubscribe {
+    this.message(messageId);
+    return this.#messageScopes.get(messageId)!.observeChanges(onChange);
+  }
+
+  observeOrder(onChange: () => void): Unsubscribe {
+    return this.#messageIds.observeChanges(onChange);
+  }
+
+  dispose(): void {
+    this.clearSubscriptions();
+    this.#messageIds.clearSubscriptions();
+    for (const scope of this.#messageScopes.values()) scope.clearSubscriptions();
+    this.#messageScopes.clear();
+  }
   // 기존 호출부의 읽기 계약. 별도 본문 배열을 상태로 보관하지 않는다.
-  get messages(): readonly PublicMessage[] {
+  get messages(): readonly TimelineMessage[] {
     return this.#visibleIds.map((id) => this.#records.get(id)!);
   }
 
@@ -102,7 +123,7 @@ export class StreamMessagesTimelineModel extends Emitter {
   applyLatest(response: LatestStreamMessagesResponse): void {
     this.#assertStream(response.streamId);
     batchChanges(() => {
-      for (const message of response.messages) this.#insertLoadedMessage(message);
+      for (const message of response.messages) this.#insertHistoryMessage(message);
       this.deliverySyncCursor = response.throughSequence;
       this.#setHistory(response.nextBeforeSequence, response.hasMoreBefore);
       this.#discardBufferedAtOrBeforeCursor();
@@ -113,7 +134,7 @@ export class StreamMessagesTimelineModel extends Emitter {
   applyOlder(response: OlderStreamMessagesResponse): void {
     this.#assertStream(response.streamId);
     batchChanges(() => {
-      for (const message of response.messages) this.#insertLoadedMessage(message);
+      for (const message of response.messages) this.#insertHistoryMessage(message);
       this.#setHistory(response.nextBeforeSequence, response.hasMoreBefore);
     });
   }
@@ -135,7 +156,7 @@ export class StreamMessagesTimelineModel extends Emitter {
       });
     }
     batchChanges(() => {
-      for (const message of response.messages) this.#insertLoadedMessage(message);
+      for (const message of response.messages) this.#insertHistoryMessage(message);
       this.deliverySyncCursor = response.nextAfterSequence;
       this.#discardBufferedAtOrBeforeCursor();
       if (!response.hasMoreAfter) this.#drainContiguousBuffer();
@@ -185,7 +206,7 @@ export class StreamMessagesTimelineModel extends Emitter {
     const current = this.#records.get(message.messageId);
     if (current === undefined || messagesEqual(current, message)) return;
     batchChanges(() => {
-      this.#records.set(message.messageId, message);
+      this.#records.set(message.messageId, ownMessage(message));
       this.#messageScopes.get(message.messageId)?.changed();
       // 기존 전체 구독은 이전 완료까지 유지한다. 순서 구독에는 알리지 않는다.
       this.emit();
@@ -199,14 +220,32 @@ export class StreamMessagesTimelineModel extends Emitter {
     this.emit();
   }
 
-  #registerRecord(message: PublicMessage): PublicMessage {
+  #registerRecord(message: PublicMessage): TimelineMessage {
     const current = this.#records.get(message.messageId);
     if (current !== undefined) return current;
-    this.#records.set(message.messageId, message);
+    const record = ownMessage(message);
+    this.#records.set(message.messageId, record);
     this.#messageIdToSequence.set(message.messageId, message.sequence);
     this.#sequenceToMessageId.set(message.sequence, message.messageId);
     this.#messageScopes.get(message.messageId)?.changed();
-    return message;
+    return record;
+  }
+
+  #insertHistoryMessage(message: PublicMessage): void {
+    this.#assertMessageTarget(message);
+    this.#assertIdentity(message);
+    const current = this.#records.get(message.messageId);
+    if (current !== undefined) {
+      // 삭제는 되돌리지 않는다. 조회 중 도착한 더 최신 수정도 보존한다.
+      const hasNewerEdit =
+        current.content !== null &&
+        current.editedAt !== undefined &&
+        message.content !== null &&
+        (message.editedAt === undefined ||
+          Date.parse(current.editedAt) > Date.parse(message.editedAt));
+      if (current.content !== null && !hasNewerEdit) this.replaceKnown(message);
+    }
+    this.#insertLoadedMessage(this.#records.get(message.messageId) ?? message);
   }
 
   #insertLoadedMessage(message: PublicMessage): void {
@@ -309,6 +348,14 @@ export class StreamMessagesTimelineModel extends Emitter {
       });
     }
   }
+}
+
+/** 입력 객체와 참조를 분리하고, 저장소가 소유한 레코드만 동결한다. */
+function ownMessage(message: PublicMessage): TimelineMessage {
+  const target = Object.freeze({ ...message.target });
+  return message.content === null
+    ? Object.freeze({ ...message, target })
+    : Object.freeze({ ...message, target, content: Object.freeze({ ...message.content }) });
 }
 
 function messagesEqual(left: PublicMessage, right: PublicMessage): boolean {

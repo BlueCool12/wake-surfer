@@ -35,7 +35,10 @@ export class StreamMessagesSessionModel {
   #abortController: AbortController | undefined;
   #olderAbortController: AbortController | undefined;
 
-  constructor(readonly options: StreamMessagesSessionModelOptions) {
+  readonly options: StreamMessagesSessionModelOptions;
+
+  constructor(options: StreamMessagesSessionModelOptions) {
+    this.options = options;
     this.target = copyStreamMessagesClientTarget(options.target);
     this.timeline = new StreamMessagesTimelineModel(this.target);
     this.cursorStorage = createStreamMessagesCursorStorage({
