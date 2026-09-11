@@ -3,20 +3,14 @@ import process from "node:process";
 import { fileURLToPath, URL } from "node:url";
 
 const workspaceRoot = fileURLToPath(new URL("..", import.meta.url));
-const appBuilds = new Map([
-  ["realtime-chat-api", ["--filter", "@wake-surfer/realtime-chat-api", "run", "build:bundle"]],
-  [
-    "realtime-chat-gateway",
-    ["--filter", "@wake-surfer/realtime-chat-gateway", "run", "build:bundle"],
-  ],
-  [
-    "realtime-media-gateway",
-    ["--filter", "@wake-surfer/realtime-media-gateway", "run", "build:bundle"],
-  ],
-  ["auth-api", ["--filter", "@wake-surfer/auth-api", "run", "build:bundle"]],
-  ["web", ["--filter", "web", "run", "build"]],
+const appPackages = new Map([
+  ["realtime-chat-api", "@wake-surfer/realtime-chat-api"],
+  ["realtime-chat-gateway", "@wake-surfer/realtime-chat-gateway"],
+  ["realtime-media-gateway", "@wake-surfer/realtime-media-gateway"],
+  ["auth-api", "@wake-surfer/auth-api"],
+  ["web", "web"],
 ]);
-const appServices = [...appBuilds.keys()];
+const appServices = [...appPackages.keys()];
 const requestedTarget = process.argv[2] ?? "all";
 
 if (
@@ -36,15 +30,17 @@ if (
 async function deploy(target) {
   const targets = target === "all" ? appServices : [target];
 
-  for (const service of targets) {
-    const buildArgs = appBuilds.get(service);
+  const buildFilters = targets.map((service) => {
+    const packageName = appPackages.get(service);
 
-    if (buildArgs === undefined) {
+    if (packageName === undefined) {
       throw new Error(`알 수 없는 앱 서비스: ${service}`);
     }
 
-    await runCommand("pnpm", buildArgs);
-  }
+    return `--filter=${packageName}`;
+  });
+
+  await runCommand("pnpm", ["exec", "turbo", "run", "build", ...buildFilters]);
 
   if (target === "all") {
     await runDockerCompose([

@@ -67,7 +67,7 @@ auth 전용 Postgres를 5433에 띄운다. 기존 realtime-chat DB(5432)와 분�
 ## 실행
 
 ```bash
-pnpm --filter @wake-surfer/auth-api build
+pnpm exec turbo run build --filter=@wake-surfer/auth-api
 pnpm --filter @wake-surfer/auth-api start
 ```
 

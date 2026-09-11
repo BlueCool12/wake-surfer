@@ -6,7 +6,10 @@
   "description": "Video conferencing and realtime collaboration platform.",
   "packageManager": "pnpm@11.7.0",
   "scripts": {
-    "build:realtime-chat": "pnpm --filter @wake-surfer/realtime-chat-api build && pnpm --filter @wake-surfer/realtime-chat-gateway build && pnpm --filter @wake-surfer/realtime-chat-stream-messages-client build && pnpm --filter web build",
+    "build": "turbo run build",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
+    "build:realtime-chat": "turbo run build --filter=@wake-surfer/realtime-chat-api --filter=@wake-surfer/realtime-chat-gateway --filter=web",
     "deploy": "node scripts/deploy.mjs",
     "dev:realtime-chat": "pnpm run deploy",
     "dev:realtime-chat:host": "pnpm docker:up && pnpm build:realtime-chat && node scripts/run-realtime-chat-dev.mjs",
@@ -24,6 +27,7 @@
     "@eslint/js": "^10.0.1",
     "eslint": "^10.6.0",
     "prettier": "^3.9.3",
+    "turbo": "^2.10.12",
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.62.0"
   }

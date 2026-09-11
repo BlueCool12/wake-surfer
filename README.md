@@ -8,6 +8,39 @@ WebSocket, WebRTC, RTMP 등을 활용한 화상 회의, 실시간 협업, 페어
 pnpm install
 ```
 
+### 빌드 실행
+
+의존 패키지의 빌드 순서와 결과 캐시는 Turborepo가 관리합니다. 각 패키지의 `build`는 자기 코드만
+컴파일하며, 앱의 배포용 번들도 같은 명령에서 생성합니다.
+
+```bash
+# 전체 앱과 패키지 빌드
+pnpm build
+
+# 웹과 웹이 사용하는 패키지만 빌드
+pnpm exec turbo run build --filter=web
+
+# 기존 채팅 개발용 빌드 범위
+pnpm build:realtime-chat
+
+# 실제 빌드 없이 실행 순서 확인
+pnpm exec turbo run build --dry
+
+# 해당 스크립트가 있는 패키지의 타입 검사와 테스트
+pnpm typecheck
+pnpm test
+```
+
+패키지의 `build`, `typecheck`, `test`, `dev`를 직접 호출하면 선행 작업은 실행되지 않습니다.
+의존 패키지 준비가 필요한 작업은 `pnpm exec turbo run <작업> --filter=<패키지명>`으로 실행합니다.
+예를 들어 웹 개발 서버는 `pnpm exec turbo run dev --filter=web`으로 시작할 수 있습니다.
+선행 빌드는 시작할 때 실행되며, 공통 패키지 변경을 계속 감시하고 재빌드하는 기능은 별도입니다.
+
+빌드 결과 `dist/`는 `.turbo/`의 로컬 캐시에서 복원합니다. 공통 TypeScript 설정, 공통 출력 스크립트,
+환경 파일과 `NODE_ENV`·`VITE_*` 값이 바뀌면 관련 캐시도 무효화됩니다. 인증 API는 빌드·타입 검사·테스트·
+개발 실행 전에 `prisma:generate`를 항상 실행해 `node_modules` 안의 생성 파일을 준비합니다.
+테스트와 개발 서버 실행은 캐시하지 않습니다. 원격 캐시는 별도로 설정하지 않습니다.
+
 ### 실제 채팅 MVP Docker 실행
 
 Docker가 실행 중인 상태에서 다음 표준 명령 하나로 앱을 로컬 빌드하고 PostgreSQL·Redis·migration과
@@ -39,7 +72,8 @@ npm run deploy -- realtime-media-gateway
 npm run deploy -- web
 ```
 
-배포 스크립트는 API·Gateway의 esbuild 실행 번들과 Web의 Vite 정적 번들을 호스트에서 먼저 만듭니다.
+배포 스크립트는 선택한 앱들을 한 번의 Turbo 실행으로 빌드합니다. API·Gateway의 esbuild 실행 번들과
+Web의 Vite 정적 번들은 호스트에서 만들거나 캐시에서 복원한 뒤 기존 Docker 배포 절차를 진행합니다.
 Docker build context는 각 앱 모듈로 제한하며 `Dockerfile.dockerignore`를 통해 `dist`와 필요한
 runtime 설정만 이미지 입력으로 전달합니다. `realtime-media-gateway`만 예외로, mediasoup의 네이티브
 `mediasoup-worker` 바이너리를 얻기 위해 Dockerfile 안에서 별도 빌드 스테이지를 한 번 더 거칩니다.
