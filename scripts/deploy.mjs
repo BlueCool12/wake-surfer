@@ -42,17 +42,23 @@ async function deploy(target) {
 
   await runCommand("pnpm", ["exec", "turbo", "run", "build", ...buildFilters]);
 
-  if (target === "all") {
+  if (target === "all" || target === "auth-api") {
+    const infrastructureServices = ["realtime-chat-postgres"];
+
+    if (target === "all") {
+      infrastructureServices.push("realtime-chat-redis");
+    }
+
     await runDockerCompose([
       "up",
       "-d",
       "--wait",
       "--wait-timeout",
       "60",
-      "realtime-chat-postgres",
-      "realtime-chat-redis",
+      ...infrastructureServices,
     ]);
     await runDockerCompose(["run", "--rm", "--build", "realtime-chat-migrate"]);
+    await runDockerCompose(["run", "--rm", "--build", "auth-api-migrate"]);
   }
 
   await runDockerCompose([
