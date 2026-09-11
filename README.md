@@ -140,6 +140,16 @@ RTC 포트(`MEDIA_GATEWAY_RTC_PORT`, 기본 44444)는 시그널링 포트와 달
 없습니다 — 브라우저가 이 포트로 직접 UDP·TCP 연결을 맺어야 하므로, 방화벽·보안 그룹에서 이
 포트를 직접 열어둬야 합니다.
 
+## PR 요약 (CodeRabbit)
+
+PR을 열면 CodeRabbit이 변경사항을 자동으로 요약합니다.
+
+- 확인 방법: 요약은 PR 설명이 아니라 CodeRabbit이 남기는 walkthrough 코멘트에서 확인합니다.
+- Draft PR은 리뷰하지 않으며, Ready로 전환하면 실행됩니다. 이후 push할 때마다 요약이 갱신됩니다.
+- 요약 코멘트에 멘션 없이 답글을 달아도 CodeRabbit이 이어서 답변합니다.
+- 설정 변경: 저장소 루트 [`.coderabbit.yaml`](.coderabbit.yaml)을 수정합니다. 요약 형식, 리뷰 대상 브랜치, 제외 경로 등을 여기서 관리합니다.
+- 전체 옵션은 [CodeRabbit 설정 문서](https://docs.coderabbit.ai/reference/configuration)를 참고합니다.
+
 ## 검증
 
 ```bash
