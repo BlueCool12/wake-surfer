@@ -57,7 +57,7 @@ awk 'BEGIN{ORS="\\n"} {print}' private.pem
 ### 4. DB 기동과 마이그레이션
 
 ```bash
-docker compose -f docker/compose.yml up -d
+docker compose -f docker/compose.yml up -d auth-postgres
 pnpm --filter @wake-surfer/auth-api prisma:migrate
 ```
 
@@ -70,6 +70,19 @@ auth 전용 Postgres를 5433에 띄운다. 기존 realtime-chat DB(5432)와 분�
 pnpm exec turbo run build --filter=@wake-surfer/auth-api
 pnpm --filter @wake-surfer/auth-api start
 ```
+
+## Docker 배포
+
+루트 배포 명령은 Turbo로 `auth-api`와 `oauth` 패키지를 먼저 빌드한 뒤 production 의존성과 Linux용
+Prisma Client를 포함한 이미지를 생성합니다. 앱 환경 변수는 `apps/auth-api/.env`에서 읽고, 컨테이너의
+DB 주소와 공개 포트는 Compose가 로컬 Docker 환경에 맞게 덮어씁니다.
+
+```bash
+npm run deploy -- auth-api
+docker compose logs -f auth-api
+```
+
+`AUTH_API_PORT`, `AUTH_PUBLIC_WEB_ORIGIN`, `AUTH_GITHUB_REDIRECT_URI`로 로컬 공개 주소를 변경할 수 있습니다.
 
 ## 데이터 모델
 

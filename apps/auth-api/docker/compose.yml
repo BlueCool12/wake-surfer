@@ -16,5 +16,47 @@ services:
       timeout: 5s
       retries: 10
 
+  auth-api:
+    image: wake-surfer/auth-api:local
+    pull_policy: build
+    build:
+      context: ../../..
+      dockerfile: apps/auth-api/docker/Dockerfile
+    init: true
+    restart: unless-stopped
+    env_file:
+      - path: ../.env
+        required: false
+    environment:
+      DATABASE_URL: postgresql://wake_surfer_auth:wake_surfer_auth_dev_password@auth-postgres:5432/wake_surfer_auth
+      PORT: "3002"
+      WEB_ORIGIN: "${AUTH_PUBLIC_WEB_ORIGIN:-http://localhost:5173}"
+      GITHUB_REDIRECT_URI: "${AUTH_GITHUB_REDIRECT_URI:-http://localhost:3002/auth/github/callback}"
+    ports:
+      - "127.0.0.1:${AUTH_API_PORT:-3002}:3002"
+    depends_on:
+      auth-postgres:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3002/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - default
+      - auth-api-host-access
+    stop_grace_period: 10s
+
 volumes:
   auth-postgres-data:
+
+networks:
+  auth-api-host-access:
+    driver: bridge

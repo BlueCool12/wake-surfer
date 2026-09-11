@@ -69,14 +69,16 @@ PostgreSQL·Redis와 다른 앱 컨테이너를 다시 만들지 않습니다.
 npm run deploy -- realtime-chat-api
 npm run deploy -- realtime-chat-gateway
 npm run deploy -- realtime-media-gateway
+npm run deploy -- auth-api
 npm run deploy -- web
 ```
 
 배포 스크립트는 선택한 앱들을 한 번의 Turbo 실행으로 빌드합니다. API·Gateway의 esbuild 실행 번들과
 Web의 Vite 정적 번들은 호스트에서 만들거나 캐시에서 복원한 뒤 기존 Docker 배포 절차를 진행합니다.
-Docker build context는 각 앱 모듈로 제한하며 `Dockerfile.dockerignore`를 통해 `dist`와 필요한
-runtime 설정만 이미지 입력으로 전달합니다. `realtime-media-gateway`만 예외로, mediasoup의 네이티브
-`mediasoup-worker` 바이너리를 얻기 위해 Dockerfile 안에서 별도 빌드 스테이지를 한 번 더 거칩니다.
+Docker build context는 `Dockerfile.dockerignore`로 필요한 파일만 이미지 입력에 전달합니다.
+`auth-api`는 workspace production 의존성과 Linux용 Prisma Client를 이미지 안에서 준비하고,
+`realtime-media-gateway`는 mediasoup의 네이티브 `mediasoup-worker` 바이너리를 별도 빌드 스테이지에서
+준비합니다.
 
 서비스 상태와 로그는 루트 Compose에서 서비스 이름으로 확인합니다.
 
@@ -85,6 +87,7 @@ docker compose ps
 docker compose logs -f realtime-chat-api
 docker compose logs -f realtime-chat-gateway
 docker compose logs -f realtime-media-gateway
+docker compose logs -f auth-api
 docker compose logs -f web
 ```
 
@@ -108,6 +111,8 @@ docker-compose.yml
 ├─ packages/realtime-chat-database/docker/compose.yml
 ├─ apps/realtime-chat-api/docker/compose.yml
 ├─ apps/realtime-chat-gateway/docker/compose.yml
+├─ apps/realtime-media-gateway/docker/compose.yml
+├─ apps/auth-api/docker/compose.yml
 └─ apps/web/docker/compose.yml
 ```
 
@@ -154,7 +159,8 @@ $env:REALTIME_CHAT_REDIS_PORT = "16379"
 pnpm docker:up
 ```
 
-앱 공개 포트는 `REALTIME_CHAT_API_PORT`, `REALTIME_CHAT_GATEWAY_PORT`, `WAKE_SURFER_WEB_PORT`로
+앱 공개 포트는 `REALTIME_CHAT_API_PORT`, `REALTIME_CHAT_GATEWAY_PORT`, `AUTH_API_PORT`,
+`WAKE_SURFER_WEB_PORT`로
 변경할 수 있습니다. 브라우저가 사용하는 origin과 Gateway URL이 달라지면
 `REALTIME_CHAT_PUBLIC_WEB_ORIGIN`, `REALTIME_CHAT_PUBLIC_GATEWAY_URL`, 빌드 시
 `VITE_API_BASE_URL`도 함께 맞춰야 합니다.
