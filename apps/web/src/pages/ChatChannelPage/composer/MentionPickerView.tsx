@@ -1,14 +1,14 @@
-import type { RoomMember } from "./ThreadPanel";
-import styles from "./MentionPicker.module.css";
+import type { MentionMember } from "../channelMember";
+import styles from "./MentionPickerView.module.css";
 
-type MentionPickerProps = {
-  members: RoomMember[];
+type MentionPickerViewProps = {
+  members: readonly MentionMember[];
   activeIndex: number;
-  onSelect: (member: RoomMember) => void;
+  onSelect: (member: MentionMember) => void;
 };
 
 /** "@"로 멘션할 채팅방 멤버를 고르는 팝업. 입력창 바로 위에 뜬다. */
-function MentionPicker({ members, activeIndex, onSelect }: MentionPickerProps) {
+function MentionPickerView({ members, activeIndex, onSelect }: MentionPickerViewProps) {
   return (
     <ul className={styles.list} role="listbox">
       {members.map((member, index) => (
@@ -33,4 +33,4 @@ function MentionPicker({ members, activeIndex, onSelect }: MentionPickerProps) {
   );
 }
 
-export default MentionPicker;
+export default MentionPickerView;

@@ -3,13 +3,13 @@ import { useEffect, useRef } from "react";
 
 import type { RefObject } from "react";
 
-import type { UseVoiceCallResult } from "../../features/voice/useVoiceCall";
-import type { VoiceParticipant } from "../../features/voice/voiceCallModel";
-import { useDraggablePosition } from "../../hooks/useDraggablePosition";
+import type { UseVoiceCallResult } from "../../../features/voice/useVoiceCall";
+import type { VoiceParticipant } from "../../../features/voice/voiceCallModel";
+import { useDraggablePosition } from "../../../hooks/useDraggablePosition";
 
-import styles from "./VoiceCallBar.module.css";
+import styles from "./VoiceCallBarView.module.css";
 
-export type VoiceCallBarProps = Pick<
+export type VoiceCallBarViewProps = Pick<
   UseVoiceCallResult,
   "status" | "participants" | "isMuted" | "error" | "leave" | "toggleMute"
 > & {
@@ -23,15 +23,16 @@ export type VoiceCallBarProps = Pick<
  * 본체를 별도 컴포넌트로 둔 이유가 있다. 조기 반환 위에서 훅을 부르면, 바가 DOM에 없는 첫 렌더에
  * 시작 위치 계산이 한 번 실패하고 그 뒤로는 의존성이 그대로라 다시 계산되지 않는다.
  */
-export function VoiceCallBar(props: VoiceCallBarProps) {
+export function VoiceCallBarView(props: VoiceCallBarViewProps) {
+  // 후속: idle+error이면 바가 사라져 종료 오류가 숨겨진다. 종료·오류 계약과 표시 위치를 정해야 한다.
   if (props.status === "idle") {
     return null;
   }
 
-  return <VoiceCallBarBody {...props} />;
+  return <VoiceCallBarBodyView {...props} />;
 }
 
-function VoiceCallBarBody({
+function VoiceCallBarBodyView({
   status,
   participants,
   isMuted,
@@ -39,7 +40,7 @@ function VoiceCallBarBody({
   leave,
   toggleMute,
   anchorRef,
-}: VoiceCallBarProps) {
+}: VoiceCallBarViewProps) {
   const barRef = useRef<HTMLDivElement>(null);
   const drag = useDraggablePosition({ ref: barRef, anchorRef });
 
@@ -88,7 +89,7 @@ function VoiceCallBarBody({
       </button>
 
       {participants.map((participant) => (
-        <RemoteAudio key={participant.peerId} participant={participant} />
+        <RemoteAudioView key={participant.peerId} participant={participant} />
       ))}
     </div>
   );
@@ -103,7 +104,7 @@ function describe(status: string, participantCount: number, error: string | unde
 }
 
 /** `srcObject`는 속성으로 넘길 수 없어 ref로 붙인다. */
-function RemoteAudio({ participant }: { participant: VoiceParticipant }) {
+function RemoteAudioView({ participant }: { participant: VoiceParticipant }) {
   const ref = useRef<HTMLAudioElement>(null);
 
   useEffect(() => {

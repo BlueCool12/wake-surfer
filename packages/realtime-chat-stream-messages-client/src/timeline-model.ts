@@ -8,7 +8,7 @@ import type {
   SyncAfterStreamMessagesResponse,
 } from "@wake-surfer/realtime-chat-stream-messages-contracts";
 
-import { Emitter } from "./emitter.js";
+import { batchChanges, Emitter, type Unsubscribe } from "./emitter.js";
 import { StreamMessageProtocolError } from "./errors.js";
 import {
   copyStreamMessagesClientTarget,
@@ -16,12 +16,46 @@ import {
   type StreamMessagesClientTarget,
 } from "./target.js";
 
+type ReadonlyMessage<T> = T extends object
+  ? { readonly [Key in keyof T]: ReadonlyMessage<T[Key]> }
+  : T;
+
+export type TimelineMessage = ReadonlyMessage<PublicMessage>;
+
+export interface TimelineReadScope<T> {
+  readonly value: T;
+  readonly subscribe: (onChange: () => void) => Unsubscribe;
+  readonly getVersion: () => number;
+}
+
+/** 원본을 복제하지 않고 ID로 읽는다. 변경 권한은 timeline만 가진다. */
+class TimelineScope<T> extends Emitter implements TimelineReadScope<T> {
+  readonly #read: () => T;
+
+  constructor(read: () => T) {
+    super();
+    this.#read = read;
+  }
+
+  get value(): T {
+    return this.#read();
+  }
+
+  changed(): void {
+    this.emit();
+  }
+}
+
 export class StreamMessagesTimelineModel extends Emitter {
-  readonly #messages: PublicMessage[] = [];
+  readonly #records = new Map<string, TimelineMessage>();
+  readonly #visibleIds: string[] = [];
+  readonly #visibleIdSet = new Set<string>();
+  readonly #acceptedOutsideVisible = new Set<string>();
   readonly #messageIdToSequence = new Map<string, number>();
   readonly #sequenceToMessageId = new Map<number, string>();
-  readonly #bufferedBySequence = new Map<number, PublicMessage>();
-  readonly #bufferedMessageIdToSequence = new Map<string, number>();
+  readonly #bufferedBySequence = new Map<number, string>();
+  readonly #messageScopes = new Map<string, TimelineScope<TimelineMessage | undefined>>();
+  readonly #messageIds = new TimelineScope<readonly string[]>(() => this.#visibleIds);
 
   deliverySyncCursor: number | null = null;
   hasMoreBefore = false;
@@ -38,8 +72,41 @@ export class StreamMessagesTimelineModel extends Emitter {
     return getCanonicalStreamId(this.target);
   }
 
-  get messages(): readonly PublicMessage[] {
-    return this.#messages;
+  get messageIds(): TimelineReadScope<readonly string[]> {
+    return this.#messageIds;
+  }
+
+  getMessage(messageId: string): TimelineMessage | undefined {
+    return this.#records.get(messageId);
+  }
+
+  message(messageId: string): TimelineReadScope<TimelineMessage | undefined> {
+    let scope = this.#messageScopes.get(messageId);
+    if (scope === undefined) {
+      scope = new TimelineScope(() => this.getMessage(messageId));
+      this.#messageScopes.set(messageId, scope);
+    }
+    return scope;
+  }
+
+  observeMessage(messageId: string, onChange: () => void): Unsubscribe {
+    this.message(messageId);
+    return this.#messageScopes.get(messageId)!.observeChanges(onChange);
+  }
+
+  observeOrder(onChange: () => void): Unsubscribe {
+    return this.#messageIds.observeChanges(onChange);
+  }
+
+  dispose(): void {
+    this.clearSubscriptions();
+    this.#messageIds.clearSubscriptions();
+    for (const scope of this.#messageScopes.values()) scope.clearSubscriptions();
+    this.#messageScopes.clear();
+  }
+  // 기존 호출부의 읽기 계약. 별도 본문 배열을 상태로 보관하지 않는다.
+  get messages(): readonly TimelineMessage[] {
+    return this.#visibleIds.map((id) => this.#records.get(id)!);
   }
 
   get hasBufferedGap(): boolean {
@@ -50,40 +117,30 @@ export class StreamMessagesTimelineModel extends Emitter {
     if (!Number.isSafeInteger(cursor) || cursor < 0) {
       throw new TypeError("복구 cursor는 0 이상의 safe integer여야 합니다.");
     }
-
     this.deliverySyncCursor = cursor;
   }
 
   applyLatest(response: LatestStreamMessagesResponse): void {
     this.#assertStream(response.streamId);
-
-    for (const message of response.messages) {
-      this.#insertLoadedMessage(message);
-    }
-
-    this.deliverySyncCursor = response.throughSequence;
-    this.historyBeforeCursor = response.nextBeforeSequence;
-    this.hasMoreBefore = response.hasMoreBefore;
-    this.#discardBufferedAtOrBeforeCursor();
-    this.#drainContiguousBuffer();
-    this.emit();
+    batchChanges(() => {
+      for (const message of response.messages) this.#insertHistoryMessage(message);
+      this.deliverySyncCursor = response.throughSequence;
+      this.#setHistory(response.nextBeforeSequence, response.hasMoreBefore);
+      this.#discardBufferedAtOrBeforeCursor();
+      this.#drainContiguousBuffer();
+    });
   }
 
   applyOlder(response: OlderStreamMessagesResponse): void {
     this.#assertStream(response.streamId);
-
-    for (const message of response.messages) {
-      this.#insertLoadedMessage(message);
-    }
-
-    this.historyBeforeCursor = response.nextBeforeSequence;
-    this.hasMoreBefore = response.hasMoreBefore;
-    this.emit();
+    batchChanges(() => {
+      for (const message of response.messages) this.#insertHistoryMessage(message);
+      this.#setHistory(response.nextBeforeSequence, response.hasMoreBefore);
+    });
   }
 
   applySync(response: SyncAfterStreamMessagesResponse): void {
     this.#assertStream(response.streamId);
-
     if (this.deliverySyncCursor !== response.afterSequence) {
       throw new StreamMessageProtocolError("sync_cursor_mismatch", {
         streamId: this.streamId,
@@ -91,7 +148,6 @@ export class StreamMessagesTimelineModel extends Emitter {
         actualAfterSequence: response.afterSequence,
       });
     }
-
     if (response.hasMoreAfter && response.nextAfterSequence <= response.afterSequence) {
       throw new StreamMessageProtocolError("sync_no_progress", {
         streamId: this.streamId,
@@ -99,189 +155,175 @@ export class StreamMessagesTimelineModel extends Emitter {
         nextAfterSequence: response.nextAfterSequence,
       });
     }
-
-    for (const message of response.messages) {
-      this.#insertLoadedMessage(message);
-    }
-
-    this.deliverySyncCursor = response.nextAfterSequence;
-    this.#discardBufferedAtOrBeforeCursor();
-
-    if (!response.hasMoreAfter) {
-      this.#drainContiguousBuffer();
-    }
-
-    this.emit();
+    batchChanges(() => {
+      for (const message of response.messages) this.#insertHistoryMessage(message);
+      this.deliverySyncCursor = response.nextAfterSequence;
+      this.#discardBufferedAtOrBeforeCursor();
+      if (!response.hasMoreAfter) this.#drainContiguousBuffer();
+    });
   }
 
   applyLive(message: PublicMessage): void {
     this.#assertMessageTarget(message);
-    const cursor = this.deliverySyncCursor;
-
-    if (cursor === null) {
-      this.#bufferMessage(message);
-      return;
-    }
-
-    if (message.sequence <= cursor) {
-      this.#assertKnownIdentityOrDrop(message);
-      return;
-    }
-
-    if (message.sequence === cursor + 1) {
-      this.#insertLoadedMessage(message);
-      this.deliverySyncCursor = message.sequence;
-      this.#drainContiguousBuffer();
-      this.emit();
-      return;
-    }
-
-    this.#bufferMessage(message);
+    this.#assertIdentity(message);
+    batchChanges(() => {
+      const cursor = this.deliverySyncCursor;
+      if (cursor === null) {
+        this.#bufferMessage(message);
+      } else if (message.sequence <= cursor) {
+        // 과거의 알 수 없는 알림만으로 표시 범위를 넓히지 않는다.
+        return;
+      } else if (message.sequence === cursor + 1) {
+        this.#insertLoadedMessage(message);
+        this.deliverySyncCursor = message.sequence;
+        this.#drainContiguousBuffer();
+      } else {
+        this.#bufferMessage(message);
+      }
+    });
   }
 
   applyAccepted(message: PublicMessage): void {
-    this.applyLive(message);
+    this.#assertMessageTarget(message);
+    this.#assertIdentity(message);
+    batchChanges(() => {
+      // 수정·삭제 후 오래된 수락이 와도 기존 원본을 우선한다.
+      const record = this.#registerRecord(message);
+      if (!this.#visibleIdSet.has(record.messageId)) {
+        this.#acceptedOutsideVisible.add(record.messageId);
+      }
+      if (this.deliverySyncCursor !== null && record.sequence <= this.deliverySyncCursor) {
+        this.#insertLoadedMessage(record);
+      } else {
+        this.applyLive(record);
+      }
+    });
   }
 
   replaceKnown(message: PublicMessage): void {
     this.#assertMessageTarget(message);
     this.#assertIdentity(message);
-    const sequence = this.#messageIdToSequence.get(message.messageId);
-
-    if (sequence !== undefined) {
-      const index = this.#messages.findIndex(
-        (candidate) => candidate.messageId === message.messageId,
-      );
-
-      if (index === -1) {
-        this.#throwIdentityConflict(message);
-      }
-
-      this.#messages[index] = message;
+    const current = this.#records.get(message.messageId);
+    if (current === undefined || messagesEqual(current, message)) return;
+    batchChanges(() => {
+      this.#records.set(message.messageId, ownMessage(message));
+      this.#messageScopes.get(message.messageId)?.changed();
+      // 기존 전체 구독은 이전 완료까지 유지한다. 순서 구독에는 알리지 않는다.
       this.emit();
-      return;
-    }
+    });
+  }
 
-    if (this.#bufferedMessageIdToSequence.has(message.messageId)) {
-      this.#bufferedBySequence.set(message.sequence, message);
-      this.emit();
+  #setHistory(beforeCursor: number | null, hasMore: boolean): void {
+    if (this.historyBeforeCursor === beforeCursor && this.hasMoreBefore === hasMore) return;
+    this.historyBeforeCursor = beforeCursor;
+    this.hasMoreBefore = hasMore;
+    this.emit();
+  }
+
+  #registerRecord(message: PublicMessage): TimelineMessage {
+    const current = this.#records.get(message.messageId);
+    if (current !== undefined) return current;
+    const record = ownMessage(message);
+    this.#records.set(message.messageId, record);
+    this.#messageIdToSequence.set(message.messageId, message.sequence);
+    this.#sequenceToMessageId.set(message.sequence, message.messageId);
+    this.#messageScopes.get(message.messageId)?.changed();
+    return record;
+  }
+
+  #insertHistoryMessage(message: PublicMessage): void {
+    this.#assertMessageTarget(message);
+    this.#assertIdentity(message);
+    const current = this.#records.get(message.messageId);
+    if (current !== undefined) {
+      // 삭제는 되돌리지 않는다. 조회 중 도착한 더 최신 수정도 보존한다.
+      const hasNewerEdit =
+        current.content !== null &&
+        current.editedAt !== undefined &&
+        message.content !== null &&
+        (message.editedAt === undefined ||
+          Date.parse(current.editedAt) > Date.parse(message.editedAt));
+      if (current.content !== null && !hasNewerEdit) this.replaceKnown(message);
     }
+    this.#insertLoadedMessage(this.#records.get(message.messageId) ?? message);
   }
 
   #insertLoadedMessage(message: PublicMessage): void {
     this.#assertMessageTarget(message);
     this.#assertIdentity(message);
-
-    if (this.#messageIdToSequence.has(message.messageId)) {
-      this.#removeBuffered(message);
+    const record = this.#registerRecord(message);
+    if (this.#visibleIdSet.has(record.messageId)) {
+      this.#removeBuffered(record);
       return;
     }
 
-    let insertionIndex = this.#messages.length;
-
-    while (insertionIndex > 0 && this.#messages[insertionIndex - 1]!.sequence > message.sequence) {
+    let insertionIndex = this.#visibleIds.length;
+    while (
+      insertionIndex > 0 &&
+      this.#records.get(this.#visibleIds[insertionIndex - 1]!)!.sequence > record.sequence
+    ) {
       insertionIndex -= 1;
     }
 
-    this.#messages.splice(insertionIndex, 0, message);
-    this.#messageIdToSequence.set(message.messageId, message.sequence);
-    this.#sequenceToMessageId.set(message.sequence, message.messageId);
-    this.#removeBuffered(message);
+    this.#visibleIds.splice(insertionIndex, 0, record.messageId);
+    this.#visibleIdSet.add(record.messageId);
+    this.#acceptedOutsideVisible.delete(record.messageId);
+    this.#removeBuffered(record);
+    this.#messageIds.changed();
+    this.emit();
   }
 
   #bufferMessage(message: PublicMessage): void {
     this.#assertIdentity(message);
-
-    if (this.#messageIdToSequence.has(message.messageId)) {
-      return;
-    }
-
-    const bufferedSequence = this.#bufferedMessageIdToSequence.get(message.messageId);
-    const bufferedMessage = this.#bufferedBySequence.get(message.sequence);
-
-    if (
-      (bufferedSequence !== undefined && bufferedSequence !== message.sequence) ||
-      (bufferedMessage !== undefined && bufferedMessage.messageId !== message.messageId)
-    ) {
-      this.#throwIdentityConflict(message);
-    }
-
-    if (bufferedMessage === undefined) {
-      this.#bufferedBySequence.set(message.sequence, message);
-      this.#bufferedMessageIdToSequence.set(message.messageId, message.sequence);
-    }
+    if (this.#visibleIdSet.has(message.messageId)) return;
+    this.#registerRecord(message);
+    this.#bufferedBySequence.set(message.sequence, message.messageId);
   }
 
   #drainContiguousBuffer(): void {
-    if (this.deliverySyncCursor === null) {
-      return;
-    }
-
+    if (this.deliverySyncCursor === null) return;
     while (true) {
       const nextSequence: number = this.deliverySyncCursor! + 1;
-      const message = this.#bufferedBySequence.get(nextSequence);
-
-      if (message === undefined) {
-        return;
-      }
-
-      this.#insertLoadedMessage(message);
+      const messageId = this.#bufferedBySequence.get(nextSequence);
+      if (messageId === undefined) return;
+      this.#insertLoadedMessage(this.#records.get(messageId)!);
       this.deliverySyncCursor = nextSequence;
     }
   }
 
   #discardBufferedAtOrBeforeCursor(): void {
-    if (this.deliverySyncCursor === null) {
-      return;
-    }
-
-    for (const [sequence, message] of this.#bufferedBySequence) {
+    if (this.deliverySyncCursor === null) return;
+    for (const [sequence, messageId] of this.#bufferedBySequence) {
       if (sequence <= this.deliverySyncCursor) {
-        this.#assertKnownIdentityOrDrop(message);
-        this.#removeBuffered(message);
+        const record = this.#records.get(messageId)!;
+        // 조회가 수락 메시지의 sequence를 지나도 수락 사실은 표시 목록에 남긴다.
+        // delivery cursor는 조회 응답이 정한 값을 유지한다.
+        if (this.#acceptedOutsideVisible.has(messageId)) {
+          this.#insertLoadedMessage(record);
+        } else {
+          this.#removeBuffered(record);
+        }
       }
     }
   }
 
   #removeBuffered(message: PublicMessage): void {
     this.#bufferedBySequence.delete(message.sequence);
-    this.#bufferedMessageIdToSequence.delete(message.messageId);
-  }
-
-  #assertKnownIdentityOrDrop(message: PublicMessage): void {
-    const knownMessageId = this.#sequenceToMessageId.get(message.sequence);
-    const knownSequence = this.#messageIdToSequence.get(message.messageId);
-
-    if (
-      (knownMessageId !== undefined && knownMessageId !== message.messageId) ||
-      (knownSequence !== undefined && knownSequence !== message.sequence)
-    ) {
-      this.#throwIdentityConflict(message);
-    }
   }
 
   #assertIdentity(message: PublicMessage): void {
     const knownMessageId = this.#sequenceToMessageId.get(message.sequence);
     const knownSequence = this.#messageIdToSequence.get(message.messageId);
-    const bufferedMessage = this.#bufferedBySequence.get(message.sequence);
-    const bufferedSequence = this.#bufferedMessageIdToSequence.get(message.messageId);
-
     if (
       (knownMessageId !== undefined && knownMessageId !== message.messageId) ||
-      (knownSequence !== undefined && knownSequence !== message.sequence) ||
-      (bufferedMessage !== undefined && bufferedMessage.messageId !== message.messageId) ||
-      (bufferedSequence !== undefined && bufferedSequence !== message.sequence)
+      (knownSequence !== undefined && knownSequence !== message.sequence)
     ) {
-      this.#throwIdentityConflict(message);
+      throw new StreamMessageProtocolError("message_identity_conflict", {
+        streamId: this.streamId,
+        messageId: message.messageId,
+        sequence: message.sequence,
+      });
     }
-  }
-
-  #throwIdentityConflict(message: PublicMessage): never {
-    throw new StreamMessageProtocolError("message_identity_conflict", {
-      streamId: this.streamId,
-      messageId: message.messageId,
-      sequence: message.sequence,
-    });
   }
 
   #assertStream(streamId: string): void {
@@ -306,4 +348,30 @@ export class StreamMessagesTimelineModel extends Emitter {
       });
     }
   }
+}
+
+/** 입력 객체와 참조를 분리하고, 저장소가 소유한 레코드만 동결한다. */
+function ownMessage(message: PublicMessage): TimelineMessage {
+  const target = Object.freeze({ ...message.target });
+  return message.content === null
+    ? Object.freeze({ ...message, target })
+    : Object.freeze({ ...message, target, content: Object.freeze({ ...message.content }) });
+}
+
+function messagesEqual(left: PublicMessage, right: PublicMessage): boolean {
+  return (
+    left.messageId === right.messageId &&
+    left.streamId === right.streamId &&
+    left.sequence === right.sequence &&
+    left.senderActorId === right.senderActorId &&
+    // 두 원본의 target은 등록·교체 전에 같은 timeline 대상으로 검증한다.
+    left.createdAt === right.createdAt &&
+    left.sentAtClient === right.sentAtClient &&
+    (left.content === null
+      ? right.content === null && left.deletedAt === right.deletedAt
+      : right.content !== null &&
+        left.content.type === right.content.type &&
+        left.content.text === right.content.text &&
+        left.editedAt === right.editedAt)
+  );
 }

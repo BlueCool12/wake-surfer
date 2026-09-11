@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { SmilePlus } from "lucide-react";
 
-import styles from "./MessageReactions.module.css";
+import styles from "./MessageReactionsView.module.css";
 
 export type MessageReactionState = {
   count: number;
@@ -12,7 +12,7 @@ export type MessageReactionsValue = Record<string, MessageReactionState>;
 
 const QUICK_EMOJIS = ["👍", "❤️", "😂", "😮", "😢", "🙏"];
 
-type MessageReactionsProps = {
+type MessageReactionsViewProps = {
   reactions: MessageReactionsValue;
   onToggle: (emoji: string) => void;
   /** 내 메시지인지. 반응 추가 버튼이 항상 말풍선과 붙는(안쪽) 자리에 오도록 순서를 정하는 데 쓴다. */
@@ -20,7 +20,7 @@ type MessageReactionsProps = {
 };
 
 /** 말풍선 옆(내 메시지는 왼쪽, 상대 메시지는 오른쪽)에 붙는 반응(이모지) pill과 추가 버튼. */
-function MessageReactions({ reactions, onToggle, isMine }: MessageReactionsProps) {
+function MessageReactionsView({ reactions, onToggle, isMine }: MessageReactionsViewProps) {
   const [isPickerOpen, setIsPickerOpen] = useState(false);
   const pickerWrapRef = useRef<HTMLDivElement>(null);
   const entries = Object.entries(reactions).filter(([, state]) => state.count > 0);
@@ -102,4 +102,4 @@ function MessageReactions({ reactions, onToggle, isMine }: MessageReactionsProps
   );
 }
 
-export default MessageReactions;
+export default MessageReactionsView;
