@@ -60,7 +60,8 @@ await database.close();
 
 ## Schema migration
 
-스키마의 단일 원본은 `./migrations`의 Atlas versioned migration이다. `atlas.sum`은 migration 파일의
+`realtime_chat` 스키마의 단일 원본은 `./migrations`의 Atlas versioned migration이다. Atlas 이력 테이블은
+인증용 Prisma 이력과 분리하기 위해 `public`에 둔다. `atlas.sum`은 migration 파일의
 순서와 내용 무결성을 보호한다. 애플리케이션은 시작할 때 migration을 실행하지 않으며, 이 패키지의
 `docker/compose.yml`이 소유하고 root Compose가 include하는 일회성 `realtime-chat-migrate` service가
 애플리케이션보다 먼저 적용해야 한다.

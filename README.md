@@ -147,7 +147,7 @@ pnpm db:validate:realtime-chat
 기본 접속 정보:
 
 ```txt
-PostgreSQL: postgresql://wake_surfer_realtime_chat:wake_surfer_realtime_chat_dev_password@localhost:5432/wake_surfer_realtime_chat
+PostgreSQL: postgresql://wake_surfer_realtime_chat:wake_surfer_realtime_chat_dev_password@localhost:5432/wake_surfer_realtime_chat?options=-c%20search_path%3Drealtime_chat%2Cpublic
 Redis: redis://localhost:6379
 ```
 

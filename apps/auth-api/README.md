@@ -62,7 +62,7 @@ docker compose run --rm --build realtime-chat-migrate
 docker compose run --rm --build auth-api-migrate
 ```
 
-인증과 실시간 채팅은 같은 PostgreSQL 데이터베이스를 사용합니다. 실시간 채팅 테이블은 Atlas가 `public`
+인증과 실시간 채팅은 같은 PostgreSQL 데이터베이스를 사용합니다. 실시간 채팅 테이블은 Atlas가 `realtime_chat`
 스키마에서 관리하고, 인증 테이블은 `apps/auth-api/prisma/migrations`의 Prisma 마이그레이션이 `auth`
 스키마에서 관리합니다.
 
