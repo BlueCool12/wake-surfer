@@ -8,7 +8,17 @@ services:
     restart: "no"
     env_file:
       - ./atlas.dev.env
-    command: ["migrate", "apply", "--env", "runtime", "--config", "file:///workspace/atlas.hcl"]
+    command:
+      [
+        "migrate",
+        "apply",
+        "--env",
+        "runtime",
+        "--config",
+        "file:///workspace/atlas.hcl",
+        "--revisions-schema",
+        "public",
+      ]
     depends_on:
       realtime-chat-postgres:
         condition: service_healthy

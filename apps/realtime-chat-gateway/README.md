@@ -62,7 +62,7 @@ durable broker는 이 MVP의 범위가 아니다.
 `.env.example`을 기준으로 API와 같은 gateway token·gateway id를 설정한 뒤 실행한다.
 
 ```powershell
-pnpm --filter @wake-surfer/realtime-chat-gateway build
+pnpm exec turbo run build --filter=@wake-surfer/realtime-chat-gateway
 pnpm --filter @wake-surfer/realtime-chat-gateway start
 ```
 

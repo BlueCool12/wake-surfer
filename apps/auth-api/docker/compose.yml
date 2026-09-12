@@ -1,20 +1,60 @@
 name: wake-surfer-auth
 
 services:
-  auth-postgres:
-    image: postgres:17-alpine
-    env_file:
-      - runtime.dev.env
-    ports:
-      # 기존 realtime-chat postgres(5432)와 충돌하지 않게 5433으로 노출한다.
-      - "5433:5432"
-    volumes:
-      - auth-postgres-data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U wake_surfer_auth -d wake_surfer_auth"]
-      interval: 5s
-      timeout: 5s
-      retries: 10
+  auth-api-migrate:
+    image: wake-surfer/auth-api-migrate:local
+    pull_policy: build
+    build:
+      context: ../../..
+      dockerfile: apps/auth-api/docker/Dockerfile
+      target: migration
+    restart: "no"
+    environment:
+      DATABASE_URL: postgresql://wake_surfer_realtime_chat:wake_surfer_realtime_chat_dev_password@realtime-chat-postgres:5432/wake_surfer_realtime_chat?schema=auth
+    depends_on:
+      realtime-chat-postgres:
+        condition: service_healthy
 
-volumes:
-  auth-postgres-data:
+  auth-api:
+    image: wake-surfer/auth-api:local
+    pull_policy: build
+    build:
+      context: ../../..
+      dockerfile: apps/auth-api/docker/Dockerfile
+    init: true
+    restart: unless-stopped
+    env_file:
+      - path: ../.env
+        required: false
+    environment:
+      DATABASE_URL: postgresql://wake_surfer_realtime_chat:wake_surfer_realtime_chat_dev_password@realtime-chat-postgres:5432/wake_surfer_realtime_chat?schema=auth
+      PORT: "3002"
+      WEB_ORIGIN: "${AUTH_PUBLIC_WEB_ORIGIN:-http://localhost:5173}"
+      GITHUB_REDIRECT_URI: "${AUTH_GITHUB_REDIRECT_URI:-http://localhost:3002/auth/github/callback}"
+    ports:
+      - "127.0.0.1:${AUTH_API_PORT:-3002}:3002"
+    depends_on:
+      auth-api-migrate:
+        condition: service_completed_successfully
+      realtime-chat-postgres:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3002/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - default
+      - auth-api-host-access
+    stop_grace_period: 10s
+
+networks:
+  auth-api-host-access:
+    driver: bridge
