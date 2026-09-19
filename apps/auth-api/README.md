@@ -54,22 +54,38 @@ awk 'BEGIN{ORS="\\n"} {print}' private.pem
 
 `.env.example`을 복사해 값을 채운다. `.env`는 커밋하지 않는다.
 
-### 4. DB 기동과 마이그레이션
+### 4. 공용 DB 기동과 마이그레이션
 
 ```bash
-docker compose -f docker/compose.yml up -d
-pnpm --filter @wake-surfer/auth-api prisma:migrate
+docker compose up -d --wait realtime-chat-postgres
+docker compose run --rm --build realtime-chat-migrate
+docker compose run --rm --build auth-api-migrate
 ```
 
-auth 전용 Postgres를 5433에 띄운다. 기존 realtime-chat DB(5432)와 분리돼 있다 —
-그쪽은 Atlas가 관리하므로 Prisma Migrate와 섞으면 안 된다.
+인증과 실시간 채팅은 같은 PostgreSQL 데이터베이스를 사용합니다. 실시간 채팅 테이블은 Atlas가 `realtime_chat`
+스키마에서 관리하고, 인증 테이블은 `apps/auth-api/prisma/migrations`의 Prisma 마이그레이션이 `auth`
+스키마에서 관리합니다.
 
 ## 실행
 
 ```bash
-pnpm --filter @wake-surfer/auth-api build
+pnpm exec turbo run build --filter=@wake-surfer/auth-api
 pnpm --filter @wake-surfer/auth-api start
 ```
+
+## Docker 배포
+
+루트 배포 명령은 Turbo로 `auth-api`와 `oauth` 패키지를 먼저 빌드하고, 공용 DB의 Atlas 마이그레이션과
+인증용 Prisma 마이그레이션을 차례로 적용합니다. 이후 production 의존성과 Linux용 Prisma Client를 포함한
+이미지를 생성합니다. 앱 환경 변수는 `apps/auth-api/.env`에서 읽고, 컨테이너의 DB 주소와 공개 포트는
+Compose가 로컬 Docker 환경에 맞게 덮어씁니다.
+
+```bash
+npm run deploy -- auth-api
+docker compose logs -f auth-api
+```
+
+`AUTH_API_PORT`, `AUTH_PUBLIC_WEB_ORIGIN`, `AUTH_GITHUB_REDIRECT_URI`로 로컬 공개 주소를 변경할 수 있습니다.
 
 ## 데이터 모델
 

@@ -25,7 +25,7 @@
     "dist"
   ],
   "scripts": {
-    "build": "pnpm --filter @wake-surfer/realtime-chat-message-send-contracts build && tsc -p tsconfig.json",
+    "build": "tsc -p tsconfig.json",
     "clean": "tsc -b tsconfig.json --clean"
   },
   "dependencies": {

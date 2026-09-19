@@ -18,7 +18,7 @@
     "dist"
   ],
   "scripts": {
-    "build": "pnpm --filter @wake-surfer/realtime-chat-message-contracts build && node ../../scripts/manage-dual-package-output.mjs clean && tsc -p tsconfig.json && tsc -p tsconfig.cjs.json && node ../../scripts/manage-dual-package-output.mjs mark",
+    "build": "node ../../scripts/manage-dual-package-output.mjs clean && tsc -p tsconfig.json && tsc -p tsconfig.cjs.json && node ../../scripts/manage-dual-package-output.mjs mark",
     "clean": "node ../../scripts/manage-dual-package-output.mjs clean"
   },
   "dependencies": {

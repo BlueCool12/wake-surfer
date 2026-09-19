@@ -5,11 +5,9 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "build": "pnpm run build:deps && tsc -p tsconfig.json",
-    "build:bundle": "pnpm run build && esbuild src/main.ts --bundle --platform=node --format=esm --target=node24 --banner:js=\"import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);\" --outfile=dist/main.mjs",
-    "build:deps": "pnpm --filter @wake-surfer/api-contracts build && pnpm --filter @wake-surfer/realtime-chat-message-send-contracts build && pnpm --filter @wake-surfer/realtime-chat-message-send build && pnpm --filter @wake-surfer/realtime-chat-message-mutation-contracts build && pnpm --filter @wake-surfer/realtime-chat-message-mutation build && pnpm --filter @wake-surfer/realtime-chat-database build && pnpm --filter @wake-surfer/realtime-chat-stream-messages-contracts build && pnpm --filter @wake-surfer/realtime-chat-stream-messages build",
+    "build": "tsc -p tsconfig.json && esbuild src/main.ts --bundle --platform=node --format=esm --target=node24 --banner:js=\"import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);\" --outfile=dist/main.mjs",
     "start": "node dist/main.js",
-    "typecheck": "pnpm run build:deps && tsc -p tsconfig.json --noEmit"
+    "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
     "@hono/node-server": "^2.0.8",

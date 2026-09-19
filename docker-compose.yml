@@ -6,6 +6,7 @@ include:
   - ./apps/realtime-chat-api/docker/compose.yml
   - ./apps/realtime-chat-gateway/docker/compose.yml
   - ./apps/realtime-media-gateway/docker/compose.yml
+  - ./apps/auth-api/docker/compose.yml
   - ./apps/web/docker/compose.yml
 
 networks:

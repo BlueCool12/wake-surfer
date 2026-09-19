@@ -8,7 +8,7 @@ const gatewayApiToken =
   process.env.REALTIME_CHAT_GATEWAY_API_TOKEN ?? "wake-surfer-local-gateway-token-change-me";
 const databaseUrl =
   process.env.REALTIME_CHAT_DATABASE_URL ??
-  "postgresql://wake_surfer_realtime_chat:wake_surfer_realtime_chat_dev_password@localhost:5432/wake_surfer_realtime_chat";
+  "postgresql://wake_surfer_realtime_chat:wake_surfer_realtime_chat_dev_password@localhost:5432/wake_surfer_realtime_chat?options=-c%20search_path%3Drealtime_chat%2Cpublic";
 const workspaceRoot = fileURLToPath(new URL("..", import.meta.url));
 const webDirectory = fileURLToPath(new URL("../apps/web", import.meta.url));
 

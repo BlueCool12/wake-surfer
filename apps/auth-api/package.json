@@ -4,15 +4,13 @@
   "version": "0.0.0",
   "type": "commonjs",
   "scripts": {
-    "build": "pnpm run build:deps && prisma generate && tsc -p tsconfig.json",
-    "build:bundle": "pnpm run build",
-    "build:deps": "pnpm --filter @wake-surfer/oauth build",
-    "dev": "pnpm run build:deps && prisma generate && tsc -p tsconfig.json --watch",
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsc -p tsconfig.json --watch",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "start": "node dist/main.js",
-    "test": "pnpm run build:deps && prisma generate && vitest run",
-    "typecheck": "pnpm run build:deps && prisma generate && tsc -p tsconfig.json --noEmit"
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
     "@nestjs/common": "^11.1.6",

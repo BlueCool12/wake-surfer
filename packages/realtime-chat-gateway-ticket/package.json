@@ -21,7 +21,7 @@
     "dist"
   ],
   "scripts": {
-    "build": "pnpm --filter @wake-surfer/realtime-chat-gateway-ticket-contracts build && tsc -p tsconfig.json",
+    "build": "tsc -p tsconfig.json",
     "clean": "tsc -b tsconfig.json --clean"
   },
   "dependencies": {

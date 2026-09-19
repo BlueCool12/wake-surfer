@@ -1,2 +1,4 @@
-h1:w8usFLbRomhpRVYSK28wB5G2XwDKmaNfVpQQIB+Dth8=
+h1:wgWOuHm7CwAGhojiotv6j8o6rQyXSgS0ZkAFdUk5Ut0=
 20260719000000_initial.sql h1:hKsk3Qy7oqcMsrsMaZR8GHA4D3qmuWWDMS4j6qdJJn4=
+20260912000000_realtime_chat_schema.sql h1:l4f58WKr/mWC8UiuldGXVrU0Ier1sJSww/6+yBz+wVE=
+20260912001000_repair_realtime_chat_tables.sql h1:TgkFLa9YU5dua4LeoEA/3AYdDvZCuk2mA/mYJP7nVD4=
