@@ -1,3 +1,4 @@
+import { memorySessions } from "./session-store.fake";
 import { describe, expect, it } from "vitest";
 
 import { completeGithubLogin } from "../src/application/complete-github-login.usecase";
@@ -25,6 +26,7 @@ const signer: JwtSignerPort = {
 };
 
 const deps = {
+  sessionStore: memorySessions(),
   userStore,
   signer,
   accessTtlSec: 1800,
@@ -39,7 +41,12 @@ describe("completeGithubLogin", () => {
     expect(result).toEqual({
       status: "ok",
       user: { id: "our-1" },
-      tokens: { accessToken: "access:our-1", refreshToken: "refresh:our-1" },
+      tokens: {
+        accessToken: "access:our-1",
+        refreshToken: "refresh:our-1",
+        accessExpiresAt: 1_001_800,
+        refreshExpiresAt: 2_209_600,
+      },
     });
   });
 
@@ -56,13 +63,17 @@ describe("completeGithubLogin", () => {
   });
 
   it("사용자 조회 실패를 USER_FETCH_FAILED로 전파한다", async () => {
-    const client = fakeClient({ fetchUser: async () => ({ ok: false, reason: "USER_FETCH_FAILED" }) });
+    const client = fakeClient({
+      fetchUser: async () => ({ ok: false, reason: "USER_FETCH_FAILED" }),
+    });
     const result = await completeGithubLogin({ ...deps, client });
     expect(result).toEqual({ status: "rejected", reason: "USER_FETCH_FAILED" });
   });
 
   it("이메일을 못 얻으면 EMAIL_UNAVAILABLE로 전파한다", async () => {
-    const client = fakeClient({ fetchUser: async () => ({ ok: false, reason: "EMAIL_UNAVAILABLE" }) });
+    const client = fakeClient({
+      fetchUser: async () => ({ ok: false, reason: "EMAIL_UNAVAILABLE" }),
+    });
     const result = await completeGithubLogin({ ...deps, client });
     expect(result).toEqual({ status: "rejected", reason: "EMAIL_UNAVAILABLE" });
   });

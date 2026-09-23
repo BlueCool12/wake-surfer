@@ -2,7 +2,7 @@ import type { AuthTokens } from "../domain/auth-token";
 import type { AuthenticatedUser } from "../domain/auth-user";
 import type { OAuthProviderError } from "../domain/oauth-provider-error";
 import type { GithubOAuthClient } from "../infrastructure/github/client";
-import type { JwtSignerPort, UserStorePort } from "../runtime-deps";
+import type { AuthSessionStorePort, JwtSignerPort, UserStorePort } from "../runtime-deps";
 
 import { fetchGithubUserByCode } from "./fetch-github-user-by-code.usecase";
 import { issueAuthTokens } from "./issue-auth-tokens.usecase";
@@ -12,6 +12,7 @@ export type CompleteGithubLoginInput = {
   readonly client: GithubOAuthClient;
   readonly userStore: UserStorePort;
   readonly signer: JwtSignerPort;
+  readonly sessionStore: AuthSessionStorePort;
   readonly accessTtlSec: number;
   readonly refreshTtlSec: number;
   readonly now?: () => number;
@@ -49,6 +50,7 @@ export async function completeGithubLogin(
   const tokens = await issueAuthTokens({
     user,
     signer: input.signer,
+    sessionStore: input.sessionStore,
     accessTtlSec: input.accessTtlSec,
     refreshTtlSec: input.refreshTtlSec,
     ...(input.now !== undefined ? { now: input.now } : {}),

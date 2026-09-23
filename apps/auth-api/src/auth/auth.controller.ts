@@ -7,12 +7,7 @@ import type { AuthApiConfig } from "../config/env";
 import { AUTH_CONFIG, OAUTH_USECASES } from "./auth.tokens";
 import { isSuspicious, loginFailureRedirect, type RejectionReason } from "./login-result.mapper";
 
-const ACCESS_COOKIE = "access_token";
-const REFRESH_COOKIE = "refresh_token";
-const ACCESS_MAX_AGE_SEC = 1800; // 30분 — 라이브러리 기본값과 맞춤
-const REFRESH_MAX_AGE_SEC = 1_209_600; // 14일
-/** refresh는 재발급 경로에만 실리도록 좁힌다. */
-const REFRESH_COOKIE_PATH = "/auth";
+import { setTokenCookies } from "./token-cookies";
 
 @Controller("auth/github")
 export class AuthController {
@@ -49,8 +44,8 @@ export class AuthController {
       return;
     }
 
-    this.setTokenCookies(response, result.tokens.accessToken, result.tokens.refreshToken);
-    response.redirect(302, this.config.webOrigin);
+    setTokenCookies(response, result.tokens, this.config.cookieSecure);
+    response.redirect(302, new URL("/rooms", this.config.webOrigin).toString());
   }
 
   private stateStoreFor(request: Request, response: Response) {
@@ -67,24 +62,5 @@ export class AuthController {
       console.warn(`[auth] suspicious callback rejected: ${reason}`);
     }
     response.redirect(302, loginFailureRedirect(this.config.webOrigin, reason));
-  }
-
-  private setTokenCookies(response: Response, accessToken: string, refreshToken: string): void {
-    const base = {
-      httpOnly: true,
-      secure: this.config.cookieSecure,
-      sameSite: "lax",
-    } as const;
-
-    response.cookie(ACCESS_COOKIE, accessToken, {
-      ...base,
-      path: "/",
-      maxAge: ACCESS_MAX_AGE_SEC * 1000,
-    });
-    response.cookie(REFRESH_COOKIE, refreshToken, {
-      ...base,
-      path: REFRESH_COOKIE_PATH,
-      maxAge: REFRESH_MAX_AGE_SEC * 1000,
-    });
   }
 }

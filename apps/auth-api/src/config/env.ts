@@ -92,7 +92,10 @@ export function loadAuthApiConfig(source: Source = process.env): AuthApiConfig {
   }
 
   try {
-    void new URL(webOrigin);
+    const web = new URL(webOrigin);
+    if (web.protocol !== "http:" && web.protocol !== "https:") {
+      invalid.push("WEB_ORIGIN must use http or https");
+    }
   } catch {
     invalid.push(`WEB_ORIGIN must be an absolute URL (got "${webOrigin}")`);
   }

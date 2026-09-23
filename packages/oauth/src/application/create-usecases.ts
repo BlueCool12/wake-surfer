@@ -1,9 +1,16 @@
+import { refreshAuthTokens, logoutSession, type RefreshResult } from "./session.usecases";
 import { OAuthConfigError, type OAuthConfig } from "../domain/oauth-config";
 import {
   createGithubOAuthClient,
   type GithubOAuthClientOptions,
 } from "../infrastructure/github/client";
-import type { JwtSignerPort, OAuthCsrfStateStorePort, UserStorePort } from "../runtime-deps";
+import type {
+  AuthSessionStorePort,
+  RefreshTokenVerifierPort,
+  JwtSignerPort,
+  OAuthCsrfStateStorePort,
+  UserStorePort,
+} from "../runtime-deps";
 import {
   completeGithubLogin,
   type CompleteGithubLoginResult,
@@ -19,6 +26,8 @@ import {
 import { startGithubLogin, type StartGithubLoginResult } from "./start-github-login.usecase";
 
 export type OAuthUsecases = {
+  refreshAuthTokens: (token: string | undefined) => Promise<RefreshResult>;
+  logout: (token: string | undefined) => Promise<void>;
   /** 요청마다 바인딩된 StateStore를 받아 로그인 진입점을 실행한다. */
   startGithubLogin: (stateStore: OAuthCsrfStateStorePort) => Promise<StartGithubLoginResult>;
   /** GitHub 콜백 쿼리를 받아 state 검증·에러 분기를 수행한다. */
@@ -36,6 +45,8 @@ export type OAuthUsecases = {
 export type OAuthAuthOptions = {
   readonly userStore: UserStorePort;
   readonly jwtSigner: JwtSignerPort;
+  readonly sessionStore: AuthSessionStorePort;
+  readonly refreshVerifier: RefreshTokenVerifierPort;
   /** 현재 시각(epoch seconds). 기본은 실제 시계. */
   readonly clock?: () => number;
   /** access 토큰 수명(초). 기본 1800(30분). */
@@ -64,7 +75,19 @@ export function createOAuthUsecases(
 ): OAuthUsecases {
   const githubClient = createGithubOAuthClient(config, options);
   const auth = options.auth;
+  const sessionDeps = () => {
+    if (!auth) throw new OAuthConfigError("Session usecases require auth dependencies");
+    return {
+      sessionStore: auth.sessionStore,
+      verifier: auth.refreshVerifier,
+      signer: auth.jwtSigner,
+      accessTtlSec: auth.accessTtlSec ?? DEFAULT_ACCESS_TTL_SEC,
+      ...(auth.clock ? { now: auth.clock } : {}),
+    };
+  };
   return {
+    refreshAuthTokens: async (token) => refreshAuthTokens(sessionDeps(), token),
+    logout: async (token) => logoutSession(sessionDeps(), token),
     startGithubLogin: (stateStore) => startGithubLogin({ config, stateStore }),
     handleGithubCallback: (stateStore, query) => handleGithubCallback({ query, stateStore }),
     fetchGithubUserByCode: (code) => fetchGithubUserByCode({ client: githubClient, code }),
@@ -78,6 +101,7 @@ export function createOAuthUsecases(
         client: githubClient,
         userStore: auth.userStore,
         signer: auth.jwtSigner,
+        sessionStore: auth.sessionStore,
         accessTtlSec: auth.accessTtlSec ?? DEFAULT_ACCESS_TTL_SEC,
         refreshTtlSec: auth.refreshTtlSec ?? DEFAULT_REFRESH_TTL_SEC,
         ...(auth.clock !== undefined ? { now: auth.clock } : {}),

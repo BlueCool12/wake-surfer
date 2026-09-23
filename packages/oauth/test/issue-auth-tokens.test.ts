@@ -1,3 +1,4 @@
+import { memorySessions } from "./session-store.fake";
 import { describe, expect, it } from "vitest";
 
 import type { AuthTokenClaims } from "../src/domain/auth-token";
@@ -18,6 +19,7 @@ function fakeSigner() {
 
 const baseInput = {
   user: { id: "user-1" },
+  sessionStore: memorySessions(),
   accessTtlSec: 1800,
   refreshTtlSec: 1_209_600,
   now: () => 1_000_000,
@@ -29,7 +31,14 @@ describe("issueAuthTokens", () => {
     await issueAuthTokens({ ...baseInput, signer });
     expect(calls).toEqual([
       { sub: "user-1", type: "access", iat: 1_000_000, exp: 1_001_800 },
-      { sub: "user-1", type: "refresh", iat: 1_000_000, exp: 2_209_600 },
+      {
+        sub: "user-1",
+        type: "refresh",
+        iat: 1_000_000,
+        exp: 2_209_600,
+        sid: expect.any(String),
+        jti: expect.any(String),
+      },
     ]);
   });
 
@@ -45,13 +54,21 @@ describe("issueAuthTokens", () => {
     expect(tokens).toEqual({
       accessToken: "access:user-1:1001800",
       refreshToken: "refresh:user-1:2209600",
+      accessExpiresAt: 1_001_800,
+      refreshExpiresAt: 2_209_600,
     });
   });
 
   it("now 미주입 시 실제 시계를 쓴다 (exp-iat는 여전히 ttl)", async () => {
     const { signer, calls } = fakeSigner();
     const before = Math.floor(Date.now() / 1000);
-    await issueAuthTokens({ user: { id: "u" }, signer, accessTtlSec: 60, refreshTtlSec: 120 });
+    await issueAuthTokens({
+      user: { id: "u" },
+      sessionStore: memorySessions(),
+      signer,
+      accessTtlSec: 60,
+      refreshTtlSec: 120,
+    });
     const access = calls[0]!;
     expect(access.iat).toBeGreaterThanOrEqual(before);
     expect(access.exp - access.iat).toBe(60);
