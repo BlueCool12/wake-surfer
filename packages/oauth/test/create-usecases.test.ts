@@ -1,3 +1,4 @@
+import { memorySessions } from "./session-store.fake";
 import { describe, expect, it } from "vitest";
 
 import { createOAuthUsecases } from "../src/application/create-usecases";
@@ -17,7 +18,9 @@ const fakeFetch = (async (url: string | URL | Request) => {
   if (u.includes("access_token")) {
     return new Response(JSON.stringify({ access_token: "gho_x" }), { status: 200 });
   }
-  return new Response(JSON.stringify({ id: 999, login: "octo", email: "o@e.com" }), { status: 200 });
+  return new Response(JSON.stringify({ id: 999, login: "octo", email: "o@e.com" }), {
+    status: 200,
+  });
 }) as typeof globalThis.fetch;
 
 const userStore: UserStorePort = {
@@ -39,13 +42,24 @@ describe("createOAuthUsecases.completeGithubLogin", () => {
   it("auth 주입 시 매핑·발급까지 배선되고 기본 수명(30분/14일)이 적용된다", async () => {
     const usecases = createOAuthUsecases(config, {
       fetch: fakeFetch,
-      auth: { userStore, jwtSigner: signer, clock: () => 1000 },
+      auth: {
+        sessionStore: memorySessions(),
+        refreshVerifier: { verify: async () => undefined },
+        userStore,
+        jwtSigner: signer,
+        clock: () => 1000,
+      },
     });
     const result = await usecases.completeGithubLogin("code-1");
     expect(result).toEqual({
       status: "ok",
       user: { id: "our-1" },
-      tokens: { accessToken: "access:2800", refreshToken: "refresh:1210600" },
+      tokens: {
+        accessToken: "access:2800",
+        refreshToken: "refresh:1210600",
+        accessExpiresAt: 2800,
+        refreshExpiresAt: 1210600,
+      },
     });
   });
 });

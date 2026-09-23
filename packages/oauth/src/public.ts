@@ -35,3 +35,7 @@ export type {
   CookieStateStoreConfig,
   SameSite,
 } from "./infrastructure/cookie/cookie-state-store";
+
+export type { AuthSession, AuthSessionStorePort, RefreshTokenVerifierPort } from "./runtime-deps";
+export type { RefreshTokenClaims } from "./domain/auth-token";
+export type { RefreshResult } from "./application/session.usecases";

@@ -21,6 +21,11 @@ function validEnv(overrides: Record<string, string | undefined> = {}) {
 }
 
 describe("loadAuthApiConfig", () => {
+  it("CSRF 허용 origin은 http/https만 허용한다", () => {
+    expect(() => loadAuthApiConfig(validEnv({ WEB_ORIGIN: "data:text/plain,test" }))).toThrow(
+      /WEB_ORIGIN/,
+    );
+  });
   it("정상 환경변수를 설정으로 읽는다", () => {
     const config = loadAuthApiConfig(validEnv());
 

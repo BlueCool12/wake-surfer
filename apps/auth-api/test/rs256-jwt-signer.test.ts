@@ -61,7 +61,7 @@ describe("createRs256JwtSigner", () => {
     const signer = createRs256JwtSigner(privateKey);
     const { decodeJwt } = await import("jose");
 
-    const refresh = await signer.sign({ ...claims, type: "refresh" });
+    const refresh = await signer.sign({ ...claims, type: "refresh", sid: "session", jti: "token" });
 
     expect(decodeJwt(refresh).type).toBe("refresh");
   });

@@ -9,11 +9,12 @@ datasource db {
 
 /// 우리 서비스 회원. 로그인 수단과 분리해 여러 provider를 붙일 수 있게 한다.
 model User {
-  id         String     @id @default(uuid())
+  id         String        @id @default(uuid())
   email      String
   login      String
-  createdAt  DateTime   @default(now()) @map("created_at")
+  createdAt  DateTime      @default(now()) @map("created_at")
   identities Identity[]
+  sessions   AuthSession[]
 
   @@map("users")
 }
@@ -30,4 +31,20 @@ model Identity {
 
   @@unique([provider, providerUserId])
   @@map("identities")
+}
+
+/// 로그인마다 별도 생성. JWT 원문 대신 현재 refresh 식별자만 저장한다.
+model AuthSession {
+  id                String    @id
+  userId            String    @map("user_id")
+  user              User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  currentRefreshJti String    @unique @map("current_refresh_jti")
+  expiresAt         DateTime  @map("expires_at")
+  revokedAt         DateTime? @map("revoked_at")
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("auth_sessions")
 }

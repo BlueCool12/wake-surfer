@@ -42,3 +42,33 @@ export type UserStorePort = {
 export type JwtSignerPort = {
   sign: (claims: AuthTokenClaims) => string | Promise<string>;
 };
+
+/** 시각은 epoch seconds. JWT 원문 대신 식별자만 저장한다. */
+export type AuthSession = {
+  readonly id: string;
+  readonly userId: string;
+  readonly currentRefreshJti: string;
+  readonly expiresAt: number;
+  readonly revokedAt: number | null;
+};
+
+export type RefreshTokenVerifierPort = {
+  verify: (
+    token: string,
+    now: number,
+  ) => Promise<import("./domain/auth-token").RefreshTokenClaims | undefined>;
+};
+
+export type AuthSessionStorePort = {
+  create: (session: AuthSession) => Promise<void>;
+  find: (id: string) => Promise<AuthSession | undefined>;
+  /** 이전 ID·소유자·만료·폐기 상태를 조건으로 원자적 교체. */
+  rotate: (input: {
+    id: string;
+    userId: string;
+    previousJti: string;
+    nextJti: string;
+    now: number;
+  }) => Promise<boolean>;
+  revoke: (id: string, userId: string, now: number) => Promise<void>;
+};

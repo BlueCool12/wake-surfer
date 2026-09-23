@@ -26,7 +26,10 @@ export function createRs256JwtSigner(privateKeyPem: string): JwtSignerPort {
   return {
     sign: async (claims) => {
       const { jose, privateKey } = await prepare();
-      return new jose.SignJWT({ type: claims.type })
+      return new jose.SignJWT({
+        type: claims.type,
+        ...(claims.type === "refresh" ? { sid: claims.sid, jti: claims.jti } : {}),
+      })
         .setProtectedHeader({ alg: ALGORITHM })
         .setSubject(claims.sub)
         .setIssuedAt(claims.iat)

@@ -7,17 +7,25 @@
 
 export type AuthTokenType = "access" | "refresh";
 
-export type AuthTokenClaims = {
+type BaseClaims = {
   /** 우리 회원 id. (GitHub id 아님) */
   readonly sub: string;
-  readonly type: AuthTokenType;
   /** 발급 시각(epoch seconds). */
   readonly iat: number;
   /** 만료 시각(epoch seconds). */
   readonly exp: number;
 };
 
+export type RefreshTokenClaims = BaseClaims & {
+  readonly type: "refresh";
+  readonly sid: string;
+  readonly jti: string;
+};
+export type AuthTokenClaims = (BaseClaims & { readonly type: "access" }) | RefreshTokenClaims;
+
 export type AuthTokens = {
   readonly accessToken: string;
   readonly refreshToken: string;
+  readonly accessExpiresAt: number;
+  readonly refreshExpiresAt: number;
 };

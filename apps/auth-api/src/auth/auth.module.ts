@@ -1,3 +1,6 @@
+import { createRs256RefreshVerifier } from "../adapters/rs256-refresh-verifier";
+import { createPrismaSessionStore } from "../adapters/prisma-session-store";
+import { SessionController } from "./session.controller";
 import { Module } from "@nestjs/common";
 import { createOAuthUsecases, type JwtSignerPort, type UserStorePort } from "@wake-surfer/oauth";
 
@@ -13,7 +16,7 @@ import { AUTH_CONFIG, JWT_SIGNER, OAUTH_USECASES, USER_STORE } from "./auth.toke
  * 요청마다 달라지는 stateStore만 컨트롤러가 요청 시점에 만든다.
  */
 @Module({
-  controllers: [AuthController],
+  controllers: [AuthController, SessionController],
   providers: [
     PrismaService,
     {
@@ -33,7 +36,12 @@ import { AUTH_CONFIG, JWT_SIGNER, OAUTH_USECASES, USER_STORE } from "./auth.toke
     },
     {
       provide: OAUTH_USECASES,
-      useFactory: (config: AuthApiConfig, userStore: UserStorePort, jwtSigner: JwtSignerPort) =>
+      useFactory: (
+        config: AuthApiConfig,
+        userStore: UserStorePort,
+        jwtSigner: JwtSignerPort,
+        prisma: PrismaService,
+      ) =>
         createOAuthUsecases(
           {
             clientId: config.githubClientId,
@@ -41,9 +49,16 @@ import { AUTH_CONFIG, JWT_SIGNER, OAUTH_USECASES, USER_STORE } from "./auth.toke
             redirectUri: config.githubRedirectUri,
             scopes: [...config.githubScopes],
           },
-          { auth: { userStore, jwtSigner } },
+          {
+            auth: {
+              userStore,
+              jwtSigner,
+              sessionStore: createPrismaSessionStore(prisma),
+              refreshVerifier: createRs256RefreshVerifier(config.jwtPublicKey),
+            },
+          },
         ),
-      inject: [AUTH_CONFIG, USER_STORE, JWT_SIGNER],
+      inject: [AUTH_CONFIG, USER_STORE, JWT_SIGNER, PrismaService],
     },
   ],
   exports: [AUTH_CONFIG],

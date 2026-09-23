@@ -5,6 +5,11 @@ export {
   OAuthConfigError,
 } from "./public";
 export type {
+  AuthSession,
+  AuthSessionStorePort,
+  RefreshTokenClaims,
+  RefreshTokenVerifierPort,
+  RefreshResult,
   AuthenticatedUser,
   AuthTokenClaims,
   AuthTokens,
