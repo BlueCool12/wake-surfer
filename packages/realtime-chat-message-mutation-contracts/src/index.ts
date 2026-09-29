@@ -100,7 +100,8 @@ export const DeletedMessageSchema = z.strictObject({
 
 export type DeletedMessage = z.infer<typeof DeletedMessageSchema>;
 
-export const EditMessageResponseSchema = z.discriminatedUnion("status", [
+// rejected가 두 분기에서 쓰이므로 status만으로 분기할 수 없다.
+export const EditMessageResponseSchema = z.union([
   z.strictObject({
     status: z.literal("accepted"),
     message: EditedTextMessageSchema,
