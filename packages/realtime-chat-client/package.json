@@ -18,7 +18,7 @@
   "scripts": {
     "build": "pnpm --filter @wake-surfer/realtime-chat-gateway-ticket-contracts build && pnpm --filter @wake-surfer/realtime-chat-message-contracts build && pnpm --filter @wake-surfer/realtime-chat-message-mutation-contracts build && pnpm --filter @wake-surfer/realtime-chat-message-send-contracts build && pnpm --filter @wake-surfer/realtime-chat-stream-messages-contracts build && pnpm clean && tsc -p tsconfig.json",
     "clean": "node ../../scripts/manage-dual-package-output.mjs clean",
-    "test": "vitest run test/realtime-chat-client.test.ts",
+    "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },

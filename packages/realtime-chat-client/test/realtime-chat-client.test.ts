@@ -68,4 +68,25 @@ describe("RealtimeChatClient", () => {
     unsubscribe();
     chat.close();
   });
+
+  it("전송 키와 연결 절차를 감추고 서버 응답을 결과 값으로 준다", async () => {
+    const chat = client();
+    const sent = chat.send("hello");
+    await vi.waitFor(() => expect(Socket.instances).toHaveLength(1));
+    const socket = Socket.instances[0]!;
+    socket.ready();
+    await vi.waitFor(() => expect(socket.frames.some((frame) => frame.type === "chat.message.send")).toBe(true));
+    const frame = socket.frames.find((candidate) => candidate.type === "chat.message.send")!;
+    expect(frame).toMatchObject({ target, text: "hello", idempotencyKey: expect.any(String) });
+    socket.receive("chat.message.accepted", {
+      status: "accepted",
+      idempotencyKey: frame.idempotencyKey,
+      message: {
+        messageId: "message-1", streamId: "channel:channel-1", sequence: 1, senderActorId: "user-1",
+        target, text: "hello", createdAt: now,
+      },
+    });
+    await expect(sent).resolves.toMatchObject({ ok: true, value: { status: "accepted" } });
+    chat.close();
+  });
 });
